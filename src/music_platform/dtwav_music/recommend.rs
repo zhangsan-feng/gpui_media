@@ -1,128 +1,112 @@
-use std::sync::Arc;
+use crate::com::HttpClient;
+use crate::entity::{MusicConvertLayer,  PlatformInterface};
 use anyhow::Context;
-use gpui::http_client::http::{header, HeaderValue};
+use gpui::http_client::http::{HeaderValue, header};
 use log::info;
 use regex::Regex;
 use scraper::{Html, Selector};
-use crate::com::HttpClient;
-use crate::entity::{MusicConvertLayer, MusicInfo, PlatformInterface};
+use std::sync::Arc;
+use uuid::{uuid, Uuid};
+use crate::music_platform::dtwav_music::headers;
 
-
-fn headers() -> header::HeaderMap {
-
-    let mut headers = header::HeaderMap::new();
-
-    headers.insert("accept", HeaderValue::from_static("*/*"));
-    headers.insert("accept-language", HeaderValue::from_static("zh-CN,zh;q=0.9"));
-    headers.insert("cache-control", HeaderValue::from_static("no-cache"));
-    headers.insert("pragma", HeaderValue::from_static("no-cache"));
-    headers.insert("priority", HeaderValue::from_static("u=0, i"));
-    headers.insert("referer", HeaderValue::from_static("https://dtwav.com/indexlist/hot.html"));
-    headers.insert("sec-ch-ua", HeaderValue::from_static("\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\""));
-    headers.insert("sec-ch-ua-mobile", HeaderValue::from_static("?0"));
-    headers.insert("sec-ch-ua-platform", HeaderValue::from_static("\"Windows\""));
-    headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
-    headers.insert("sec-fetch-mode", HeaderValue::from_static("navigate"));
-    headers.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
-    headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
-    headers.insert("upgrade-insecure-requests", HeaderValue::from_static("1"));
-    headers.insert("user-agent", HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"));
-
-    headers
-}
-
-
-
-struct PlatformImpl;
-impl PlatformInterface for PlatformImpl {
-
-    fn download(&self, params: &MusicConvertLayer) -> anyhow::Result<MusicInfo> {
-
+pub struct DtWavImpl;
+impl PlatformInterface for DtWavImpl {
+    fn download(&self, params: &MusicConvertLayer) -> anyhow::Result<MusicConvertLayer> {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-            let response = HttpClient::new()
-                .get_for_html(&*params.music_source, headers())
-                .await
-                .context("Failed to fetch HTML")?;
+                let response = HttpClient::new()
+                    .get_for_html(&*params.music_source, headers())
+                    .await
+                    .context("Failed to fetch HTML")?;
 
-            let html_content = response
-                .text()
-                .await
-                .context("Failed to read HTML")?;
-                
-            let title_re = Regex::new(r"title:\s*'([^']*)'").unwrap();
-            let author_re = Regex::new(r"author:\s*'([^']*)'").unwrap();
-            let url_re = Regex::new(r"url:\s*'([^']*)'").unwrap();
-            let pic_re = Regex::new(r"pic:\s*'([^']*)'").unwrap();
+                let html_content = response.text().await.context("Failed to read HTML")?;
+                // println!("{}", html_content);
 
-            let title = title_re.captures(&html_content) // &html_content 不需要 *
-                .and_then(|c| c.get(1))
-                .map(|m| m.as_str().to_string())
-                .ok_or_else(|| anyhow::anyhow!("未找到 title"))?;
+                let title_re = Regex::new(r"title:\s*'([^']*)'").unwrap();
+                let author_re = Regex::new(r"author:\s*'([^']*)'").unwrap();
+                let url_re = Regex::new(r"url:\s*'([^']*)'").unwrap();
+                // let pic_re = Regex::new(r"pic:\s*'([^']*)'").unwrap();
 
-            let author = author_re.captures(&html_content)
-                .and_then(|c| c.get(1))
-                .map(|m| m.as_str().to_string())
-                .unwrap_or_default();
+                let title = title_re
+                    .captures(&html_content) // &html_content 不需要 *
+                    .and_then(|c| c.get(1))
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_else(||"".to_string());
 
-            let url = url_re.captures(&html_content)
-                .and_then(|c| c.get(1))
-                .map(|m| m.as_str().to_string())
-                .ok_or_else(|| anyhow::anyhow!("未找到 url"))?;
+                let author = author_re
+                    .captures(&html_content)
+                    .and_then(|c| c.get(1))
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_else(||"".to_string());
 
-            let pic = pic_re.captures(&html_content)
-                .and_then(|c| c.get(1))
-                .map(|m| m.as_str().to_string())
-                .ok_or_else(|| anyhow::anyhow!("未找到 pic"))?;
+                let url = url_re
+                    .captures(&html_content)
+                    .and_then(|c| c.get(1))
+                    .map(|m| m.as_str().to_string())
+                    .ok_or_else(|| anyhow::anyhow!("未找到 url"))?;
 
-            info!("解析成功: {} - {} (URL: {} pic:{})", title, author, url, pic);
-            let file_name = format!("./music/ {}", url.split("/").last().unwrap());
-            HttpClient::new().download_music(file_name.clone(), url, headers()).await.expect("download file error");
+                // let pic = pic_re
+                //     .captures(&html_content)
+                //     .and_then(|c| c.get(1))
+                //     .map(|m| m.as_str().to_string())
+                //     .unwrap_or_else(||"".to_string());
 
+                println!("解析成功: {} - {} (URL: {} pic:)", title, author, url);
+                let download_file = format!("./music/{}_{}",title, url.split("/").last().unwrap());
+                HttpClient::new()
+                    .download_music(download_file.clone(), url, headers())
+                    .await
+                    .expect("download file error");
 
-            Ok(MusicInfo{
-                music_id: "".to_string(),
-                music_platform: "dtwav".to_string(),
-                music_name: title,
-                music_author: "".to_string(),
-                music_pic: format!("https://dtwav.com{}", pic),
-                music_source: file_name,
+                Ok(MusicConvertLayer {
+                    music_id: params.music_id.clone(),
+                    music_platform: "dtwav".to_string(),
+                    music_name: title,
+                    music_author: params.music_author.clone(),
+                    music_pic: params.music_pic.clone(),
+                    music_source: params.music_source.to_string(),
+                    music_file: download_file,
+                    func: params.func.clone(),
+                })
             })
-        })
         })
     }
 }
 
 
-pub async fn call(page: &str) -> Result<Vec<MusicConvertLayer>, anyhow::Error> {
+
+pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
     let mut call_back = Vec::new();
 
     let response = HttpClient::new()
-        .get_for_html("https://dtwav.com/indexlist/hot.html?typeclass=hot&page=1", headers())
+        .get_for_html(url, headers())
         .await
         .context("Failed to fetch HTML")?;
 
     let body = response.text().await?;
     let document = Html::parse_document(&body);
 
-
     let selector = Selector::parse(".media.thread.tap").expect("Invalid selector");
     let a_selector = Selector::parse("a").expect("Invalid a selector");
-    // let img_selector = Selector::parse("img").expect("Invalid a selector");
+    let img_selector = Selector::parse("img").expect("Invalid a selector");
 
     for element in document.select(&selector) {
-
         let link_element = element
             .select(&a_selector)
             .next()
             .ok_or_else(|| anyhow::anyhow!("No <a> tag found in .media-body"))?;
 
+        let img_element = element
+            .select(&img_selector)
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No <a> tag found in .media-body"))?;
+        let img = img_element.value().attr("src").ok_or_else(|| anyhow::anyhow!("No src found in .media-body"))?;
+        let img = format!("https://dtwav.com{}",img);
 
         let href = link_element
             .value()
             .attr("href")
             .ok_or_else(|| anyhow::anyhow!("No href attribute found"))?;
-
 
         let text_content: String = link_element
             .text()
@@ -131,20 +115,42 @@ pub async fn call(page: &str) -> Result<Vec<MusicConvertLayer>, anyhow::Error> {
             .trim()
             .to_string();
 
-        // println!("{} {}", href, text_content);
-
+        info!("{} {} {}", href, text_content, img);
 
         let author = text_content.split("[").next().unwrap_or("");
 
-
         call_back.push(MusicConvertLayer {
-            music_id: "".to_string(),
+            music_id: Uuid::new_v4().to_string(),
             music_name: author.to_string(),
             music_source: href.to_string(),
-            music_pic: "".to_string(),
+            music_pic: img,
             music_platform: "dtwav".to_string(),
-            platform: Arc::new(PlatformImpl),
+            func: Arc::new(DtWavImpl),
+            music_author: "".to_string(),
+            music_file: "".to_string(),
         });
+    }
+
+    Ok(call_back)
+}
+
+
+pub async fn call() -> anyhow::Result<Vec<MusicConvertLayer>> {
+    let mut call_back = Vec::new();
+
+    let url_list = vec![
+        "https://dtwav.com/index.html?page=1",
+        "https://dtwav.com/indexlist/hot.html?typeclass=hot&page=1"
+    ];
+    for url in url_list {
+        match request_web(url).await {
+            Ok(val)=>{
+                call_back.extend(val)
+            }
+            Err(e)=>{
+                info!("err:{}",e)
+            }
+        }
     }
 
     Ok(call_back)

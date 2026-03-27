@@ -1,38 +1,32 @@
 use std::sync::Arc;
-use std::time::Duration;
-use gpui::Task;
-use rodio::{MixerDeviceSink, Player};
-use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Default)]
-pub struct MusicInfo {
-    pub music_id: String,
-    pub music_platform: String,
-    pub music_name: String,
-    pub music_author: String,
-    pub music_pic: String,
-    pub music_source: String,
-}
-
-
-
-pub trait PlatformInterface: Send + Sync{
-    fn download(&self, params: &MusicConvertLayer) ->anyhow::Result<MusicInfo> ;
-}
 
 
 #[derive(Clone)]
 pub struct MusicConvertLayer{
     pub music_id:String,
     pub music_name:String,
-    pub music_source:String,
+    pub music_author:String,
     pub music_pic:String,
     pub music_platform:String,
-    pub platform: Arc<dyn PlatformInterface>,
+    pub music_source:String,
+    pub music_file:String,
+    pub func: Arc<dyn PlatformInterface>,
+}
+
+pub trait PlatformInterface: Send + Sync{
+    fn download(&self, params: &MusicConvertLayer) ->anyhow::Result<MusicConvertLayer> ;
 }
 
 impl MusicConvertLayer{
-    pub fn download(&self) -> anyhow::Result<MusicInfo> {
-        self.platform.download(self)
+    pub fn download(&self) -> anyhow::Result<MusicConvertLayer> {
+        self.func.download(self)
+    }
+}
+
+pub struct DefaultPlatformInterface;
+impl PlatformInterface for DefaultPlatformInterface{
+    fn download(&self, params: &MusicConvertLayer) ->anyhow::Result<MusicConvertLayer> {
+        anyhow::bail!("No platform implemented yet")
     }
 }

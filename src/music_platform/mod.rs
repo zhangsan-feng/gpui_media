@@ -15,9 +15,9 @@ https://music-api.gdstudio.xyz/api.php
 
 
 
-pub async  fn music_recommend(page:&str) -> Result<Vec<MusicConvertLayer>, anyhow::Error>{
+pub async  fn music_recommend() -> Result<Vec<MusicConvertLayer>, anyhow::Error>{
     let mut call_back = Vec::new();
-    match dtwav_music::recommend::call(page).await {
+    match dtwav_music::recommend::call().await {
         Ok(val)=>{
             call_back.extend(val)
         }
@@ -25,7 +25,14 @@ pub async  fn music_recommend(page:&str) -> Result<Vec<MusicConvertLayer>, anyho
             info!("err:{}",e)
         }
     }
-
+    match xmwav_music::recommend::call().await{
+        Ok(val)=>{
+            call_back.extend(val)
+        }
+        Err(e)=>{
+            info!("err:{}",e)
+        }
+    }
     Ok(call_back)
     // xmwav_music::recommend::call().await;
     // kugou_music::recommend::call(page).await
@@ -35,4 +42,9 @@ pub async  fn music_recommend(page:&str) -> Result<Vec<MusicConvertLayer>, anyho
 pub fn music_local(){}
 
 
-pub fn music_search(){}
+pub fn music_search(keyword:&str) -> Result<Vec<MusicConvertLayer>, anyhow::Error>{
+    let mut call_back = Vec::new();
+
+    Ok(call_back)
+    
+}

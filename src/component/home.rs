@@ -1,5 +1,6 @@
 use gpui::*;
-use gpui_component::{h_flex, v_flex};
+use gpui_component::{h_flex, v_flex, Root};
+use gpui_component::divider::Divider;
 use crate::component::music_player::MusicPlayer;
 use crate::component::recommend_page::RecommendPage;
 
@@ -55,7 +56,7 @@ impl HomeView {
                 }
                 style
             })
-            .on_click(cx.listener(move |this,_, _, cx| {
+            .on_click(cx.listener(move |this,_, _, _| {
                 this.select_id = page;
             }))
             .bg(if is_selected {
@@ -77,7 +78,7 @@ impl Render for HomeView {
                     .p_4()
                     .gap_2()
                     .h_full()
-                    .w(px(300.))
+                    .w(px(240.))
                     .bg(rgb_to_u32(233, 238, 246))
                     // .rounded_2xl()
                     .child(self.render_nav_item("歌曲推荐", Page::RecommendPage, cx))
@@ -104,12 +105,14 @@ impl Render for HomeView {
                                     }
                             )
                     )
-                    // .child(Divider::horizontal().w_full())
+                    .child(Divider::horizontal().w_full())
                     .child(
                         self.music_play_component.clone()
                     )
-
             )
+            .children(Root::render_dialog_layer(window, cx))
+            .children(Root::render_notification_layer(window, cx))
+            .children(Root::render_sheet_layer(window, cx))
 
 
     }

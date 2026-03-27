@@ -12,7 +12,8 @@ pub struct State {
 
 #[derive(Clone)]
 pub enum StateEvent {
-    TogglePlayMusic(entity::MusicInfo),
+    TogglePlayMusic(entity::MusicConvertLayer),
+    UpdatePlatyList(Vec<entity::MusicConvertLayer>)
 }
 
 impl EventEmitter<StateEvent> for State {}

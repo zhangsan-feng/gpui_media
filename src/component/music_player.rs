@@ -2,15 +2,20 @@ use anyhow::{Result, anyhow};
 use gpui::prelude::*;
 use gpui::*;
 use gpui::{InteractiveElement, StatefulInteractiveElement};
-use gpui_component::{h_flex, v_flex, Anchor};
+use gpui_component::{h_flex, v_flex, Anchor, WindowExt};
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 use std::fs::File;
+use std::sync::Arc;
 use std::time::Duration;
 use gpui_component::button::Button;
+use gpui_component::notification::NotificationType;
 use gpui_component::popover::Popover;
+use gpui_component::scroll::ScrollableElement;
+use log::info;
 use crate::entity;
+use crate::entity::DefaultPlatformInterface;
 use crate::state::{GlobalState, StateEvent};
-use crate::state::StateEvent::TogglePlayMusic;
+use crate::state::StateEvent::{TogglePlayMusic, UpdatePlatyList};
 
 #[derive(Clone, Copy)]
 struct ProgressDrag;
@@ -21,9 +26,10 @@ struct VolumeDrag;
 
 
 pub struct MusicPlayer {
-    pub current_player_music: entity::MusicInfo,
-    pub player_list: Vec<entity::MusicInfo>,
+    pub current_player_music: entity::MusicConvertLayer,
+    pub player_list: Vec<entity::MusicConvertLayer>,
     pub is_player: bool,
+    play_err:Option<String>,
     device_sink: Option<MixerDeviceSink>,
     player: Option<Player>,
     total_duration: Option<Duration>,
@@ -43,16 +49,19 @@ impl MusicPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> MusicPlayer {
         // let _ = (window, cx);
         let mut s = MusicPlayer {
-            current_player_music: entity::MusicInfo {
+            current_player_music: entity::MusicConvertLayer{
                 music_id: "".to_string(),
-                music_pic: "".to_string(),
-                music_name: "测试歌曲".to_string(),
-                music_source: "C:/Users/10463/Downloads/69732821111079.ogg".to_string(),
-                music_platform: "".to_string(),
+                music_name: "".to_string(),
                 music_author: "".to_string(),
+                music_pic: "".to_string(),
+                music_platform: "".to_string(),
+                music_source: "".to_string(),
+                music_file: "".to_string(),
+                func: Arc::new(DefaultPlatformInterface),
             },
             player_list: vec![],
             is_player: false,
+            play_err: Option::from("".to_string()),
             device_sink: None,
             player: None,
             total_duration: None,
@@ -80,7 +89,7 @@ impl MusicPlayer {
 
     fn load_music_source(&mut self) -> Result<()> {
         self.load_output_deriver()?;
-        let file = File::open(&self.current_player_music.music_source)?;
+        let file = File::open(&self.current_player_music.music_file)?;
         let decoder = Decoder::try_from(file)?;
         self.total_duration = decoder.total_duration();
 
@@ -258,9 +267,44 @@ impl MusicPlayer {
 
     fn toggle_music(&mut self, cx: &mut Context<Self>) {
         self.clean_music();
-        if self.load_music_source().is_ok(){
-            self.play(cx);
-        }
+
+        let mut cx_async = cx.to_async().clone();
+        let entity = cx.entity().clone();
+        let state_handle = cx.global::<GlobalState>().0.clone();
+        let tokio_handler = state_handle.read(cx).clone().tokio_handle;
+        let music_layer = self.current_player_music.clone();
+
+        cx.spawn(|_, _:&mut AsyncApp| async move {
+            let res = tokio_handler.spawn(async move {
+                music_layer.download()
+            });
+
+            match res.await {
+                Ok(Ok(val)) => {
+                    entity.update(&mut cx_async, |this, cx|{
+                        this.current_player_music = val;
+                        if  this.load_music_source().is_ok(){
+                           this.play(cx);
+                        }
+                        cx.notify()
+                    })
+                },
+                Ok(Err(e)) => {
+                    entity.update(&mut cx_async, |this, cx|{
+                        this.play_err = Some(e.to_string());
+                        this.next_music(cx);
+                    });
+                    info!("http error: {:?}", e);
+                },
+                Err(e) => {
+                    entity.update(&mut cx_async, |this, cx|{
+                        this.play_err =  Some(e.to_string());
+                        this.next_music(cx);
+                    });
+                    info!("tokio runtime error: {:?}", e);
+                }
+            }
+        }).detach();
     }
 
 
@@ -274,6 +318,9 @@ impl MusicPlayer {
                     this.current_player_music = data.clone();
                     this.toggle_music(cx);
                     cx.notify();
+                }
+                UpdatePlatyList(data)=>{
+                    this.player_list = data.clone();
                 }
                 _ => {
                 }
@@ -297,6 +344,7 @@ impl Render for MusicPlayer {
         let volume_ratio = self.volume.clamp(0.0, 1.0);
         let progress_bar_width = 280.0;
         let volume_bar_width = 150.0;
+
 
         v_flex()
             .w_full()
@@ -504,8 +552,53 @@ impl Render for MusicPlayer {
                     .child(
                         Popover::new("default-open-popover")
                             .anchor(Anchor::BottomRight)
-                            .trigger(Button::new("当前播放列表").label("Default Open").outline())
-                            .child("This popover is open by default when first rendered.")
+                            .trigger(Button::new("current-play-list").label("播放列表").outline())
+                            .child(
+                                div()
+                                    .h(px(600.))
+                                    .w(px(600.))
+                                    .overflow_y_scrollbar()
+                                    .flex()
+                                    .flex_col()
+                                    .justify_center()
+                                    .gap_2()
+                                    .p_4()
+                                    .children(self.player_list.iter().enumerate().map(|(index, data)| {
+                                        div()
+                                            .flex()
+                                            .justify_between()
+                                            .w_full()
+                                            .pr_2()
+                                            .child(img(data.music_pic.clone()).size(px(24.)).rounded_full())
+                                            .child(data.music_name.clone())
+                                            .child(
+                                                if self.current_player_music.music_id == data.music_id {
+                                                    div()
+                                                        .child("正在播放").into_any_element()
+                                                }else{
+                                                    Button::new(("music-play-index-", index))
+                                                        .label("播放")
+                                                        .on_click({
+                                                            let c = data.clone();
+                                                            cx.listener(move |_, _, _ , cx|{
+                                                                let mut cx_async = cx.to_async().clone();
+                                                                let entity = cx.entity().clone();
+                                                                let c = c.clone();
+                                                                cx.spawn(|_, _:&mut AsyncApp| async move {
+                                                                    entity.update(&mut cx_async, |this, cx|{
+                                                                        this.current_player_music = c;
+                                                                        this.toggle_music(cx);
+                                                                        cx.notify()
+                                                                    })
+                                                                }).detach()
+                                                            })
+
+                                                        }).into_any_element()
+                                                }
+
+                                            )
+                                    }))
+                            )
                     )
             )
     }
