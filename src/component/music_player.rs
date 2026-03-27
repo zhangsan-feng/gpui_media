@@ -55,6 +55,7 @@ impl MusicPlayer {
                 music_author: "".to_string(),
                 music_pic: "".to_string(),
                 music_platform: "".to_string(),
+                music_time: "".to_string(),
                 music_source: "".to_string(),
                 music_file: "".to_string(),
                 func: Arc::new(DefaultPlatformInterface),

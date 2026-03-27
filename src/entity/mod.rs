@@ -9,6 +9,7 @@ pub struct MusicConvertLayer{
     pub music_author:String,
     pub music_pic:String,
     pub music_platform:String,
+    pub music_time:String,
     pub music_source:String,
     pub music_file:String,
     pub func: Arc<dyn PlatformInterface>,

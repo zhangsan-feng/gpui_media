@@ -5,6 +5,7 @@ pub mod kugou_music;
 pub mod dtwav_music;
 pub mod xmwav_music;
 mod gdstudio;
+mod bilibili;
 /*
 
 https://dtwav.com/

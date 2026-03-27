@@ -67,6 +67,7 @@ impl PlatformInterface for DtWavImpl {
                     music_source: params.music_source.to_string(),
                     music_file: download_file,
                     func: params.func.clone(),
+                    music_time: params.music_time.clone(),
                 })
             })
         })
@@ -128,6 +129,7 @@ pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
             func: Arc::new(DtWavImpl),
             music_author: "".to_string(),
             music_file: "".to_string(),
+            music_time: "".to_string(),
         });
     }
 
