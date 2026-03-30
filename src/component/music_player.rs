@@ -291,17 +291,17 @@ impl MusicPlayer {
                     })
                 },
                 Ok(Err(e)) => {
-                    entity.update(&mut cx_async, |this, cx|{
-                        this.play_err = Some(e.to_string());
-                        this.next_music(cx);
-                    });
+                    // entity.update(&mut cx_async, |this, cx|{
+                    //     this.play_err = Some(e.to_string());
+                    //     this.next_music(cx);
+                    // });
                     info!("http error: {:?}", e);
                 },
                 Err(e) => {
-                    entity.update(&mut cx_async, |this, cx|{
-                        this.play_err =  Some(e.to_string());
-                        this.next_music(cx);
-                    });
+                    // entity.update(&mut cx_async, |this, cx|{
+                    //     this.play_err =  Some(e.to_string());
+                    //     this.next_music(cx);
+                    // });
                     info!("tokio runtime error: {:?}", e);
                 }
             }

@@ -2,6 +2,7 @@ use gpui::http_client::http::{header, HeaderValue};
 
 pub mod recommend;
 pub mod search;
+mod hot;
 
 
 fn headers() -> header::HeaderMap {

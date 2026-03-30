@@ -1,6 +1,7 @@
 use gpui::*;
 use gpui_component::{h_flex, v_flex, Root};
 use gpui_component::divider::Divider;
+use crate::component::load_local_music_page::LoadLocalMusicPage;
 use crate::component::music_player::MusicPlayer;
 use crate::component::recommend_page::RecommendPage;
 
@@ -9,13 +10,14 @@ use crate::component::recommend_page::RecommendPage;
 pub enum Page{
     RecommendPage,
     SearchPage,
-    LocalPage
+    LoadLocalMusicPage
 }
 
 
 pub struct HomeView {
     select_id:Page,
     recommend_page:Entity<RecommendPage>,
+    load_local_music_page:Entity<LoadLocalMusicPage>,
     music_play_component:Entity<MusicPlayer>,
 }
 
@@ -24,6 +26,7 @@ impl HomeView {
         let s =   HomeView {
             select_id:Page::RecommendPage,
             recommend_page:cx.new(|cx|{ RecommendPage::new(window, cx)}),
+            load_local_music_page:cx.new(|cx|{ LoadLocalMusicPage::new(window, cx)}),
             music_play_component:cx.new(|cx|{MusicPlayer::new(window, cx)})
         };
         s
@@ -83,7 +86,8 @@ impl Render for HomeView {
                     // .rounded_2xl()
                     .child(self.render_nav_item("歌曲推荐", Page::RecommendPage, cx))
                     .child(self.render_nav_item("歌曲搜索", Page::SearchPage, cx))
-                    .child(self.render_nav_item("本地导入", Page::LocalPage, cx))
+                    .child(self.render_nav_item("本地导入", Page::LoadLocalMusicPage, cx))
+
             )
             .child(
                     v_flex()
@@ -99,8 +103,8 @@ impl Render for HomeView {
                                         Page::SearchPage => {
                                             div().into_any_element()
                                         }
-                                        Page::LocalPage => {
-                                            div().into_any_element()
+                                        Page::LoadLocalMusicPage => {
+                                            self.load_local_music_page.clone().into_any_element()
                                         }
                                     }
                             )

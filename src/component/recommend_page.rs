@@ -4,6 +4,7 @@ use gpui::*;
 use gpui_component::scroll::ScrollableElement;
 use log::info;
 use gpui_component::button::Button;
+use gpui_component::StyledExt;
 use crate::entity::MusicConvertLayer;
 
 
@@ -25,7 +26,6 @@ impl RecommendPage {
 
     pub fn init_component_data(&self, cx: &mut Context<Self>) {
         let global_state = cx.global::<GlobalState>().0.read(cx).clone();
-        let mut cx_async = cx.to_async().clone();
         let entity = cx.entity().clone();
         let mut cx_async = cx.to_async().clone();
         let state_handle = cx.global::<GlobalState>().0.clone();
@@ -57,7 +57,7 @@ impl Render for RecommendPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
 
         div()
-            .h(px(600.))
+            .h(px(580.))
             .justify_center()
             .child(
                 div()
@@ -73,8 +73,16 @@ impl Render for RecommendPage {
                             .justify_between()
                             .w_full()
                             .pr_2()
-                            .child(img(data.music_pic.clone()).size(px(24.)).rounded_full())
-                            .child(data.music_name.clone())
+                            .child(
+                                div()
+                                    .gap_2()
+                                    .justify_between()
+                                    .h_flex()
+                                    .child(img(data.music_pic.clone()).size(px(24.)).rounded_full())
+                                    .child(data.music_author.clone())
+                                    .child(data.music_platform.clone())
+                                    .child(data.music_name.clone())
+                            )
                             .child(
                                 Button::new(("music-play-index-", index))
                                     .label("播放")

@@ -97,6 +97,7 @@ pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
             .next()
             .ok_or_else(|| anyhow::anyhow!("No <a> tag found in .media-body"))?;
 
+     
         let img_element = element
             .select(&img_selector)
             .next()
@@ -118,11 +119,11 @@ pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
 
         info!("{} {} {}", href, text_content, img);
 
-        let author = text_content.split("[").next().unwrap_or("");
+        let music_name = text_content.split("[").next().unwrap_or("");
 
         call_back.push(MusicConvertLayer {
             music_id: Uuid::new_v4().to_string(),
-            music_name: author.to_string(),
+            music_name: music_name.to_string(),
             music_source: href.to_string(),
             music_pic: img,
             music_platform: "dtwav".to_string(),
@@ -142,7 +143,7 @@ pub async fn call() -> anyhow::Result<Vec<MusicConvertLayer>> {
 
     let url_list = vec![
         "https://dtwav.com/index.html?page=1",
-        "https://dtwav.com/indexlist/hot.html?typeclass=hot&page=1"
+        // "https://dtwav.com/indexlist/hot.html?typeclass=hot&page=1"
     ];
     for url in url_list {
         match request_web(url).await {

@@ -18,6 +18,8 @@ https://music-api.gdstudio.xyz/api.php
 
 pub async  fn music_recommend() -> Result<Vec<MusicConvertLayer>, anyhow::Error>{
     let mut call_back = Vec::new();
+
+
     match dtwav_music::recommend::call().await {
         Ok(val)=>{
             call_back.extend(val)
@@ -26,6 +28,7 @@ pub async  fn music_recommend() -> Result<Vec<MusicConvertLayer>, anyhow::Error>
             info!("err:{}",e)
         }
     }
+
     match xmwav_music::recommend::call().await{
         Ok(val)=>{
             call_back.extend(val)
