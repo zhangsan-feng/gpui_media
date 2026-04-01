@@ -38,8 +38,7 @@ pub async  fn music_recommend() -> Result<Vec<MusicConvertLayer>, anyhow::Error>
         }
     }
     Ok(call_back)
-    // xmwav_music::recommend::call().await;
-    // kugou_music::recommend::call(page).await
+
 }
 
 

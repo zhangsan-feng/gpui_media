@@ -1,33 +1,36 @@
-use gpui::*;
-use gpui_component::{h_flex, v_flex, Root};
-use gpui_component::divider::Divider;
 use crate::component::load_local_music_page::LoadLocalMusicPage;
 use crate::component::music_player::MusicPlayer;
 use crate::component::recommend_page::RecommendPage;
-
-
+use crate::component::video_player::VideoPlayer;
+use gpui::*;
+use gpui_component::divider::Divider;
+use gpui_component::{Root, h_flex, v_flex};
+use std::time::Duration;
 #[derive(PartialEq, Clone, Copy)]
-pub enum Page{
+pub enum Page {
     RecommendPage,
     SearchPage,
-    LoadLocalMusicPage
+    LoadLocalMusicPage,
+    MusicPlayerPage,
+    VideoPlayerPage,
 }
 
-
 pub struct HomeView {
-    select_id:Page,
-    recommend_page:Entity<RecommendPage>,
-    load_local_music_page:Entity<LoadLocalMusicPage>,
-    music_play_component:Entity<MusicPlayer>,
+    select_id: Page,
+    recommend_page: Entity<RecommendPage>,
+    load_local_music_page: Entity<LoadLocalMusicPage>,
+    music_player_page: Entity<MusicPlayer>,
+    video_player_page: Entity<VideoPlayer>,
 }
 
 impl HomeView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> HomeView {
-        let s =   HomeView {
-            select_id:Page::RecommendPage,
-            recommend_page:cx.new(|cx|{ RecommendPage::new(window, cx)}),
-            load_local_music_page:cx.new(|cx|{ LoadLocalMusicPage::new(window, cx)}),
-            music_play_component:cx.new(|cx|{MusicPlayer::new(window, cx)})
+        let s = HomeView {
+            select_id: Page::RecommendPage,
+            recommend_page: cx.new(|cx| RecommendPage::new(window, cx)),
+            load_local_music_page: cx.new(|cx| LoadLocalMusicPage::new(window, cx)),
+            music_player_page: cx.new(|cx| MusicPlayer::new(window, cx)),
+            video_player_page: cx.new(|cx| VideoPlayer::new(window, cx)),
         };
         s
     }
@@ -37,7 +40,6 @@ pub fn rgb_to_u32(r: u8, g: u8, b: u8) -> Rgba {
     let color: u32 = (r as u32) << 16 | (g as u32) << 8 | (b as u32);
     rgb(color)
 }
-
 
 impl HomeView {
     fn render_nav_item(&self, label: &'static str, page: Page, cx: &Context<Self>) -> impl Element {
@@ -59,7 +61,7 @@ impl HomeView {
                 }
                 style
             })
-            .on_click(cx.listener(move |this,_, _, _| {
+            .on_click(cx.listener(move |this, _, _, _| {
                 this.select_id = page;
             }))
             .bg(if is_selected {
@@ -70,9 +72,16 @@ impl HomeView {
     }
 }
 
-
 impl Render for HomeView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let content_anim_id = match self.select_id {
+            Page::RecommendPage => "home-view-recommend",
+            Page::SearchPage => "home-view-search",
+            Page::LoadLocalMusicPage => "home-view-local",
+            Page::MusicPlayerPage => "music-player-page",
+            Page::VideoPlayerPage => "video-player-page",
+        };
+
         h_flex()
             .size_full()
             .child(
@@ -87,37 +96,43 @@ impl Render for HomeView {
                     .child(self.render_nav_item("歌曲推荐", Page::RecommendPage, cx))
                     .child(self.render_nav_item("歌曲搜索", Page::SearchPage, cx))
                     .child(self.render_nav_item("本地导入", Page::LoadLocalMusicPage, cx))
-
+                    .child(self.render_nav_item("音频播放器", Page::MusicPlayerPage, cx))
+                    .child(self.render_nav_item("视频播放器", Page::VideoPlayerPage, cx)),
             )
             .child(
-                    v_flex()
-                    .size_full()
-                    .child(
-                        div()
-                            .flex_grow()
-                            .child(
-                                match self.select_id {
-                                        Page::RecommendPage => {
-                                            self.recommend_page.clone().into_any_element()
-                                        }
-                                        Page::SearchPage => {
-                                            div().into_any_element()
-                                        }
-                                        Page::LoadLocalMusicPage => {
-                                            self.load_local_music_page.clone().into_any_element()
-                                        }
-                                    }
-                            )
-                    )
-                    .child(Divider::horizontal().w_full())
-                    .child(
-                        self.music_play_component.clone()
-                    )
+                v_flex().size_full().child(
+                    div()
+                        .flex_grow()
+                        .child(match self.select_id {
+                            Page::RecommendPage => self.recommend_page.clone().into_any_element(),
+                            Page::SearchPage => div().into_any_element(),
+                            Page::LoadLocalMusicPage => {
+                                self.load_local_music_page.clone().into_any_element()
+                            }
+                            Page::MusicPlayerPage => {
+                                self.music_player_page.clone().into_any_element()
+                            }
+                            Page::VideoPlayerPage => {
+                                self.video_player_page.clone().into_any_element()
+                            }
+                        })
+                        .with_animations(
+                            content_anim_id,
+                            vec![
+                                Animation::new(Duration::from_millis(500)).with_easing(ease_in_out),
+                                // Animation::new(Duration::from_millis(300))
+                                //     .with_easing(ease_in_out),
+                            ],
+                            |el, ix, delta| match ix {
+                                _ => el.opacity(delta),
+                                // _ => el.opacity(delta),
+                            },
+                        ),
+                ), // .child(Divider::horizontal().w_full())
+                   // .child(self.music_play_component.clone()),
             )
             .children(Root::render_dialog_layer(window, cx))
             .children(Root::render_notification_layer(window, cx))
             .children(Root::render_sheet_layer(window, cx))
-
-
     }
 }

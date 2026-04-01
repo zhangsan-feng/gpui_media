@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 
-
 #[derive(Clone)]
 pub struct MusicConvertLayer{
     pub music_id:String,
@@ -16,7 +15,7 @@ pub struct MusicConvertLayer{
 }
 
 pub trait PlatformInterface: Send + Sync{
-    fn download(&self, params: &MusicConvertLayer) ->anyhow::Result<MusicConvertLayer> ;
+    fn download(&self, params: &MusicConvertLayer) ->anyhow::Result<MusicConvertLayer>;
 }
 
 impl MusicConvertLayer{

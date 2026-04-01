@@ -1,8 +1,8 @@
+mod com;
 mod component;
+mod entity;
 mod music_platform;
 mod state;
-mod com;
-mod entity;
 
 use gpui::*;
 use gpui_component::*;
@@ -11,10 +11,10 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::state::{GlobalState, State};
 use gpui::http_client::{RedirectPolicy, Request, Response, Url, anyhow, http};
 use reqwest_client::ReqwestClient;
 use rust_embed::RustEmbed;
-use crate::state::{GlobalState, State};
 
 pub fn logger_init(logger_path: &str) {
     let date = chrono::Local::now().format("%Y-%m-%d");
@@ -31,8 +31,8 @@ pub fn logger_init(logger_path: &str) {
     // println!("{}", logfile_path);
 
     match std::fs::create_dir("./music") {
-        Ok(e)=>{}
-        Err(e)=>{}
+        Ok(e) => {}
+        Err(e) => {}
     }
 
     let mut dispatch = fern::Dispatch::new();
@@ -122,9 +122,6 @@ impl AssetSource for MergedAssets {
     }
 }
 
-
-
-
 fn main() {
     logger_init("./");
     let http_client = ReqwestClient::user_agent("gpui").unwrap();
@@ -139,17 +136,15 @@ fn main() {
     app.run(move |cx| {
         let mut window_options = WindowOptions::default();
         window_options.window_bounds = Some(WindowBounds::centered(size(px(1200.), px(700.)), cx));
-        window_options.is_resizable = false;
 
         cx.open_window(window_options, |window, app| {
-
             // window.set_background_appearance(WindowBackgroundAppearance::Transparent);
             gpui_component::init(app);
             // let transparent = Theme::global(app).transparent;
             // Theme::global_mut(app).background = transparent;
             // state::new_state(app);
-            
-            let state_entity = app.new(|cx| { State::new(cx) });
+
+            let state_entity = app.new(|cx| State::new(cx));
             app.set_global(GlobalState(state_entity));
             let view = app.new(|cx| component::home::HomeView::new(window, cx));
             app.new(|cx| Root::new(view, window, cx))
@@ -157,3 +152,6 @@ fn main() {
         .expect("Failed to create app");
     });
 }
+
+// https://uk.aoemc.top/v1
+// sk-scld3ZKoVWp61eoQIg5sm5aIisf5wFpFldwGlh1vgRTpNDXm
