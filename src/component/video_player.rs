@@ -1,14 +1,15 @@
-use crate::component::home::HomeView;
 use anyhow::Result;
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::{ElementExt as GpuiElementExt, Root, h_flex, v_flex};
+use gpui_component::text::markdown;
+use gpui_component::{ElementExt as GpuiElementExt, h_flex, v_flex};
 use gstreamer as gst;
 use gstreamer::prelude::ElementExt as GstElementExt;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
 use image::{Frame, RgbaImage};
+use log::info;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -16,37 +17,37 @@ use std::thread;
 use std::time::Duration;
 use url::Url;
 
-pub fn window_center_options(window: &mut Window, w: f32, h: f32) -> WindowOptions {
-    let parent_bounds = window.bounds();
-    let parent_x = parent_bounds.origin.x;
-    let parent_y = parent_bounds.origin.y;
+// pub fn window_center_options(window: &mut Window, w: f32, h: f32) -> WindowOptions {
+//     let parent_bounds = window.bounds();
+//     let parent_x = parent_bounds.origin.x;
+//     let parent_y = parent_bounds.origin.y;
 
-    let parent_width = parent_bounds.size.width;
-    let parent_height = parent_bounds.size.height;
+//     let parent_width = parent_bounds.size.width;
+//     let parent_height = parent_bounds.size.height;
 
-    let child_x = parent_x + (parent_width - px(w)) / 2.0;
-    let child_y = parent_y + (parent_height - px(h)) / 2.0;
-    let mut window_options = WindowOptions::default();
-    let window_size = size(px(w), px(h));
+//     let child_x = parent_x + (parent_width - px(w)) / 2.0;
+//     let child_y = parent_y + (parent_height - px(h)) / 2.0;
+//     let mut window_options = WindowOptions::default();
+//     let window_size = size(px(w), px(h));
 
-    let bounds = Bounds {
-        origin: Point {
-            x: child_x,
-            y: child_y,
-        },
-        size: window_size,
-    };
-    window_options.window_bounds = Some(WindowBounds::Windowed(bounds));
+//     let bounds = Bounds {
+//         origin: Point {
+//             x: child_x,
+//             y: child_y,
+//         },
+//         size: window_size,
+//     };
+//     window_options.window_bounds = Some(WindowBounds::Windowed(bounds));
 
-    window_options.window_min_size = Some(window_size);
-    window_options.is_resizable = true;
-    window_options.titlebar = Some(TitlebarOptions {
-        title: Some(SharedString::from("")),
-        appears_transparent: false,
-        ..Default::default()
-    });
-    window_options
-}
+//     window_options.window_min_size = Some(window_size);
+//     window_options.is_resizable = true;
+//     window_options.titlebar = Some(TitlebarOptions {
+//         title: Some(SharedString::from("")),
+//         appears_transparent: false,
+//         ..Default::default()
+//     });
+//     window_options
+// }
 
 pub struct VideoPlayer {
     current_player: String,
@@ -62,11 +63,14 @@ pub struct VideoPlayer {
     progress_bar_bounds: Option<Bounds<Pixels>>,
     progress_task: Option<Task<()>>,
     frame_task: Option<Task<()>>,
+    bus_watch_task: Option<Task<()>>,
     frame_buffer: Arc<Mutex<FrameBuffer>>,
     last_frame_seq: u64,
     render_image: Option<Arc<RenderImage>>,
     frame_thread: Option<thread::JoinHandle<()>>,
     stop_frames: Arc<AtomicBool>,
+    last_error: Option<String>,
+    bus_watch_started: bool,
 }
 
 impl VideoPlayer {
@@ -87,11 +91,14 @@ impl VideoPlayer {
             progress_bar_bounds: None,
             progress_task: None,
             frame_task: None,
+            bus_watch_task: None,
             frame_buffer: Arc::new(Mutex::new(FrameBuffer::default())),
             last_frame_seq: 0,
             render_image: None,
             frame_thread: None,
             stop_frames: Arc::new(AtomicBool::new(false)),
+            last_error: None,
+            bus_watch_started: false,
         }
     }
 
@@ -235,6 +242,7 @@ impl VideoPlayer {
         if let Some(playbin) = &self.playbin {
             let _ = playbin.set_state(gst::State::Playing);
             self.is_playing = true;
+            self.ensure_bus_watch(cx);
             self.ensure_progress_task(cx);
             self.ensure_frame_task(cx);
         }
@@ -245,6 +253,58 @@ impl VideoPlayer {
             let _ = playbin.set_state(gst::State::Paused);
         }
         self.is_playing = false;
+    }
+
+    fn ensure_bus_watch(&mut self, cx: &mut Context<Self>) {
+        if self.bus_watch_started {
+            return;
+        }
+        let Some(playbin) = self.playbin.clone() else {
+            return;
+        };
+        let Some(bus) = playbin.bus() else {
+            return;
+        };
+
+        self.bus_watch_started = true;
+        self.bus_watch_task = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(100))
+                    .await;
+
+                let Some(msg) = bus.timed_pop(gst::ClockTime::from_mseconds(0)) else {
+                    let keep_running = this
+                        .update(cx, |this, _| this.playbin.is_some())
+                        .unwrap_or(false);
+                    if !keep_running {
+                        break;
+                    }
+                    continue;
+                };
+
+                let action = match msg.view() {
+                    gst::MessageView::Error(err) => {
+                        Some((true, Some(format!("{} ({:?})", err.error(), err.debug()))))
+                    }
+                    gst::MessageView::Eos(_) => Some((true, None)),
+                    _ => None,
+                };
+
+                if let Some((should_stop, error_text)) = action {
+                    let _ = this.update(cx, |this, cx| {
+                        if let Some(text) = error_text {
+                            this.last_error = Some(text);
+                        }
+                        this.is_playing = false;
+                        cx.notify();
+                    });
+                    if should_stop {
+                        break;
+                    }
+                }
+            }
+        }));
     }
 
     fn ensure_progress_task(&mut self, cx: &mut Context<Self>) {
@@ -347,7 +407,7 @@ impl VideoPlayer {
             let target = gst::ClockTime::from_nseconds(nanos);
 
             let ok = playbin.seek_simple(gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, target);
-            println!("[video] seek ok={:?} pos={}ms", ok, position.as_millis());
+            // println!("[video] seek ok={:?} pos={}ms", ok, position.as_millis());
             self.position = position;
         }
     }
@@ -425,7 +485,7 @@ impl Render for VideoPlayer {
                     .rounded_md()
                     .border_1()
                     .border_color(rgb(0xE2E8F0))
-                    .bg(rgb(0x0F172A))
+                    // .bg(rgb(0x0F172A))
                     .child(
                         div()
                             .w(px(video_width))
@@ -437,15 +497,34 @@ impl Render for VideoPlayer {
                                     .size_full()
                                     .into_any_element()
                             } else {
+                                let message = self
+                                    .last_error
+                                    .clone()
+                                    .unwrap_or_else(|| "No video loaded".to_string());
+                                // info!("{}", message);
                                 div()
                                     .w_full()
                                     .h_full()
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .text_color(rgb(0x94A3B8))
-                                    .text_size(px(14.))
-                                    .child("No video loaded")
+                                    .child(
+                                        div()
+                                            .w_full()
+                                            .text_color(rgb(0x94A3B8))
+                                            .text_size(px(14.))
+                                            .items_center()
+                                            .justify_center()
+                                            .whitespace_normal()
+                                            .child(
+                                                markdown(message)
+                                                    .selectable(true)
+                                                    .text_color(rgb(0x94A3B8))
+                                                    .text_size(px(14.))
+                                                    .cursor_text(),
+                                            ),
+                                    )
+                                    .flex_wrap()
                                     .into_any_element()
                             }),
                     ),
@@ -458,7 +537,7 @@ impl Render for VideoPlayer {
                     .border_1()
                     .border_color(rgb(0xE2E8F0))
                     .bg(rgb(0xF8FAFC))
-                    .flex_shrink_0()
+                    // .flex_shrink_0()
                     .child(
                         div()
                             .h(px(8.))

@@ -1,5 +1,5 @@
 use crate::entity;
-use crate::entity::DefaultPlatformInterface;
+use crate::entity::{DefaultPlatformInterface, PlatformInterface};
 use crate::state::StateEvent::{TogglePlayMusic, UpdatePlatyList};
 use crate::state::{GlobalState, StateEvent};
 use anyhow::{Result, anyhow};
@@ -10,19 +10,31 @@ use gpui::{InteractiveElement, StatefulInteractiveElement};
 use gpui_component::button::Button;
 use gpui_component::popover::Popover;
 use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
-use gpui_component::{Anchor, StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list};
+use gpui_component::text::markdown;
+use gpui_component::{
+    Anchor, ElementExt, StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list,
+};
 use log::info;
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 use std::fs::File;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
+use uuid::Uuid;
 
 #[derive(Clone, Copy)]
 struct ProgressDrag;
 
 #[derive(Clone, Copy)]
 struct VolumeDrag;
+
+struct LocalMusicImpl;
+impl PlatformInterface for LocalMusicImpl {
+    fn download(&self, params: &entity::MusicConvertLayer) -> Result<entity::MusicConvertLayer> {
+        Ok(params.clone())
+    }
+}
 
 pub struct MusicPlayer {
     pub current_player: entity::MusicConvertLayer,
@@ -48,7 +60,6 @@ fn rgb_u8(r: u8, g: u8, b: u8) -> Rgba {
 
 impl MusicPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> MusicPlayer {
-        // let _ = (window, cx);
         let mut s = MusicPlayer {
             current_player: entity::MusicConvertLayer {
                 music_id: "".to_string(),
@@ -108,6 +119,56 @@ impl MusicPlayer {
         }
     }
 
+    fn track_from_path(&self, path: &Path) -> Option<entity::MusicConvertLayer> {
+        if !path.is_file() {
+            return None;
+        }
+
+        let file_name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.to_string_lossy().to_string());
+        let file_path = path.to_string_lossy().to_string();
+
+        Some(entity::MusicConvertLayer {
+            music_id: Uuid::new_v4().to_string(),
+            music_name: file_name,
+            music_author: "".to_string(),
+            music_pic: "".to_string(),
+            music_platform: "".to_string(),
+            music_time: "".to_string(),
+            music_source: "".to_string(),
+            music_file: file_path,
+            func: Arc::new(LocalMusicImpl),
+        })
+    }
+
+    fn handle_file_drop(&mut self, paths: &ExternalPaths, cx: &mut Context<Self>) {
+        let mut added = Vec::new();
+        for path in paths.paths() {
+            let Some(track) = self.track_from_path(path) else {
+                continue;
+            };
+            if self
+                .player_list
+                .iter()
+                .any(|item| item.music_file == track.music_file)
+            {
+                continue;
+            }
+            added.push(track);
+        }
+
+        if added.is_empty() {
+            return;
+        }
+
+        self.current_player = added[0].clone();
+        self.player_list.extend(added);
+        self.toggle_music(cx);
+        cx.notify();
+    }
+
     fn ensure_track_loaded(&mut self) -> Result<()> {
         self.load_output_deriver()?;
         let needs_load = self
@@ -133,6 +194,7 @@ impl MusicPlayer {
         if self.current_player.music_file.is_empty() && !self.player_list.is_empty() {
             if let Some(player) = self.player_list.first() {
                 self.current_player = player.clone();
+                self.toggle_music(cx);
             }
         }
         if self.ensure_track_loaded().is_ok() {
@@ -345,24 +407,290 @@ impl MusicPlayer {
         .detach();
     }
 
-    fn player_volume_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn player_progress_control_ui(
+        &self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let total = self
+            .total_duration
+            .unwrap_or_else(|| Duration::from_secs(0));
+
+        let display_position = self
+            .scrub_position
+            .filter(|_| self.is_scrubbing)
+            .unwrap_or(self.current_position);
+
+        let progress_bar_width = self
+            .progress_bar_bounds
+            .as_ref()
+            .map(|bounds| bounds.size.width.as_f32())
+            .unwrap_or(0.0);
+
+        let progress_ratio = if total.as_secs_f32() > 0.0 {
+            (display_position.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+
+        let progress_bar_entity = cx.entity();
+
         div()
+            .h(px(8.))
+            .w_full()
+            .rounded_full()
+            .bg(rgb_u8(226, 232, 240))
+            .cursor_pointer()
+            .on_prepaint({
+                let progress_bar_entity = progress_bar_entity.clone();
+                move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
+                    let _ = progress_bar_entity.update(cx, |this, _cx| {
+                        this.progress_bar_bounds = Some(bounds);
+                    });
+                }
+            })
+            .id("music_progress_bar")
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseDownEvent, _window, cx| {
+                    if let Some(bounds) = this.progress_bar_bounds {
+                        if let Some(target) = this.position_from_drag(event.position, bounds) {
+                            this.seek_audio_progress(target, cx);
+                            this.is_scrubbing = false;
+                            this.scrub_position = None;
+                        }
+                    }
+                }),
+            )
+            .on_drag(ProgressDrag, |_value, _offset, _window, cx| {
+                cx.new(|_| Empty)
+            })
+            .on_drag_move::<ProgressDrag>(cx.listener(
+                |this, event: &DragMoveEvent<ProgressDrag>, _window, _cx| {
+                    if let Some(target) =
+                        this.position_from_drag(event.event.position, event.bounds)
+                    {
+                        this.is_scrubbing = true;
+                        this.scrub_position = Some(target);
+                    }
+                },
+            ))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _event, _window, cx| {
+                    if this.is_scrubbing {
+                        if let Some(target) = this.scrub_position.take() {
+                            this.seek_audio_progress(target, cx);
+                        }
+                        this.is_scrubbing = false;
+                    }
+                }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, _event, _window, cx| {
+                    if this.is_scrubbing {
+                        if let Some(target) = this.scrub_position.take() {
+                            this.seek_audio_progress(target, cx);
+                        }
+                        this.is_scrubbing = false;
+                    }
+                }),
+            )
+            .child(
+                div()
+                    .h(px(8.))
+                    .w(px(progress_bar_width * progress_ratio))
+                    .rounded_full()
+                    .bg(rgb_u8(59, 130, 246)),
+            )
     }
 
-    fn player_progress_bar_ui(
+    fn player_volume_control_ui(
         &self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        div()
+        let volume_ratio = self.volume.clamp(0.0, 1.0);
+        let volume_bar_width = 150.0;
+        h_flex()
+            .w_full()
+            .gap_4()
+            .justify_center()
+            .items_center()
+            .flex_shrink_0()
+            .child(self.player_list_ui(window, cx))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(
+                        div()
+                            .size(px(28.))
+                            .rounded_full()
+                            .bg(rgb_u8(241, 245, 249))
+                            .border_1()
+                            .border_color(rgb_u8(203, 213, 225))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(12.))
+                            .text_color(rgb_u8(15, 23, 42))
+                            .id("music_prev_button")
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _event, _window, cx| {
+                                this.prev_music(cx);
+                            }))
+                            .child("<"),
+                    )
+                    .child(
+                        div()
+                            .size(px(36.))
+                            .rounded_full()
+                            .bg(rgb_u8(59, 130, 246))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(14.))
+                            .text_color(white())
+                            .cursor_pointer()
+                            .id("music_play_button")
+                            .on_click(cx.listener(|this, _event, _window, cx| {
+                                this.toggle_play(cx);
+                            }))
+                            .child(
+                                (if self.is_player {
+                                    div().child("■")
+                                } else {
+                                    div().child("▶")
+                                })
+                                .with_animation(
+                                    format!("play_toggle_{}", self.is_player),
+                                    Animation::new(Duration::from_millis(1000))
+                                        .with_easing(ease_in_out),
+                                    |el, delta| el.opacity(0.35 + 0.65 * delta),
+                                ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .size(px(28.))
+                            .rounded_full()
+                            .bg(rgb_u8(241, 245, 249))
+                            .border_1()
+                            .border_color(rgb_u8(203, 213, 225))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(12.))
+                            .text_color(rgb_u8(15, 23, 42))
+                            .cursor_pointer()
+                            .id("music_nest_button")
+                            .on_click(cx.listener(|this, _event, _window, cx| {
+                                this.next_music(cx);
+                            }))
+                            .child(">"),
+                    )
+                    .child(
+                        h_flex()
+                            .w(px(220.))
+                            .gap_2()
+                            .items_center()
+                            .ml_auto()
+                            .child(img("icon/icons8-voice-100.png").size(px(24.)))
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(rgb_u8(100, 116, 139))
+                                    .child(format!("{:.0}%", volume_ratio * 100.0)),
+                            )
+                            .child(
+                                div()
+                                    .h(px(8.))
+                                    .w(px(volume_bar_width))
+                                    .rounded_full()
+                                    .bg(rgb_u8(226, 232, 240))
+                                    .cursor_pointer()
+                                    .id("music_volume_bar")
+                                    .on_drag(VolumeDrag, |_value, _offset, _window, cx| {
+                                        cx.new(|_| Empty)
+                                    })
+                                    .on_drag_move::<VolumeDrag>(cx.listener(
+                                        |this, event: &DragMoveEvent<VolumeDrag>, _window, _cx| {
+                                            let left = event.bounds.origin.x.as_f32();
+                                            let width = event.bounds.size.width.as_f32().max(1.0);
+                                            let ratio = ((event.event.position.x.as_f32() - left)
+                                                / width)
+                                                .clamp(0.0, 1.0);
+                                            this.set_volume(ratio);
+                                        },
+                                    ))
+                                    .child(
+                                        div()
+                                            .h(px(8.))
+                                            .w(px(volume_bar_width * volume_ratio))
+                                            .rounded_full()
+                                            .bg(rgb_u8(148, 163, 184)),
+                                    ),
+                            ),
+                    ),
+            )
     }
 
-    fn player_controller_ui(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        div()
+    fn player_list_vm(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_virtual_list(
+            cx.entity().clone(),
+            "music-player-vm-list",
+            Rc::new(
+                self.player_list
+                    .iter()
+                    .map(|_| size(px(100.), px(40.)))
+                    .collect(),
+            ),
+            |view, visible_range, _, cx| {
+                visible_range
+                    .map(|index| {
+                        let data = view.player_list[index].clone();
+                        div()
+                            .flex()
+                            .justify_between()
+                            .w_full()
+                            .pr_2()
+                            .child(
+                                div()
+                                    .gap_2()
+                                    .justify_between()
+                                    .h_flex()
+                                    .child(img(data.music_pic.clone()).size(px(24.)).rounded_full())
+                                    .child(data.music_author.clone())
+                                    .child(data.music_platform.clone())
+                                    .child(data.music_name.clone()),
+                            )
+                            .child(if view.current_player.music_id == data.music_id {
+                                div().child("正在播放").into_any_element()
+                            } else {
+                                Button::new(("music-play-index-", index))
+                                    .label("播放")
+                                    .on_click({
+                                        let c = data.clone();
+                                        cx.listener(move |_, _, _, cx| {
+                                            let mut cx_async = cx.to_async().clone();
+                                            let state_handle = cx.global::<GlobalState>().0.clone();
+                                            let c = c.clone();
+                                            cx.spawn(|_, _: &mut AsyncApp| async move {
+                                                state_handle.update(&mut cx_async, |_, cx| {
+                                                    cx.emit(StateEvent::TogglePlayMusic(c.clone()))
+                                                });
+                                            })
+                                            .detach()
+                                        })
+                                    })
+                                    .into_any_element()
+                            })
+                    })
+                    .collect()
+            },
+        )
+        .track_scroll(&self.scroll_handle)
     }
 
     fn player_list_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -378,71 +706,7 @@ impl MusicPlayer {
                             .gap_2()
                             .p_4()
                             .size_full()
-                            .child(
-                                v_virtual_list(
-                                    cx.entity().clone(),
-                                    "music-player-vm-list",
-                                    Rc::new(
-                                        self.player_list
-                                            .iter()
-                                            .map(|_| size(px(100.), px(40.)))
-                                            .collect(),
-                                    ),
-                                    |view, visible_range, _, cx| {
-                                        visible_range
-                                            .map(|index| {
-                                                let data = view.player_list[index].clone();
-                                                div()
-                                                    .flex()
-                                                    .justify_between()
-                                                    .w_full()
-                                                    .pr_2()
-                                                    .child(
-                                                        div()
-                                                            .gap_2()
-                                                            .justify_between()
-                                                            .h_flex()
-                                                            .child(
-                                                                img(data.music_pic.clone())
-                                                                    .size(px(24.))
-                                                                    .rounded_full(),
-                                                            )
-                                                            .child(data.music_author.clone())
-                                                            .child(data.music_platform.clone())
-                                                            .child(data.music_name.clone()),
-                                                    )
-                                                    .child(
-                                                        Button::new(("music-play-index-", index))
-                                                            .label("播放")
-                                                            .on_click({
-                                                                let c = data.clone();
-                                                                cx.listener(move |_, _, _, cx| {
-                                                                    let mut cx_async = cx.to_async().clone();
-                                                                    let state_handle =
-                                                                        cx.global::<GlobalState>().0.clone();
-                                                                    let c = c.clone();
-                                                                    cx.spawn(|_, _: &mut AsyncApp| async move {
-                                                                        state_handle.update(
-                                                                            &mut cx_async,
-                                                                            |_, cx| {
-                                                                                cx.emit(
-                                                                                    StateEvent::TogglePlayMusic(
-                                                                                        c.clone(),
-                                                                                    ),
-                                                                                )
-                                                                            },
-                                                                        );
-                                                                    })
-                                                                    .detach()
-                                                                })
-                                                            }),
-                                                    )
-                                            })
-                                            .collect()
-                                    },
-                                )
-                                .track_scroll(&self.scroll_handle),
-                            )
+                            .child(self.player_list_vm(window, cx))
                             .child(
                                 Scrollbar::vertical(&self.scroll_handle)
                                     .scrollbar_show(ScrollbarShow::Always)
@@ -460,7 +724,6 @@ impl MusicPlayer {
 
 impl Render for MusicPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let _ = window;
         let total = self
             .total_duration
             .unwrap_or_else(|| Duration::from_secs(0));
@@ -468,258 +731,51 @@ impl Render for MusicPlayer {
             .scrub_position
             .filter(|_| self.is_scrubbing)
             .unwrap_or(self.current_position);
-        let progress_ratio = if total.as_secs_f32() > 0.0 {
-            (display_position.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        let volume_ratio = self.volume.clamp(0.0, 1.0);
-        let progress_bar_width = self
-            .progress_bar_bounds
-            .as_ref()
-            .map(|bounds| bounds.size.width.as_f32())
-            .unwrap_or(0.0);
-        let volume_bar_width = 150.0;
-        let progress_bar_entity = cx.entity();
 
         v_flex()
             .size_full()
             .p_2()
             .gap_2()
             .bg(rgb_u8(248, 250, 252))
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
+                this.handle_file_drop(paths, cx);
+            }))
             .child(div().flex_grow())
             .child(
                 v_flex()
-                 .w_full().child(
-                    v_flex()
-                        .gap_2()
-                        .child(
-                            div()
-                                .on_children_prepainted({
-                                    let progress_bar_entity = progress_bar_entity.clone();
-                                    move |bounds, _window, cx| {
-                                        if let Some(bounds) = bounds.first().cloned() {
-                                            let _ = progress_bar_entity.update(cx, |this, _cx| {
-                                                this.progress_bar_bounds = Some(bounds);
-                                            });
-                                        }
-                                    }
-                                })
-                                .child(
-                                    div()
-                                        .h(px(8.))
-                                        .w_full()
-                                        .rounded_full()
-                                        .bg(rgb_u8(226, 232, 240))
-                                        .cursor_pointer()
-                                        .id("music_progress_bar")
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            cx.listener(|this,  event: &MouseDownEvent, _window, cx| {
-                                                if let Some(bounds) = this.progress_bar_bounds {
-                                                    if let Some(target) = this.position_from_drag(event.position, bounds) {
-                                                        this.seek_audio_progress(target, cx);
-                                                        this.is_scrubbing = false;
-                                                        this.scrub_position = None;
-                                                    }
-                                                }
-                                            }),
-                                        )
-                                        .on_drag(ProgressDrag, |_value, _offset, _window, cx| {
-                                            cx.new(|_| Empty)
-                                        })
-                                        .on_drag_move::<ProgressDrag>(cx.listener(|this, event: &DragMoveEvent<ProgressDrag>, _window, _cx| {
-                                                if let Some(target) = this.position_from_drag(event.event.position, event.bounds, ) {
-                                                    this.is_scrubbing = true;
-                                                    this.scrub_position = Some(target);
-                                                }
-                                            },
-                                        ))
-                                        .on_mouse_up(
-                                            MouseButton::Left,
-                                            cx.listener(|this, _event, _window, cx| {
-                                                if this.is_scrubbing {
-                                                    if let Some(target) = this.scrub_position.take() {
-                                                        this.seek_audio_progress(target, cx);
-                                                    }
-                                                    this.is_scrubbing = false;
-                                                }
-                                            }),
-                                        )
-                                        .on_mouse_up_out(
-                                            MouseButton::Left,
-                                            cx.listener(|this, _event, _window, cx| {
-                                                if this.is_scrubbing {
-                                                    if let Some(target) = this.scrub_position.take() {
-                                                        this.seek_audio_progress(target, cx);
-                                                    }
-                                                    this.is_scrubbing = false;
-                                                }
-                                            }),
-                                        )
-                                        .child(
-                                            div()
-                                                .h(px(8.))
-                                                .w(px(progress_bar_width * progress_ratio))
-                                                .rounded_full()
-                                                .bg(rgb_u8(59, 130, 246)),
-                                        ),
-                                ),
-                        )
-
-                        .child(
-                            h_flex()
-                                .text_size(px(12.))
-                                .w_full()
-                                .items_center()
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .justify_start()
-                                        .text_color(rgb_u8(15, 23, 42))
-                                        .child(self.current_player.music_name.clone()),
-                                )
-
-                                .child(
-                                    h_flex()
-                                        .gap_2()
-                                        .child(Self::format_time(display_position))
-                                        .child("/")
-                                        .child(Self::format_time(total))
-                                )
-                                .child(
-                                    div()
-                                        .flex_1()
-                                )
-                        ),
-                )
-            )
-            .child(
-                h_flex()
-                    .w_full()
-                    .gap_4()
-                    .justify_center()
-                    .items_center()
-                    .flex_shrink_0()
-
-                    .child(
-                       self.player_list_ui(window, cx)
-                    )
+                    .gap_2()
+                    .p_2()
+                    .rounded_md()
+                    .border_2()
+                    .border_color(rgb(0xE2E8F0))
+                    .child(self.player_progress_control_ui(window, cx))
                     .child(
                         h_flex()
-                            .gap_2()
+                            .text_size(px(12.))
+                            .w_full()
+                            .items_center()
                             .child(
                                 div()
-                                    .size(px(28.))
-                                    .rounded_full()
-                                    .bg(rgb_u8(241, 245, 249))
-                                    .border_1()
-                                    .border_color(rgb_u8(203, 213, 225))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_size(px(12.))
+                                    .flex_1()
+                                    .justify_start()
+                                    .overflow_y_scrollbar()
                                     .text_color(rgb_u8(15, 23, 42))
-                                    .id("music_prev_button")
-                                    .cursor_pointer()
-                                    .on_click(cx.listener(|this, _event, _window, cx| {
-                                        this.prev_music(cx);
-                                    }))
-                                    .child("<"),
-                            )
-                            .child(
-                                div()
-                                    .size(px(36.))
-                                    .rounded_full()
-                                    .bg(rgb_u8(59, 130, 246))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_size(px(14.))
-                                    .text_color(white())
-                                    .cursor_pointer()
-                                    .id("music_play_button")
-                                    .on_click(cx.listener(|this, _event, _window, cx| {
-                                        this.toggle_play(cx);
-                                    }))
                                     .child(
-                                        (if self.is_player {
-                                            div().child("■")
-                                        } else {
-                                            div().child("▶")
-                                        })
-                                        .with_animation(
-                                            format!("play_toggle_{}", self.is_player),
-                                            Animation::new(Duration::from_millis(1000))
-                                                .with_easing(ease_in_out),
-                                            |el, delta| el.opacity(0.35 + 0.65 * delta),
-                                        ),
+                                        markdown(self.current_player.music_name.clone())
+                                            .selectable(true)
+                                            .cursor_text(),
                                     ),
-                            )
-                            .child(
-                                div()
-                                    .size(px(28.))
-                                    .rounded_full()
-                                    .bg(rgb_u8(241, 245, 249))
-                                    .border_1()
-                                    .border_color(rgb_u8(203, 213, 225))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_size(px(12.))
-                                    .text_color(rgb_u8(15, 23, 42))
-                                    .cursor_pointer()
-                                    .id("music_nest_button")
-                                    .on_click(cx.listener(|this, _event, _window, cx| {
-                                        this.next_music(cx);
-                                    }))
-                                    .child(">")
-
-                                ,
                             )
                             .child(
                                 h_flex()
-                                    .w(px(220.))
                                     .gap_2()
-                                    .items_center()
-                                    .ml_auto()
-                                    .child(img("icon/icons8-voice-100.png").size(px(24.)))
-                                    .child(
-                                        div()
-                                            .text_size(px(11.))
-                                            .text_color(rgb_u8(100, 116, 139))
-                                            .child(format!("{:.0}%", volume_ratio * 100.0)),
-                                    )
-                                    .child(
-                                        div()
-                                            .h(px(8.))
-                                            .w(px(volume_bar_width))
-                                            .rounded_full()
-                                            .bg(rgb_u8(226, 232, 240))
-                                            .cursor_pointer()
-                                            .id("music_volume_bar")
-                                            .on_drag(VolumeDrag, |_value, _offset, _window, cx| {
-                                                cx.new(|_| Empty)
-                                            })
-                                            .on_drag_move::<VolumeDrag>(cx.listener(
-                                                |this, event: &DragMoveEvent<VolumeDrag>, _window, _cx| {
-                                                    let left = event.bounds.origin.x.as_f32();
-                                                    let width = event.bounds.size.width.as_f32().max(1.0);
-                                                    let ratio = ((event.event.position.x.as_f32() - left) / width)
-                                                        .clamp(0.0, 1.0);
-                                                    this.set_volume(ratio);
-                                                },
-                                            ))
-                                            .child(
-                                                div()
-                                                    .h(px(8.))
-                                                    .w(px(volume_bar_width * volume_ratio))
-                                                    .rounded_full()
-                                                    .bg(rgb_u8(148, 163, 184)),
-                                            ),
-                                    ),
-                            ),
+                                    .child(Self::format_time(display_position))
+                                    .child("/")
+                                    .child(Self::format_time(total)),
+                            )
+                            .child(div().flex_1()),
                     )
+                    .child(self.player_volume_control_ui(window, cx)),
             )
     }
 }

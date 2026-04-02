@@ -136,7 +136,7 @@ fn main() {
     app.run(move |cx| {
         let mut window_options = WindowOptions::default();
         window_options.window_bounds = Some(WindowBounds::centered(size(px(1200.), px(700.)), cx));
-
+        window_options.window_min_size = Some(size(px(1200.), px(700.)));
         cx.open_window(window_options, |window, app| {
             // window.set_background_appearance(WindowBackgroundAppearance::Transparent);
             gpui_component::init(app);
@@ -152,6 +152,3 @@ fn main() {
         .expect("Failed to create app");
     });
 }
-
-// https://uk.aoemc.top/v1
-// sk-scld3ZKoVWp61eoQIg5sm5aIisf5wFpFldwGlh1vgRTpNDXm

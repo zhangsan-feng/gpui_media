@@ -1,16 +1,13 @@
-use crate::component::load_local_music_page::LoadLocalMusicPage;
 use crate::component::music_player::MusicPlayer;
 use crate::component::recommend_page::RecommendPage;
 use crate::component::video_player::VideoPlayer;
 use gpui::*;
-use gpui_component::divider::Divider;
 use gpui_component::{Root, h_flex, v_flex};
 use std::time::Duration;
 #[derive(PartialEq, Clone, Copy)]
 pub enum Page {
     RecommendPage,
     SearchPage,
-    LoadLocalMusicPage,
     MusicPlayerPage,
     VideoPlayerPage,
 }
@@ -18,7 +15,6 @@ pub enum Page {
 pub struct HomeView {
     select_id: Page,
     recommend_page: Entity<RecommendPage>,
-    load_local_music_page: Entity<LoadLocalMusicPage>,
     music_player_page: Entity<MusicPlayer>,
     video_player_page: Entity<VideoPlayer>,
 }
@@ -28,7 +24,6 @@ impl HomeView {
         let s = HomeView {
             select_id: Page::RecommendPage,
             recommend_page: cx.new(|cx| RecommendPage::new(window, cx)),
-            load_local_music_page: cx.new(|cx| LoadLocalMusicPage::new(window, cx)),
             music_player_page: cx.new(|cx| MusicPlayer::new(window, cx)),
             video_player_page: cx.new(|cx| VideoPlayer::new(window, cx)),
         };
@@ -77,7 +72,6 @@ impl Render for HomeView {
         let content_anim_id = match self.select_id {
             Page::RecommendPage => "home-view-recommend",
             Page::SearchPage => "home-view-search",
-            Page::LoadLocalMusicPage => "home-view-local",
             Page::MusicPlayerPage => "music-player-page",
             Page::VideoPlayerPage => "video-player-page",
         };
@@ -95,7 +89,6 @@ impl Render for HomeView {
                     // .rounded_2xl()
                     .child(self.render_nav_item("歌曲推荐", Page::RecommendPage, cx))
                     .child(self.render_nav_item("歌曲搜索", Page::SearchPage, cx))
-                    .child(self.render_nav_item("本地导入", Page::LoadLocalMusicPage, cx))
                     .child(self.render_nav_item("音频播放器", Page::MusicPlayerPage, cx))
                     .child(self.render_nav_item("视频播放器", Page::VideoPlayerPage, cx)),
             )
@@ -106,9 +99,6 @@ impl Render for HomeView {
                         .child(match self.select_id {
                             Page::RecommendPage => self.recommend_page.clone().into_any_element(),
                             Page::SearchPage => div().into_any_element(),
-                            Page::LoadLocalMusicPage => {
-                                self.load_local_music_page.clone().into_any_element()
-                            }
                             Page::MusicPlayerPage => {
                                 self.music_player_page.clone().into_any_element()
                             }

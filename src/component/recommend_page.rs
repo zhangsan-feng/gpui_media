@@ -22,7 +22,7 @@ impl RecommendPage {
             hovered_id: None,
             scroll_handle: VirtualListScrollHandle::new(),
         };
-        // s.init_component_data(cx);
+        s.init_component_data(cx);
         s
     }
 
@@ -57,7 +57,7 @@ impl RecommendPage {
 
 impl Render for RecommendPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div().h(px(580.)).w_full().child(
+        div().size_full().child(
             v_flex()
                 .gap_2()
                 .p_4()
