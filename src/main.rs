@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::state::{GlobalState, State};
-use gpui::http_client::{RedirectPolicy, Request, Response, Url, anyhow, http};
 use reqwest_client::ReqwestClient;
 use rust_embed::RustEmbed;
 

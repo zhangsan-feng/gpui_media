@@ -1,13 +1,13 @@
-use std::sync::Arc;
 use anyhow::Context;
-use gpui::http_client::http::{header, HeaderValue};
+use std::sync::Arc;
+
+use crate::com::HttpClient;
+use crate::entity::{MusicConvertLayer, PlatformInterface};
+use crate::music_platform::xmwav_music::headers;
 use log::info;
 use regex::Regex;
 use scraper::{Html, Selector};
 use uuid::Uuid;
-use crate::com::HttpClient;
-use crate::entity::{MusicConvertLayer, PlatformInterface};
-use crate::music_platform::xmwav_music::headers;
 
 pub struct XmWavImpl;
 impl PlatformInterface for XmWavImpl {
@@ -30,7 +30,11 @@ impl PlatformInterface for XmWavImpl {
                     .ok_or_else(|| anyhow::anyhow!("xmwav 未找到 artist"))?;
 
                 // info!("url: {} ", url);
-                let download_file = format!("./music/{}_{}",params.music_name, url.split("/").last().unwrap());
+                let download_file = format!(
+                    "./music/{}_{}",
+                    params.music_name,
+                    url.split("/").last().unwrap()
+                );
                 HttpClient::new()
                     .download_music(download_file.clone(), url, headers())
                     .await
@@ -39,7 +43,7 @@ impl PlatformInterface for XmWavImpl {
                 Ok(MusicConvertLayer {
                     music_id: params.music_id.clone(),
                     music_platform: "dtwav".to_string(),
-                    music_name:params.music_name.clone(),
+                    music_name: params.music_name.clone(),
                     music_author: params.music_author.clone(),
                     music_pic: params.music_pic.clone(),
                     music_source: params.music_source.to_string(),
@@ -52,7 +56,7 @@ impl PlatformInterface for XmWavImpl {
     }
 }
 
-pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
+pub async fn request_web(url: &str) -> anyhow::Result<Vec<MusicConvertLayer>> {
     let mut call_back = Vec::new();
 
     let response = HttpClient::new()
@@ -67,11 +71,11 @@ pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
     let selector = Selector::parse(".list.bgb ul > a ").expect("Invalid selector");
     let h2_selector = Selector::parse("h2").expect("Invalid h2 selector");
 
-
     for element in document.select(&selector) {
-
-        let href = element.value().attr("href").ok_or_else(|| anyhow::anyhow!("a tag not find href"))?;
-
+        let href = element
+            .value()
+            .attr("href")
+            .ok_or_else(|| anyhow::anyhow!("a tag not find href"))?;
 
         let h2_element = element
             .select(&h2_selector)
@@ -105,7 +109,6 @@ pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
     Ok(call_back)
 }
 
-
 pub async fn call() -> anyhow::Result<Vec<MusicConvertLayer>> {
     let mut call_back = Vec::new();
 
@@ -120,11 +123,9 @@ pub async fn call() -> anyhow::Result<Vec<MusicConvertLayer>> {
 
     for url in url_list {
         match request_web(url).await {
-            Ok(val)=>{
-                call_back.extend(val)
-            }
-            Err(e)=>{
-                info!("err:{}",e)
+            Ok(val) => call_back.extend(val),
+            Err(e) => {
+                info!("err:{}", e)
             }
         }
     }

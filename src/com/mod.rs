@@ -1,16 +1,15 @@
+use anyhow::Error;
+use deno_core::{JsRuntime, RuntimeOptions, serde_v8};
+use futures_util::StreamExt;
+use gpui::http_client::http::HeaderMap;
+use gpui::*;
+use log::info;
+use reqwest::{Response, multipart};
 use std::fs;
 use std::path::Path;
-use anyhow::Error;
-use deno_core::{serde_v8, JsRuntime, RuntimeOptions};
-use futures_util::{ StreamExt};
-use gpui::http_client::http::HeaderMap;
-use log::info;
-use reqwest::{multipart, Response};
 use tokio::io::AsyncWriteExt;
 
-
-pub fn call_js(js_path: &str, fn_name: &str, params: Vec<String>, ) -> Result<String, Error> {
-
+pub fn call_js(js_path: &str, fn_name: &str, params: Vec<String>) -> Result<String, Error> {
     let js_code = fs::read_to_string(js_path)?;
     let mut runtime = JsRuntime::new(RuntimeOptions::default());
     runtime.execute_script("<init>", js_code)?;
@@ -59,7 +58,6 @@ impl ResponseHandler for reqwest::Response {
     }
 }
 
-
 pub struct HttpClient {
     client: reqwest::Client,
 }
@@ -71,23 +69,21 @@ impl HttpClient {
         }
     }
 
-
-    pub async fn download_music(&self, file_name: String, url: String, header: HeaderMap) -> anyhow::Result<()> {
-
+    pub async fn download_music(
+        &self,
+        file_name: String,
+        url: String,
+        header: HeaderMap,
+    ) -> anyhow::Result<()> {
         if Path::new(&file_name).exists() {
-            return Ok(())
+            return Ok(());
         }
 
         let client = reqwest::Client::new();
-        let response = client
-            .get(&url)
-            .headers(header)
-            .send()
-            .await?;
-
+        let response = client.get(&url).headers(header).send().await?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("d"))
+            return Err(anyhow::anyhow!("d"));
         }
 
         let mut file = tokio::fs::File::create(&file_name).await?;
@@ -103,8 +99,11 @@ impl HttpClient {
         Ok(())
     }
 
-
-    pub async fn get_for_html(&self, url: &str, header:HeaderMap) -> Result<Response, anyhow::Error> {
+    pub async fn get_for_html(
+        &self,
+        url: &str,
+        header: HeaderMap,
+    ) -> Result<Response, anyhow::Error> {
         let response = match self.client.get(url).headers(header).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -115,7 +114,11 @@ impl HttpClient {
         Ok(response)
     }
 
-    pub async fn get(&self, url: &str, header:HeaderMap) -> Result<serde_json::Value, anyhow::Error> {
+    pub async fn get(
+        &self,
+        url: &str,
+        header: HeaderMap,
+    ) -> Result<serde_json::Value, anyhow::Error> {
         let response = match self.client.get(url).headers(header).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -127,8 +130,20 @@ impl HttpClient {
         response.handle().await
     }
 
-    pub async fn post(&self, url: &str, header:HeaderMap, body: serde_json::Value) -> Result<serde_json::Value, anyhow::Error> {
-        let response = match self.client.post(url).headers(header).json(&body).send().await {
+    pub async fn post(
+        &self,
+        url: &str,
+        header: HeaderMap,
+        body: serde_json::Value,
+    ) -> Result<serde_json::Value, anyhow::Error> {
+        let response = match self
+            .client
+            .post(url)
+            .headers(header)
+            .json(&body)
+            .send()
+            .await
+        {
             Ok(r) => r,
             Err(e) => {
                 info!("POST请求失败 [{}]: {}", url, e);
@@ -139,7 +154,11 @@ impl HttpClient {
         response.handle().await
     }
 
-    pub async fn post_form(&self, url: String, form: multipart::Form) -> Result<serde_json::Value, anyhow::Error> {
+    pub async fn post_form(
+        &self,
+        url: String,
+        form: multipart::Form,
+    ) -> Result<serde_json::Value, anyhow::Error> {
         let response = match self.client.post(&url).multipart(form).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -151,6 +170,7 @@ impl HttpClient {
     }
 }
 
-
-
-
+pub fn rgb_u8(r: u8, g: u8, b: u8) -> Rgba {
+    let color: u32 = (r as u32) << 16 | (g as u32) << 8 | (b as u32);
+    rgb(color)
+}

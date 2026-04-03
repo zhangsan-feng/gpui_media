@@ -1,13 +1,13 @@
 use crate::com::HttpClient;
-use crate::entity::{MusicConvertLayer,  PlatformInterface};
+use crate::entity::{MusicConvertLayer, PlatformInterface};
 use anyhow::Context;
-use gpui::http_client::http::{HeaderValue, header};
+
+use crate::music_platform::dtwav_music::headers;
 use log::info;
 use regex::Regex;
 use scraper::{Html, Selector};
 use std::sync::Arc;
-use uuid::{uuid, Uuid};
-use crate::music_platform::dtwav_music::headers;
+use uuid::Uuid;
 
 pub struct DtWavImpl;
 impl PlatformInterface for DtWavImpl {
@@ -31,13 +31,13 @@ impl PlatformInterface for DtWavImpl {
                     .captures(&html_content) // &html_content 不需要 *
                     .and_then(|c| c.get(1))
                     .map(|m| m.as_str().to_string())
-                    .unwrap_or_else(||"".to_string());
+                    .unwrap_or_else(|| "".to_string());
 
                 let author = author_re
                     .captures(&html_content)
                     .and_then(|c| c.get(1))
                     .map(|m| m.as_str().to_string())
-                    .unwrap_or_else(||"".to_string());
+                    .unwrap_or_else(|| "".to_string());
 
                 let url = url_re
                     .captures(&html_content)
@@ -52,7 +52,7 @@ impl PlatformInterface for DtWavImpl {
                 //     .unwrap_or_else(||"".to_string());
 
                 println!("解析成功: {} - {} (URL: {} pic:)", title, author, url);
-                let download_file = format!("./music/{}_{}",title, url.split("/").last().unwrap());
+                let download_file = format!("./music/{}_{}", title, url.split("/").last().unwrap());
                 HttpClient::new()
                     .download_music(download_file.clone(), url, headers())
                     .await
@@ -74,9 +74,7 @@ impl PlatformInterface for DtWavImpl {
     }
 }
 
-
-
-pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
+pub async fn request_web(url: &str) -> anyhow::Result<Vec<MusicConvertLayer>> {
     let mut call_back = Vec::new();
 
     let response = HttpClient::new()
@@ -97,13 +95,15 @@ pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
             .next()
             .ok_or_else(|| anyhow::anyhow!("No <a> tag found in .media-body"))?;
 
-     
         let img_element = element
             .select(&img_selector)
             .next()
             .ok_or_else(|| anyhow::anyhow!("No <a> tag found in .media-body"))?;
-        let img = img_element.value().attr("src").ok_or_else(|| anyhow::anyhow!("No src found in .media-body"))?;
-        let img = format!("https://dtwav.com{}",img);
+        let img = img_element
+            .value()
+            .attr("src")
+            .ok_or_else(|| anyhow::anyhow!("No src found in .media-body"))?;
+        let img = format!("https://dtwav.com{}", img);
 
         let href = link_element
             .value()
@@ -137,7 +137,6 @@ pub async fn request_web(url: &str)-> anyhow::Result<Vec<MusicConvertLayer>>{
     Ok(call_back)
 }
 
-
 pub async fn call() -> anyhow::Result<Vec<MusicConvertLayer>> {
     let mut call_back = Vec::new();
 
@@ -147,11 +146,9 @@ pub async fn call() -> anyhow::Result<Vec<MusicConvertLayer>> {
     ];
     for url in url_list {
         match request_web(url).await {
-            Ok(val)=>{
-                call_back.extend(val)
-            }
-            Err(e)=>{
-                info!("err:{}",e)
+            Ok(val) => call_back.extend(val),
+            Err(e) => {
+                info!("err:{}", e)
             }
         }
     }

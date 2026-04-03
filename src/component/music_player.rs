@@ -1,3 +1,4 @@
+use crate::com::rgb_u8;
 use crate::entity;
 use crate::entity::{DefaultPlatformInterface, PlatformInterface};
 use crate::state::StateEvent::{TogglePlayMusic, UpdatePlatyList};
@@ -9,7 +10,7 @@ use gpui::*;
 use gpui::{InteractiveElement, StatefulInteractiveElement};
 use gpui_component::button::Button;
 use gpui_component::popover::Popover;
-use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
+use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
 use gpui_component::{
     Anchor, ElementExt, StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list,
@@ -39,6 +40,7 @@ impl PlatformInterface for LocalMusicImpl {
 pub struct MusicPlayer {
     pub current_player: entity::MusicConvertLayer,
     pub player_list: Vec<entity::MusicConvertLayer>,
+    custom_render_width: Option<Bounds<Pixels>>,
     pub is_player: bool,
     scroll_handle: VirtualListScrollHandle,
     play_err: Option<String>,
@@ -51,11 +53,6 @@ pub struct MusicPlayer {
     volume: f32,
     progress_task: Option<Task<()>>,
     progress_bar_bounds: Option<Bounds<Pixels>>,
-}
-
-fn rgb_u8(r: u8, g: u8, b: u8) -> Rgba {
-    let color: u32 = (r as u32) << 16 | (g as u32) << 8 | (b as u32);
-    rgb(color)
 }
 
 impl MusicPlayer {
@@ -74,7 +71,7 @@ impl MusicPlayer {
             },
             player_list: vec![],
             scroll_handle: VirtualListScrollHandle::new(),
-
+            custom_render_width: None,
             is_player: false,
             play_err: Option::from("".to_string()),
             device_sink: None,
@@ -401,7 +398,6 @@ impl MusicPlayer {
                 UpdatePlatyList(data) => {
                     this.player_list = data.clone();
                 }
-                _ => {}
             },
         )
         .detach();
@@ -731,6 +727,7 @@ impl Render for MusicPlayer {
             .scrub_position
             .filter(|_| self.is_scrubbing)
             .unwrap_or(self.current_position);
+        let progress_bar_entity = cx.entity();
 
         v_flex()
             .size_full()
@@ -740,7 +737,17 @@ impl Render for MusicPlayer {
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
                 this.handle_file_drop(paths, cx);
             }))
-            .child(div().flex_grow())
+            .child(
+                div()
+                    .flex_grow()
+                    // .bg(rgb(0x0F172A))
+                    .flex_grow()
+                    .flex()
+                    .justify_center()
+                    .items_center()
+                    .rounded_md()
+                    .border_1(),
+            )
             .child(
                 v_flex()
                     .gap_2()
@@ -753,18 +760,49 @@ impl Render for MusicPlayer {
                         h_flex()
                             .text_size(px(12.))
                             .w_full()
-                            .items_center()
                             .child(
                                 div()
-                                    .flex_1()
                                     .justify_start()
-                                    .overflow_y_scrollbar()
                                     .text_color(rgb_u8(15, 23, 42))
+                                    .on_prepaint({
+                                        let progress_bar_entity = progress_bar_entity.clone();
+                                        move |bounds: Bounds<Pixels>,
+                                              _window: &mut Window,
+                                              cx: &mut App| {
+                                            let _ = progress_bar_entity.update(cx, |this, cx| {
+                                                this.custom_render_width = Some(bounds);
+                                                // println!("{:?}", bounds.size.width)
+                                            });
+                                        }
+                                    })
                                     .child(
-                                        markdown(self.current_player.music_name.clone())
-                                            .selectable(true)
-                                            .cursor_text(),
-                                    ),
+                                        div()
+                                            .overflow_x_hidden()
+                                            .mb_3()
+                                            .w(px(self
+                                                .custom_render_width
+                                                .as_ref()
+                                                .map(|bounds| bounds.size.width.as_f32() - 10.)
+                                                .unwrap_or(0.0)))
+                                            .child(
+                                                markdown(
+                                                    if !self.current_player.music_name.is_empty() {
+                                                        self.current_player.music_name.clone()
+                                                    } else {
+                                                        if let Some(r) = self.play_err.clone() {
+                                                            r
+                                                        } else {
+                                                            "没有加载音源".to_string()
+                                                        }
+                                                    },
+                                                )
+                                                .selectable(true)
+                                                .whitespace_nowrap()
+                                                .text_color(rgb(0x94A3B8))
+                                                .cursor_text(),
+                                            ),
+                                    )
+                                    .into_any_element(),
                             )
                             .child(
                                 h_flex()
@@ -772,8 +810,7 @@ impl Render for MusicPlayer {
                                     .child(Self::format_time(display_position))
                                     .child("/")
                                     .child(Self::format_time(total)),
-                            )
-                            .child(div().flex_1()),
+                            ),
                     )
                     .child(self.player_volume_control_ui(window, cx)),
             )

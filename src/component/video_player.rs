@@ -1,6 +1,7 @@
 use anyhow::Result;
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::scroll::ScrollableElement;
 use gpui_component::text::markdown;
 use gpui_component::{ElementExt as GpuiElementExt, h_flex, v_flex};
 use gstreamer as gst;
@@ -9,13 +10,14 @@ use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
 use image::{Frame, RgbaImage};
-use log::info;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use url::Url;
+
+use crate::com::rgb_u8;
 
 // pub fn window_center_options(window: &mut Window, w: f32, h: f32) -> WindowOptions {
 //     let parent_bounds = window.bounds();
@@ -52,6 +54,9 @@ use url::Url;
 pub struct VideoPlayer {
     current_player: String,
     player_list: Vec<String>,
+    custom_render_width: Option<Bounds<Pixels>>,
+    custom_render_video_bounds: Option<Bounds<Pixels>>,
+
     playbin: Option<gst::Element>,
     appsink: Option<gst_app::AppSink>,
     is_playing: bool,
@@ -78,8 +83,10 @@ impl VideoPlayer {
         let _ = (window, cx);
         let _ = gst::init();
         Self {
-            current_player: "https://v11-weba.douyinvod.com/19d5e51f5dd6672453f491529bf07d7c/69ccb205/video/tos/cn/tos-cn-ve-15/o8IAAREanRPwbIi0j0N34PD2CQiHvB60PcQ7U/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1507&bt=1507&cs=0&ds=4&ft=AJkeU_TERR0sWrC12D12Nc0iPMgzbL8q01-U_4mqVY_2Nv7TGW&mime_type=video_mp4&qs=0&rc=aGU6ZWk2Zzo8aWc4PDdnNEBpajZveHU5cml5OTMzNGkzM0BeLTQvM2MxNmMxYF9gMDUuYSNvbWU1MmQ0ZW1hLS1kLTBzcw%3D%3D&btag=c0000e00030000&cquery=100w_100B_100H_100K_100o&dy_q=1775011511&feature_id=37f92ebd2877ae8e7eba995d406c5150&l=20260401104511FCAB47CEDA6E5EF505E5".to_string(),
-            player_list:vec![],
+            current_player: "".to_string(),
+            player_list: vec![],
+            custom_render_width: None,
+            custom_render_video_bounds: None,
             playbin: None,
             appsink: None,
             is_playing: false,
@@ -350,13 +357,13 @@ impl VideoPlayer {
         if let Some(playbin) = &self.playbin {
             if let Some(pos) = playbin.query_position::<gst::ClockTime>() {
                 self.position = clock_to_duration(pos);
-                println!("[video] pos={}ms", self.position.as_millis());
+                // println!("[video] pos={}ms", self.position.as_millis());
             }
             let needs_duration = self.duration.map(|d| d.as_nanos() == 0).unwrap_or(true);
             if needs_duration {
                 if let Some(total) = playbin.query_duration::<gst::ClockTime>() {
                     let duration = clock_to_duration(total);
-                    println!("[video] duration={}ms", duration.as_millis());
+                    // println!("[video] duration={}ms", duration.as_millis());
                     if duration.as_nanos() > 0 {
                         self.duration = Some(duration);
                     }
@@ -434,14 +441,27 @@ impl VideoPlayer {
         let seconds = total_secs % 60;
         format!("{:02}:{:02}", minutes, seconds)
     }
+
+    fn handle_file_drop(&mut self, paths: &ExternalPaths, cx: &mut Context<Self>) {
+        let mut added = Vec::new();
+        for path in paths.paths() {
+            added.push(path.to_string_lossy().to_string());
+        }
+
+        if added.is_empty() {
+            return;
+        }
+
+        self.current_player = added[0].clone();
+        self.player_list.extend(added);
+        self.play(cx);
+
+        cx.notify();
+    }
 }
 
 impl Render for VideoPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let window_bounds = window.bounds();
-        let window_width = window_bounds.size.width.as_f32();
-        let window_height = window_bounds.size.height.as_f32();
-        let content_width = (window_width - 32.0).max(1.0);
         let total = self.duration.unwrap_or_else(|| Duration::from_secs(0));
         let display_position = self
             .scrub_position
@@ -452,14 +472,19 @@ impl Render for VideoPlayer {
         } else {
             0.0
         };
-        let progress_bar_width = 520.0;
+        let progress_bar_width = self
+            .progress_bar_bounds
+            .as_ref()
+            .map(|bounds| bounds.size.width.as_f32())
+            .unwrap_or(0.0);
         let progress_bar_entity = cx.entity();
-        let controls_height = 160.0;
-        let available_height = (window_height - controls_height - 32.0).max(200.0);
         let aspect = self.video_aspect.max(0.01);
+
         let (video_width, video_height) = {
-            let max_w = content_width.max(1.0);
-            let max_h = available_height.max(1.0);
+            let max_w = window.bounds().size.width.as_f32() - 240.;
+            let max_h = window.bounds().size.height.as_f32() - 160.;
+            let max_w = max_w.max(1.0);
+            let max_h = max_h.max(1.0);
             let width_for_height = max_h * aspect;
             if width_for_height <= max_w {
                 (width_for_height, max_h)
@@ -469,79 +494,59 @@ impl Render for VideoPlayer {
             }
         };
 
+        // println!("video w:{} video h:{}", video_width, video_height);
         v_flex()
-            .w_full()
-            .h_full()
-            .p_4()
-            .gap_4()
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
+                this.handle_file_drop(paths, cx);
+            }))
+            .size_full()
+            .p_2()
+            .gap_2()
             .child(
                 div()
-                    .h(px(available_height))
-                    .w_full()
-                    .flex()
                     .flex_grow()
-                    .items_center()
+                    .flex()
                     .justify_center()
+                    .items_center()
                     .rounded_md()
                     .border_1()
                     .border_color(rgb(0xE2E8F0))
                     // .bg(rgb(0x0F172A))
+
+                    .on_prepaint({
+                        let progress_bar_entity = progress_bar_entity.clone();
+                        move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
+                            let _ = progress_bar_entity.update(cx, |this, cx| {
+                                this.custom_render_video_bounds = Some(bounds);
+                                // println!("w:{} h:{}", bounds.size.width, bounds.size.height)
+                            });
+                        }
+                    })
                     .child(
-                        div()
-                            .w(px(video_width))
-                            .h(px(video_height))
-                            .overflow_hidden()
-                            .child(if let Some(frame) = self.render_image.clone() {
-                                img(frame)
-                                    .object_fit(ObjectFit::Contain)
-                                    .size_full()
-                                    .into_any_element()
-                            } else {
-                                let message = self
-                                    .last_error
-                                    .clone()
-                                    .unwrap_or_else(|| "No video loaded".to_string());
-                                // info!("{}", message);
-                                div()
-                                    .w_full()
-                                    .h_full()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .child(
-                                        div()
-                                            .w_full()
-                                            .text_color(rgb(0x94A3B8))
-                                            .text_size(px(14.))
-                                            .items_center()
-                                            .justify_center()
-                                            .whitespace_normal()
-                                            .child(
-                                                markdown(message)
-                                                    .selectable(true)
-                                                    .text_color(rgb(0x94A3B8))
-                                                    .text_size(px(14.))
-                                                    .cursor_text(),
-                                            ),
-                                    )
-                                    .flex_wrap()
-                                    .into_any_element()
-                            }),
+                        if let Some(frame) = self.render_image.clone() {
+                            img(frame)
+                                .w(px(video_width))
+                                .h(px(video_height))
+                                .object_fit(ObjectFit::Cover)
+                                .into_any_element()
+                        } else {
+                            div().into_any_element()
+                        },
+
                     ),
             )
             .child(
                 v_flex()
-                    .gap_3()
-                    .p_3()
+                    .gap_2()
+                    .p_2()
                     .rounded_md()
                     .border_1()
                     .border_color(rgb(0xE2E8F0))
                     .bg(rgb(0xF8FAFC))
-                    // .flex_shrink_0()
                     .child(
                         div()
                             .h(px(8.))
-                            .w(px(progress_bar_width))
+                            .w_full()
                             .rounded_full()
                             .bg(rgb(0xE2E8F0))
                             .cursor_pointer()
@@ -613,10 +618,60 @@ impl Render for VideoPlayer {
                     )
                     .child(
                         h_flex()
-                            .items_center()
-                            .child(Self::format_time(display_position))
-                            .child("/")
-                            .child(Self::format_time(total)),
+                            .text_size(px(12.))
+                            .w_full()
+                            .child(
+                                div()
+                                    .justify_start()
+                                    .text_color(rgb_u8(15, 23, 42))
+                                    .on_prepaint({
+                                        let progress_bar_entity = progress_bar_entity.clone();
+                                        move |bounds: Bounds<Pixels>,
+                                              _window: &mut Window,
+                                              cx: &mut App| {
+                                            let _ = progress_bar_entity.update(cx, |this, cx| {
+                                                this.custom_render_width = Some(bounds);
+                                                // println!("{:?}", bounds.size.width)
+                                            });
+                                        }
+                                    })
+                                    .child(
+                                        div()
+                                            .overflow_x_scrollbar()
+                                            .mb_3()
+                                            .w(px(self
+                                                .custom_render_width
+                                                .as_ref()
+                                                .map(|bounds| bounds.size.width.as_f32() - 10.)
+                                                .unwrap_or(0.0)))
+                                            .child(
+                                                markdown(if !self.current_player.is_empty() {
+                                                    self.current_player.clone()
+                                                } else {
+                                                    if let Some(player_err) =
+                                                        self.last_error.clone()
+                                                    {
+                                                        player_err.to_string()
+                                                    } else {
+                                                        "No video loaded".to_string()
+                                                    }
+                                                })
+                                                .selectable(true)
+                                                .whitespace_nowrap()
+                                                .text_color(rgb(0x94A3B8))
+                                                .cursor_text(),
+                                            ),
+                                    )
+                                    .into_any_element(),
+                            )
+                            .child(
+                                h_flex()
+                                    .gap_2()
+                                    .flex_shrink_0()
+                                    .child(Self::format_time(display_position))
+                                    .child("/")
+                                    .child(Self::format_time(total)),
+                            ),
                     )
                     .child(
                         h_flex().gap_3().items_center().child(
