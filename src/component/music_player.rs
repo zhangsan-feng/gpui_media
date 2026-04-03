@@ -10,7 +10,7 @@ use gpui::*;
 use gpui::{InteractiveElement, StatefulInteractiveElement};
 use gpui_component::button::Button;
 use gpui_component::popover::Popover;
-use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
+use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
 use gpui_component::{
     Anchor, ElementExt, StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list,
@@ -60,7 +60,7 @@ impl MusicPlayer {
         let mut s = MusicPlayer {
             current_player: entity::MusicConvertLayer {
                 music_id: "".to_string(),
-                music_name: "当前没有加载音源".to_string(),
+                music_name: "".to_string(),
                 music_author: "".to_string(),
                 music_pic: "".to_string(),
                 music_platform: "".to_string(),
@@ -73,7 +73,7 @@ impl MusicPlayer {
             scroll_handle: VirtualListScrollHandle::new(),
             custom_render_width: None,
             is_player: false,
-            play_err: Option::from("".to_string()),
+            play_err: None,
             device_sink: None,
             player: None,
             total_duration: None,
@@ -559,12 +559,6 @@ impl MusicPlayer {
                                 } else {
                                     div().child("▶")
                                 })
-                                .with_animation(
-                                    format!("play_toggle_{}", self.is_player),
-                                    Animation::new(Duration::from_millis(1000))
-                                        .with_easing(ease_in_out),
-                                    |el, delta| el.opacity(0.35 + 0.65 * delta),
-                                ),
                             ),
                     )
                     .child(
@@ -727,7 +721,6 @@ impl Render for MusicPlayer {
             .scrub_position
             .filter(|_| self.is_scrubbing)
             .unwrap_or(self.current_position);
-        let progress_bar_entity = cx.entity();
 
         v_flex()
             .size_full()
@@ -760,52 +753,36 @@ impl Render for MusicPlayer {
                         h_flex()
                             .text_size(px(12.))
                             .w_full()
+                            .justify_between()
                             .child(
                                 div()
-                                    .justify_start()
+                                    .w(px(window.bounds().size.width.as_f32().clone() / 2.))
                                     .text_color(rgb_u8(15, 23, 42))
-                                    .on_prepaint({
-                                        let progress_bar_entity = progress_bar_entity.clone();
-                                        move |bounds: Bounds<Pixels>,
-                                              _window: &mut Window,
-                                              cx: &mut App| {
-                                            let _ = progress_bar_entity.update(cx, |this, cx| {
-                                                this.custom_render_width = Some(bounds);
-                                                // println!("{:?}", bounds.size.width)
-                                            });
-                                        }
-                                    })
+                                    .overflow_x_scrollbar()
+                                    .mb_3()
                                     .child(
-                                        div()
-                                            .overflow_x_hidden()
-                                            .mb_3()
-                                            .w(px(self
-                                                .custom_render_width
-                                                .as_ref()
-                                                .map(|bounds| bounds.size.width.as_f32() - 10.)
-                                                .unwrap_or(0.0)))
-                                            .child(
-                                                markdown(
-                                                    if !self.current_player.music_name.is_empty() {
-                                                        self.current_player.music_name.clone()
-                                                    } else {
-                                                        if let Some(r) = self.play_err.clone() {
-                                                            r
-                                                        } else {
-                                                            "没有加载音源".to_string()
-                                                        }
-                                                    },
-                                                )
-                                                .selectable(true)
-                                                .whitespace_nowrap()
-                                                .text_color(rgb(0x94A3B8))
-                                                .cursor_text(),
-                                            ),
-                                    )
-                                    .into_any_element(),
+                                        markdown(
+                                            // "没有加载音源".to_string()
+                                            if let Some(r) = self.play_err.clone() {
+                                                r
+                                            } else {
+                                                if !self.current_player.music_name.is_empty() {
+                                                    self.current_player.music_name.clone()
+                                                    // "aaaaaa".to_string()
+                                                } else {
+                                                    "没有加载音乐来源".to_string()
+                                                }
+                                            }
+                                        )
+                                        .selectable(true)
+                                        .whitespace_nowrap()
+                                        .text_color(rgb(0x94A3B8))
+                                        .cursor_text(),
+                                    ),
                             )
                             .child(
                                 h_flex()
+                                    .flex_shrink_0()
                                     .gap_2()
                                     .child(Self::format_time(display_position))
                                     .child("/")

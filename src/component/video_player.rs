@@ -1,9 +1,11 @@
 use anyhow::Result;
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::scroll::ScrollableElement;
+use gpui_component::button::Button;
+use gpui_component::popover::Popover;
+use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
-use gpui_component::{ElementExt as GpuiElementExt, h_flex, v_flex};
+use gpui_component::{Anchor, ElementExt as GpuiElementExt, StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list};
 use gstreamer as gst;
 use gstreamer::prelude::ElementExt as GstElementExt;
 use gstreamer::prelude::*;
@@ -11,6 +13,7 @@ use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
 use image::{Frame, RgbaImage};
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -18,6 +21,7 @@ use std::time::Duration;
 use url::Url;
 
 use crate::com::rgb_u8;
+use crate::state::GlobalState;
 
 // pub fn window_center_options(window: &mut Window, w: f32, h: f32) -> WindowOptions {
 //     let parent_bounds = window.bounds();
@@ -55,11 +59,11 @@ pub struct VideoPlayer {
     current_player: String,
     player_list: Vec<String>,
     custom_render_width: Option<Bounds<Pixels>>,
-    custom_render_video_bounds: Option<Bounds<Pixels>>,
-
+    scroll_handle: VirtualListScrollHandle,
+    volume: f32,
     playbin: Option<gst::Element>,
     appsink: Option<gst_app::AppSink>,
-    is_playing: bool,
+    is_player: bool,
     duration: Option<Duration>,
     position: Duration,
     video_aspect: f32,
@@ -85,11 +89,12 @@ impl VideoPlayer {
         Self {
             current_player: "".to_string(),
             player_list: vec![],
+            scroll_handle:VirtualListScrollHandle::new(),
             custom_render_width: None,
-            custom_render_video_bounds: None,
+            volume: 0.6,
             playbin: None,
             appsink: None,
-            is_playing: false,
+            is_player: false,
             duration: None,
             position: Duration::from_secs(0),
             video_aspect: 16.0 / 9.0,
@@ -235,7 +240,7 @@ impl VideoPlayer {
     }
 
     fn toggle_play(&mut self, cx: &mut Context<Self>) {
-        if self.is_playing {
+        if self.is_player {
             self.pause();
         } else {
             self.play(cx);
@@ -248,7 +253,7 @@ impl VideoPlayer {
         }
         if let Some(playbin) = &self.playbin {
             let _ = playbin.set_state(gst::State::Playing);
-            self.is_playing = true;
+            self.is_player = true;
             self.ensure_bus_watch(cx);
             self.ensure_progress_task(cx);
             self.ensure_frame_task(cx);
@@ -259,7 +264,7 @@ impl VideoPlayer {
         if let Some(playbin) = &self.playbin {
             let _ = playbin.set_state(gst::State::Paused);
         }
-        self.is_playing = false;
+        self.is_player = false;
     }
 
     fn ensure_bus_watch(&mut self, cx: &mut Context<Self>) {
@@ -303,7 +308,7 @@ impl VideoPlayer {
                         if let Some(text) = error_text {
                             this.last_error = Some(text);
                         }
-                        this.is_playing = false;
+                        this.is_player = false;
                         cx.notify();
                     });
                     if should_stop {
@@ -371,7 +376,7 @@ impl VideoPlayer {
             }
         }
 
-        let should_continue = self.is_playing || self.is_scrubbing;
+        let should_continue = self.is_player || self.is_scrubbing;
         if !should_continue {
             self.progress_task = None;
         }
@@ -458,6 +463,88 @@ impl VideoPlayer {
 
         cx.notify();
     }
+
+    fn player_list_vm(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_virtual_list(
+            cx.entity().clone(),
+            "music-player-vm-list",
+            Rc::new(
+                self.player_list
+                    .iter()
+                    .map(|_| size(px(100.), px(40.)))
+                    .collect(),
+            ),
+            |view, visible_range, _, cx| {
+                visible_range
+                    .map(|index| {
+                        let data = view.player_list[index].clone();
+                        div()
+                            .flex()
+                            .justify_between()
+                            .w_full()
+                            .pr_2()
+                            .child(
+                                div()
+                                    .gap_2()
+                                    .justify_between()
+                                    .h_flex()
+                                    .child(data.clone()),
+                            )
+                            // .child(if view.current_player.music_id == data.music_id {
+                            //     div().child("正在播放").into_any_element()
+                            // } else {
+                            //     Button::new(("music-play-index-", index))
+                            //         .label("播放")
+                            //         .on_click({
+                            //             let c = data.clone();
+                            //             cx.listener(move |_, _, _, cx| {
+                            //                 let mut cx_async = cx.to_async().clone();
+                            //                 let state_handle = cx.global::<GlobalState>().0.clone();
+                            //                 let c = c.clone();
+                            //                 cx.spawn(|_, _: &mut AsyncApp| async move {
+                            //                     state_handle.update(&mut cx_async, |_, cx| {
+                            //                         cx.emit(StateEvent::TogglePlayMusic(c.clone()))
+                            //                     });
+                            //                 })
+                            //                 .detach()
+                            //             })
+                            //         })
+                            //         .into_any_element()
+                            // })
+                    })
+                    .collect()
+            },
+        )
+        .track_scroll(&self.scroll_handle)
+    }
+
+    fn player_list_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        Popover::new("default-open-popover")
+            .anchor(Anchor::BottomRight)
+            .trigger(Button::new("show-form").label("播放列表").outline())
+            .child(
+                div()
+                    .h(px(600.))
+                    .w(px(800.))
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .p_4()
+                            .size_full()
+                            .child(self.player_list_vm(window, cx))
+                            .child(
+                                Scrollbar::vertical(&self.scroll_handle)
+                                    .scrollbar_show(ScrollbarShow::Always)
+                                    .axis(ScrollbarAxis::Vertical),
+                            ),
+                    )
+                    .with_animation(
+                        "playlist-popover-anim",
+                        Animation::new(Duration::from_millis(550)).with_easing(ease_in_out),
+                        |el, delta| el.opacity(0.2 + 0.8 * delta).h(px(8. + 592. * delta)),
+                    ),
+            )
+    }
 }
 
 impl Render for VideoPlayer {
@@ -493,7 +580,8 @@ impl Render for VideoPlayer {
                 (max_w, height_for_width)
             }
         };
-
+        let volume_bar_width = 150.;
+        let volume_ratio = self.volume.clamp(0.0, 1.0);
         // println!("video w:{} video h:{}", video_width, video_height);
         v_flex()
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
@@ -512,16 +600,6 @@ impl Render for VideoPlayer {
                     .border_1()
                     .border_color(rgb(0xE2E8F0))
                     // .bg(rgb(0x0F172A))
-
-                    .on_prepaint({
-                        let progress_bar_entity = progress_bar_entity.clone();
-                        move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
-                            let _ = progress_bar_entity.update(cx, |this, cx| {
-                                this.custom_render_video_bounds = Some(bounds);
-                                // println!("w:{} h:{}", bounds.size.width, bounds.size.height)
-                            });
-                        }
-                    })
                     .child(
                         if let Some(frame) = self.render_image.clone() {
                             img(frame)
@@ -619,77 +697,156 @@ impl Render for VideoPlayer {
                     .child(
                         h_flex()
                             .text_size(px(12.))
+                            .justify_between()
                             .w_full()
                             .child(
                                 div()
-                                    .justify_start()
+                                    .w(px(window.bounds().size.width.as_f32().clone() / 2.))
                                     .text_color(rgb_u8(15, 23, 42))
-                                    .on_prepaint({
-                                        let progress_bar_entity = progress_bar_entity.clone();
-                                        move |bounds: Bounds<Pixels>,
-                                              _window: &mut Window,
-                                              cx: &mut App| {
-                                            let _ = progress_bar_entity.update(cx, |this, cx| {
-                                                this.custom_render_width = Some(bounds);
-                                                // println!("{:?}", bounds.size.width)
-                                            });
-                                        }
-                                    })
+                                    .overflow_x_scrollbar()
+                                    .mb_3()
                                     .child(
-                                        div()
-                                            .overflow_x_scrollbar()
-                                            .mb_3()
-                                            .w(px(self
-                                                .custom_render_width
-                                                .as_ref()
-                                                .map(|bounds| bounds.size.width.as_f32() - 10.)
-                                                .unwrap_or(0.0)))
-                                            .child(
-                                                markdown(if !self.current_player.is_empty() {
+                                        markdown(
+                                            if let Some(player_err) = self.last_error.clone(){
+                                                player_err.to_string()
+                                            } else {
+                                                if !self.current_player.is_empty() {
                                                     self.current_player.clone()
-                                                } else {
-                                                    if let Some(player_err) =
-                                                        self.last_error.clone()
-                                                    {
-                                                        player_err.to_string()
-                                                    } else {
-                                                        "No video loaded".to_string()
-                                                    }
-                                                })
-                                                .selectable(true)
-                                                .whitespace_nowrap()
-                                                .text_color(rgb(0x94A3B8))
-                                                .cursor_text(),
-                                            ),
-                                    )
-                                    .into_any_element(),
+                                                }else{
+                                                    "没有加载视频来源".to_string()
+                                                }
+                                        })
+                                        .selectable(true)
+                                        .whitespace_nowrap()
+                                        .text_color(rgb(0x94A3B8))
+                                        .cursor_text(),
+                                    ),
+
                             )
                             .child(
                                 h_flex()
                                     .gap_2()
-                                    .flex_shrink_0()
                                     .child(Self::format_time(display_position))
                                     .child("/")
                                     .child(Self::format_time(total)),
                             ),
                     )
                     .child(
-                        h_flex().gap_3().items_center().child(
-                            div()
-                                .size(px(36.))
-                                .rounded_full()
-                                .bg(rgb(0x3B82F6))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_color(white())
-                                .cursor_pointer()
-                                .id("video_play_button")
-                                .on_click(cx.listener(|this, _event, _window, cx| {
-                                    this.toggle_play(cx);
-                                }))
-                                .child(if self.is_playing { "Pause" } else { "Play" }),
-                        ),
+                        h_flex()
+                            .w_full()
+                            .gap_4()
+                            .justify_center()
+                            .items_center()
+                            .child(self.player_list_ui(window, cx))
+                            .child(
+                                h_flex()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .size(px(28.))
+                                            .rounded_full()
+                                            .bg(rgb_u8(241, 245, 249))
+                                            .border_1()
+                                            .border_color(rgb_u8(203, 213, 225))
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .text_size(px(12.))
+                                            .text_color(rgb_u8(15, 23, 42))
+                                            .id("music_prev_button")
+                                            .cursor_pointer()
+                                            // .on_click(cx.listener(|this, _event, _window, cx| {
+                                                // this.prev_music(cx);
+                                            // }))
+                                            .child("<"),
+                                    )
+                                    .child(
+                                        div()
+                                            .size(px(36.))
+                                            .rounded_full()
+                                            .bg(rgb_u8(59, 130, 246))
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .text_size(px(14.))
+                                            .text_color(white())
+                                            .cursor_pointer()
+                                            .id("music_play_button")
+                                            .on_click(cx.listener(|this, _event, _window, cx| {
+                                                this.toggle_play(cx);
+                                            }))
+                                            .child(
+                                                (if self.is_player {
+                                                    div().child("■")
+                                                } else {
+                                                    div().child("▶")
+                                                })
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .size(px(28.))
+                                            .rounded_full()
+                                            .bg(rgb_u8(241, 245, 249))
+                                            .border_1()
+                                            .border_color(rgb_u8(203, 213, 225))
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .text_size(px(12.))
+                                            .text_color(rgb_u8(15, 23, 42))
+                                            .cursor_pointer()
+                                            .id("music_nest_button")
+                                            // .on_click(cx.listener(|this, _event, _window, cx| {
+                                                // this.next_music(cx);
+                                            // }))
+                                            .child(">"),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .w(px(220.))
+                                            .gap_2()
+                                            .items_center()
+                                            .ml_auto()
+                                            .child(img("icon/icons8-voice-100.png").size(px(24.)))
+                                            .child(
+                                                div()
+                                                    .text_size(px(11.))
+                                                    .text_color(rgb_u8(100, 116, 139))
+                                                    .child(format!("{:.0}%", volume_ratio * 100.0)),
+                                            )
+                                            .child(
+                                                div()
+                                                    .h(px(8.))
+                                                    .w(px(volume_bar_width))
+                                                    .rounded_full()
+                                                    .bg(rgb_u8(226, 232, 240))
+                                                    .cursor_pointer()
+                                                    .id("music_volume_bar")
+                                                    // .on_drag(VolumeDrag, |_value, _offset, _window, cx| {
+                                                    //     cx.new(|_| Empty)
+                                                    // })
+                                                    // .on_drag_move::<VolumeDrag>(cx.listener(
+                                                    //     |this, event: &DragMoveEvent<VolumeDrag>, _window, _cx| {
+                                                    //         let left = event.bounds.origin.x.as_f32();
+                                                    //         let width = event.bounds.size.width.as_f32().max(1.0);
+                                                    //         let ratio = ((event.event.position.x.as_f32() - left)
+                                                    //             / width)
+                                                    //             .clamp(0.0, 1.0);
+                                                    //         this.set_volume(ratio);
+                                                    //     },
+                                                    // ))
+                                                    // .child(
+                                                    //     div()
+                                                    //         .h(px(8.))
+                                                    //         .w(px(volume_bar_width * volume_ratio))
+                                                    //         .rounded_full()
+                                                    //         .bg(rgb_u8(148, 163, 184)),
+                                                    // ),
+                                            ),
+                                    ),
+                            )
+
                     ),
             )
     }
