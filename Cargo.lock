@@ -2894,6 +2894,7 @@ dependencies = [
  "image",
  "log",
  "md5",
+ "raw-window-handle",
  "regex",
  "reqwest",
  "reqwest_client",

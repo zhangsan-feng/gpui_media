@@ -136,6 +136,7 @@ fn main() {
         let mut window_options = WindowOptions::default();
         window_options.window_bounds = Some(WindowBounds::centered(size(px(1200.), px(700.)), cx));
         window_options.window_min_size = Some(size(px(1200.), px(700.)));
+
         cx.open_window(window_options, |window, app| {
             // window.set_background_appearance(WindowBackgroundAppearance::Transparent);
             gpui_component::init(app);

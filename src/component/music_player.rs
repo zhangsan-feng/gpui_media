@@ -53,6 +53,7 @@ pub struct MusicPlayer {
     volume: f32,
     progress_task: Option<Task<()>>,
     progress_bar_bounds: Option<Bounds<Pixels>>,
+    volume_bar_bounds: Option<Bounds<Pixels>>,
 }
 
 impl MusicPlayer {
@@ -83,8 +84,9 @@ impl MusicPlayer {
             volume: 0.6,
             progress_task: None,
             progress_bar_bounds: None,
+            volume_bar_bounds: None,
         };
-        s.init_subscribe(cx);
+        // s.init_subscribe(cx);
         s
     }
 
@@ -280,6 +282,12 @@ impl MusicPlayer {
         let ratio = ((position.x.as_f32() - left) / width).clamp(0.0, 1.0);
         let seconds = total.as_secs_f32() * ratio;
         Some(Duration::from_secs_f32(seconds))
+    }
+
+    fn volume_from_position(&self, position: Point<Pixels>, bounds: Bounds<Pixels>) -> f32 {
+        let left = bounds.origin.x.as_f32();
+        let width = bounds.size.width.as_f32().max(1.0);
+        ((position.x.as_f32() - left) / width).clamp(0.0, 1.0)
     }
 
     fn format_time(duration: Duration) -> String {
@@ -502,11 +510,94 @@ impl MusicPlayer {
             )
     }
 
-    fn player_volume_control_ui(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+
+
+    fn player_list_vm(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_virtual_list(
+            cx.entity().clone(),
+            "music-player-vm-list",
+            Rc::new(
+                self.player_list
+                    .iter()
+                    .map(|_| size(px(100.), px(40.)))
+                    .collect(),
+            ),
+            |view, visible_range, _, cx| {
+                visible_range
+                    .map(|index| {
+                        let data = view.player_list[index].clone();
+                        div()
+                            .flex()
+                            .justify_between()
+                            .w_full()
+                            .pr_2()
+                            .child(
+                                div()
+                                    .gap_2()
+                                    .justify_between()
+                                    .h_flex()
+                                    .child(img(data.music_pic.clone()).size(px(24.)).rounded_full())
+                                    .child(data.music_author.clone())
+                                    .child(data.music_platform.clone())
+                                    .child(data.music_name.clone()),
+                            )
+                            .child(if view.current_player.music_id == data.music_id {
+                                div().child("正在播放").into_any_element()
+                            } else {
+                                Button::new(("music-play-index-", index))
+                                    .label("播放")
+                                    .on_click({
+                                        let c = data.clone();
+                                        cx.listener(move |_, _, _, cx| {
+                                            let mut cx_async = cx.to_async().clone();
+                                            let state_handle = cx.global::<GlobalState>().0.clone();
+                                            let c = c.clone();
+                                            cx.spawn(|_, _: &mut AsyncApp| async move {
+                                                state_handle.update(&mut cx_async, |_, cx| {
+                                                    cx.emit(StateEvent::TogglePlayMusic(c.clone()))
+                                                });
+                                            })
+                                            .detach()
+                                        })
+                                    })
+                                    .into_any_element()
+                            })
+                    })
+                    .collect()
+            },
+        )
+        .track_scroll(&self.scroll_handle)
+    }
+
+    fn player_list_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        Popover::new("default-open-popover")
+            .anchor(Anchor::BottomRight)
+            .trigger(Button::new("show-form").label("播放列表").outline())
+            .child(
+                div()
+                    .h(px(600.))
+                    .w(px(800.))
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .p_4()
+                            .size_full()
+                            .child(self.player_list_vm(window, cx))
+                            .child(
+                                Scrollbar::vertical(&self.scroll_handle)
+                                    .scrollbar_show(ScrollbarShow::Always)
+                                    .axis(ScrollbarAxis::Vertical),
+                            ),
+                    )
+                    .with_animation(
+                        "playlist-popover-anim",
+                        Animation::new(Duration::from_millis(550)).with_easing(ease_in_out),
+                        |el, delta| el.opacity(0.2 + 0.8 * delta).h(px(8. + 592. * delta)),
+                    ),
+            )
+    }
+
+    fn player_volume_control_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let volume_ratio = self.volume.clamp(0.0, 1.0);
         let volume_bar_width = 150.0;
         h_flex()
@@ -600,7 +691,25 @@ impl MusicPlayer {
                                     .rounded_full()
                                     .bg(rgb_u8(226, 232, 240))
                                     .cursor_pointer()
+                                    .on_prepaint({
+                                        let volume_bar_entity = cx.entity();
+                                        move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
+                                            let _ = volume_bar_entity.update(cx, |this, _cx| {
+                                                this.volume_bar_bounds = Some(bounds);
+                                            });
+                                        }
+                                    })
                                     .id("music_volume_bar")
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(|this, event: &MouseDownEvent, _window, _cx| {
+                                            if let Some(bounds) = this.volume_bar_bounds {
+                                                let ratio =
+                                                    this.volume_from_position(event.position, bounds);
+                                                this.set_volume(ratio);
+                                            }
+                                        }),
+                                    )
                                     .on_drag(VolumeDrag, |_value, _offset, _window, cx| {
                                         cx.new(|_| Empty)
                                     })
@@ -622,91 +731,6 @@ impl MusicPlayer {
                                             .bg(rgb_u8(148, 163, 184)),
                                     ),
                             ),
-                    ),
-            )
-    }
-
-    fn player_list_vm(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_virtual_list(
-            cx.entity().clone(),
-            "music-player-vm-list",
-            Rc::new(
-                self.player_list
-                    .iter()
-                    .map(|_| size(px(100.), px(40.)))
-                    .collect(),
-            ),
-            |view, visible_range, _, cx| {
-                visible_range
-                    .map(|index| {
-                        let data = view.player_list[index].clone();
-                        div()
-                            .flex()
-                            .justify_between()
-                            .w_full()
-                            .pr_2()
-                            .child(
-                                div()
-                                    .gap_2()
-                                    .justify_between()
-                                    .h_flex()
-                                    .child(img(data.music_pic.clone()).size(px(24.)).rounded_full())
-                                    .child(data.music_author.clone())
-                                    .child(data.music_platform.clone())
-                                    .child(data.music_name.clone()),
-                            )
-                            .child(if view.current_player.music_id == data.music_id {
-                                div().child("正在播放").into_any_element()
-                            } else {
-                                Button::new(("music-play-index-", index))
-                                    .label("播放")
-                                    .on_click({
-                                        let c = data.clone();
-                                        cx.listener(move |_, _, _, cx| {
-                                            let mut cx_async = cx.to_async().clone();
-                                            let state_handle = cx.global::<GlobalState>().0.clone();
-                                            let c = c.clone();
-                                            cx.spawn(|_, _: &mut AsyncApp| async move {
-                                                state_handle.update(&mut cx_async, |_, cx| {
-                                                    cx.emit(StateEvent::TogglePlayMusic(c.clone()))
-                                                });
-                                            })
-                                            .detach()
-                                        })
-                                    })
-                                    .into_any_element()
-                            })
-                    })
-                    .collect()
-            },
-        )
-        .track_scroll(&self.scroll_handle)
-    }
-
-    fn player_list_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        Popover::new("default-open-popover")
-            .anchor(Anchor::BottomRight)
-            .trigger(Button::new("show-form").label("播放列表").outline())
-            .child(
-                div()
-                    .h(px(600.))
-                    .w(px(800.))
-                    .child(
-                        v_flex()
-                            .gap_2()
-                            .p_4()
-                            .size_full()
-                            .child(self.player_list_vm(window, cx))
-                            .child(
-                                Scrollbar::vertical(&self.scroll_handle)
-                                    .scrollbar_show(ScrollbarShow::Always)
-                                    .axis(ScrollbarAxis::Vertical),
-                            ),
-                    )
-                    .with_animation(
-                        "playlist-popover-anim",
-                        Animation::new(Duration::from_millis(550)).with_easing(ease_in_out),
-                        |el, delta| el.opacity(0.2 + 0.8 * delta).h(px(8. + 592. * delta)),
                     ),
             )
     }

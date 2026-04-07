@@ -19,46 +19,14 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use url::Url;
-
 use crate::com::rgb_u8;
-use crate::state::GlobalState;
 
-// pub fn window_center_options(window: &mut Window, w: f32, h: f32) -> WindowOptions {
-//     let parent_bounds = window.bounds();
-//     let parent_x = parent_bounds.origin.x;
-//     let parent_y = parent_bounds.origin.y;
 
-//     let parent_width = parent_bounds.size.width;
-//     let parent_height = parent_bounds.size.height;
 
-//     let child_x = parent_x + (parent_width - px(w)) / 2.0;
-//     let child_y = parent_y + (parent_height - px(h)) / 2.0;
-//     let mut window_options = WindowOptions::default();
-//     let window_size = size(px(w), px(h));
-
-//     let bounds = Bounds {
-//         origin: Point {
-//             x: child_x,
-//             y: child_y,
-//         },
-//         size: window_size,
-//     };
-//     window_options.window_bounds = Some(WindowBounds::Windowed(bounds));
-
-//     window_options.window_min_size = Some(window_size);
-//     window_options.is_resizable = true;
-//     window_options.titlebar = Some(TitlebarOptions {
-//         title: Some(SharedString::from("")),
-//         appears_transparent: false,
-//         ..Default::default()
-//     });
-//     window_options
-// }
 
 pub struct VideoPlayer {
     current_player: String,
     player_list: Vec<String>,
-    custom_render_width: Option<Bounds<Pixels>>,
     scroll_handle: VirtualListScrollHandle,
     volume: f32,
     playbin: Option<gst::Element>,
@@ -70,6 +38,7 @@ pub struct VideoPlayer {
     is_scrubbing: bool,
     scrub_position: Option<Duration>,
     progress_bar_bounds: Option<Bounds<Pixels>>,
+    volume_bar_bounds: Option<Bounds<Pixels>>,
     progress_task: Option<Task<()>>,
     frame_task: Option<Task<()>>,
     bus_watch_task: Option<Task<()>>,
@@ -80,6 +49,8 @@ pub struct VideoPlayer {
     stop_frames: Arc<AtomicBool>,
     last_error: Option<String>,
     bus_watch_started: bool,
+    pending_drop_images: Vec<Arc<RenderImage>>,
+    last_volume_before_mute: f32,
 }
 
 impl VideoPlayer {
@@ -90,7 +61,6 @@ impl VideoPlayer {
             current_player: "".to_string(),
             player_list: vec![],
             scroll_handle:VirtualListScrollHandle::new(),
-            custom_render_width: None,
             volume: 0.6,
             playbin: None,
             appsink: None,
@@ -101,6 +71,7 @@ impl VideoPlayer {
             is_scrubbing: false,
             scrub_position: None,
             progress_bar_bounds: None,
+            volume_bar_bounds: None,
             progress_task: None,
             frame_task: None,
             bus_watch_task: None,
@@ -111,6 +82,8 @@ impl VideoPlayer {
             stop_frames: Arc::new(AtomicBool::new(false)),
             last_error: None,
             bus_watch_started: false,
+            pending_drop_images: Vec::new(),
+            last_volume_before_mute: 0.6,
         }
     }
 
@@ -139,6 +112,7 @@ impl VideoPlayer {
             .build();
 
         playbin.set_property("video-sink", &appsink);
+        playbin.set_property("volume", &(self.volume as f64));
         playbin.set_property("uri", &uri);
         playbin.set_state(gst::State::Paused)?;
 
@@ -396,7 +370,10 @@ impl VideoPlayer {
         if width > 0 && height > 0 {
             if let Some(image) = RgbaImage::from_raw(width, height, data) {
                 let frame = Frame::new(image);
-                self.render_image = Some(Arc::new(RenderImage::new(vec![frame])));
+                let new_image = Arc::new(RenderImage::new(vec![frame]));
+                if let Some(old) = self.render_image.replace(new_image) {
+                    self.pending_drop_images.push(old);
+                }
                 self.last_frame_seq = seq;
                 self.video_aspect = (width as f32 / height as f32).max(0.01);
                 cx.notify();
@@ -440,6 +417,12 @@ impl VideoPlayer {
         Some(Duration::from_secs_f32(seconds))
     }
 
+    fn volume_from_position(&self, position: Point<Pixels>, bounds: Bounds<Pixels>) -> f32 {
+        let left = bounds.origin.x.as_f32();
+        let width = bounds.size.width.as_f32().max(1.0);
+        ((position.x.as_f32() - left) / width).clamp(0.0, 1.0)
+    }
+
     fn format_time(duration: Duration) -> String {
         let total_secs = duration.as_secs();
         let minutes = total_secs / 60;
@@ -447,9 +430,36 @@ impl VideoPlayer {
         format!("{:02}:{:02}", minutes, seconds)
     }
 
+    fn set_volume(&mut self, volume: f32) {
+        self.volume = volume.clamp(0.0, 1.0);
+        if self.volume > 0.0 {
+            self.last_volume_before_mute = self.volume;
+        }
+        if let Some(playbin) = &self.playbin {
+            playbin.set_property("volume", &(self.volume as f64));
+        }
+    }
+
+    fn toggle_mute(&mut self) {
+        if self.volume <= 0.0 {
+            let restore = if self.last_volume_before_mute > 0.0 {
+                self.last_volume_before_mute
+            } else {
+                0.6
+            };
+            self.set_volume(restore);
+        } else {
+            self.last_volume_before_mute = self.volume;
+            self.set_volume(0.0);
+        }
+    }
+
     fn handle_file_drop(&mut self, paths: &ExternalPaths, cx: &mut Context<Self>) {
         let mut added = Vec::new();
         for path in paths.paths() {
+            if self.player_list.iter().any(|item| item == path){
+                continue;
+            }
             added.push(path.to_string_lossy().to_string());
         }
 
@@ -459,10 +469,100 @@ impl VideoPlayer {
 
         self.current_player = added[0].clone();
         self.player_list.extend(added);
+        self.reset_pipeline();
         self.play(cx);
 
         cx.notify();
     }
+
+
+    fn drain_dropped_images(&mut self, window: &mut Window) {
+        if self.pending_drop_images.is_empty() {
+            return;
+        }
+        for image in self.pending_drop_images.drain(..) {
+            let _ = window.drop_image(image);
+        }
+    }
+
+    fn reset_pipeline(&mut self) {
+        if let Some(playbin) = &self.playbin {
+            let _ = playbin.set_state(gst::State::Null);
+        }
+        self.playbin = None;
+        self.appsink = None;
+        self.is_player = false;
+        self.duration = None;
+        self.position = Duration::from_secs(0);
+        self.is_scrubbing = false;
+        self.scrub_position = None;
+        self.last_error = None;
+        self.bus_watch_started = false;
+        self.progress_task = None;
+        self.frame_task = None;
+        self.bus_watch_task = None;
+        self.last_frame_seq = 0;
+        if let Some(old) = self.render_image.take() {
+            self.pending_drop_images.push(old);
+        }
+        {
+            let mut buffer = self.frame_buffer.lock().unwrap();
+            buffer.width = 0;
+            buffer.height = 0;
+            buffer.data.clear();
+            buffer.seq = 0;
+        }
+        self.stop_frame_thread();
+        self.stop_frames.store(false, Ordering::Relaxed);
+    }
+
+    fn switch_to_index(&mut self, index: usize, cx: &mut Context<Self>) {
+        if index >= self.player_list.len() {
+            return;
+        }
+        let next = self.player_list[index].clone();
+        if next.is_empty() {
+            return;
+        }
+        self.current_player = next;
+        self.reset_pipeline();
+        self.play(cx);
+    }
+
+    fn prev_video(&mut self, cx: &mut Context<Self>) {
+        let len = self.player_list.len();
+        if len == 0 {
+            return;
+        }
+        let current = self
+            .player_list
+            .iter()
+            .position(|item| item == &self.current_player);
+        let index = match current {
+            Some(i) if i > 0 => i - 1,
+            Some(_) => len - 1,
+            None => len - 1,
+        };
+        self.switch_to_index(index, cx);
+    }
+
+    fn next_video(&mut self, cx: &mut Context<Self>) {
+        let len = self.player_list.len();
+        if len == 0 {
+            return;
+        }
+        let current = self
+            .player_list
+            .iter()
+            .position(|item| item == &self.current_player);
+        let index = match current {
+            Some(i) if i + 1 < len => i + 1,
+            Some(_) => 0,
+            None => 0,
+        };
+        self.switch_to_index(index, cx);
+    }
+
 
     fn player_list_vm(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_virtual_list(
@@ -545,10 +645,82 @@ impl VideoPlayer {
                     ),
             )
     }
+
+
+    fn player_volume_control_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let volume_ratio = self.volume.clamp(0.0, 1.0);
+        let volume_bar_width = 150.0;
+
+        h_flex()
+            .child(
+                h_flex()
+                    .w(px(220.))
+                    .gap_2()
+                    .items_center()
+                    .ml_auto()
+                    .child(img("icon/icons8-voice-100.png").size(px(24.)))
+                    .child(
+                        div()
+                            .text_size(px(11.))
+                            .text_color(rgb_u8(100, 116, 139))
+                            .child(format!("{:.0}%", volume_ratio * 100.0)),
+                    )
+                    .child(
+                        div()
+                            .h(px(8.))
+                            .w(px(volume_bar_width))
+                            .rounded_full()
+                            .bg(rgb_u8(226, 232, 240))
+                            .cursor_pointer()
+                            .on_prepaint({
+                                let volume_bar_entity = cx.entity();
+                                move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
+                                    let _ = volume_bar_entity.update(cx, |this, _cx| {
+                                        this.volume_bar_bounds = Some(bounds);
+                                    });
+                                }
+                            })
+                            .id("music_volume_bar")
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, event: &MouseDownEvent, _window, _cx| {
+                                    if let Some(bounds) = this.volume_bar_bounds {
+                                        let ratio =
+                                            this.volume_from_position(event.position, bounds);
+                                        this.set_volume(ratio);
+                                    }
+                                }),
+                            )
+                            .on_drag(VolumeDrag, |_value, _offset, _window, cx| {
+                                cx.new(|_| Empty)
+                            })
+                            .on_drag_move::<VolumeDrag>(cx.listener(
+                                |this, event: &DragMoveEvent<VolumeDrag>, _window, _cx| {
+                                    let left = event.bounds.origin.x.as_f32();
+                                    let width = event.bounds.size.width.as_f32().max(1.0);
+                                    let ratio = ((event.event.position.x.as_f32() - left)
+                                        / width)
+                                        .clamp(0.0, 1.0);
+                                    this.set_volume(ratio);
+                                },
+                            ))
+                            .child(
+                                div()
+                                    .h(px(8.))
+                                    .w(px(volume_bar_width * volume_ratio))
+                                    .rounded_full()
+                                    .bg(rgb_u8(148, 163, 184)),
+                            ),
+                    ),
+            )
+
+    }
+
 }
 
 impl Render for VideoPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.drain_dropped_images(window);
         let total = self.duration.unwrap_or_else(|| Duration::from_secs(0));
         let display_position = self
             .scrub_position
@@ -755,9 +927,9 @@ impl Render for VideoPlayer {
                                             .text_color(rgb_u8(15, 23, 42))
                                             .id("music_prev_button")
                                             .cursor_pointer()
-                                            // .on_click(cx.listener(|this, _event, _window, cx| {
-                                                // this.prev_music(cx);
-                                            // }))
+                                            .on_click(cx.listener(|this, _event, _window, cx| {
+                                                this.prev_video(cx);
+                                            }))
                                             .child("<"),
                                     )
                                     .child(
@@ -797,54 +969,14 @@ impl Render for VideoPlayer {
                                             .text_color(rgb_u8(15, 23, 42))
                                             .cursor_pointer()
                                             .id("music_nest_button")
-                                            // .on_click(cx.listener(|this, _event, _window, cx| {
-                                                // this.next_music(cx);
-                                            // }))
+                                            .on_click(cx.listener(|this, _event, _window, cx| {
+                                                this.next_video(cx);
+                                            }))
                                             .child(">"),
                                     )
                                     .child(
-                                        h_flex()
-                                            .w(px(220.))
-                                            .gap_2()
-                                            .items_center()
-                                            .ml_auto()
-                                            .child(img("icon/icons8-voice-100.png").size(px(24.)))
-                                            .child(
-                                                div()
-                                                    .text_size(px(11.))
-                                                    .text_color(rgb_u8(100, 116, 139))
-                                                    .child(format!("{:.0}%", volume_ratio * 100.0)),
-                                            )
-                                            .child(
-                                                div()
-                                                    .h(px(8.))
-                                                    .w(px(volume_bar_width))
-                                                    .rounded_full()
-                                                    .bg(rgb_u8(226, 232, 240))
-                                                    .cursor_pointer()
-                                                    .id("music_volume_bar")
-                                                    // .on_drag(VolumeDrag, |_value, _offset, _window, cx| {
-                                                    //     cx.new(|_| Empty)
-                                                    // })
-                                                    // .on_drag_move::<VolumeDrag>(cx.listener(
-                                                    //     |this, event: &DragMoveEvent<VolumeDrag>, _window, _cx| {
-                                                    //         let left = event.bounds.origin.x.as_f32();
-                                                    //         let width = event.bounds.size.width.as_f32().max(1.0);
-                                                    //         let ratio = ((event.event.position.x.as_f32() - left)
-                                                    //             / width)
-                                                    //             .clamp(0.0, 1.0);
-                                                    //         this.set_volume(ratio);
-                                                    //     },
-                                                    // ))
-                                                    // .child(
-                                                    //     div()
-                                                    //         .h(px(8.))
-                                                    //         .w(px(volume_bar_width * volume_ratio))
-                                                    //         .rounded_full()
-                                                    //         .bg(rgb_u8(148, 163, 184)),
-                                                    // ),
-                                            ),
-                                    ),
+                                        self.player_volume_control_ui(window, cx)
+                                    )
                             )
 
                     ),
@@ -863,6 +995,9 @@ impl Drop for VideoPlayer {
 
 #[derive(Clone, Copy)]
 struct ProgressDrag;
+
+#[derive(Clone, Copy)]
+struct VolumeDrag;
 
 #[derive(Default)]
 struct FrameBuffer {
