@@ -40,7 +40,6 @@ impl PlatformInterface for LocalMusicImpl {
 pub struct MusicPlayer {
     pub current_player: entity::MusicConvertLayer,
     pub player_list: Vec<entity::MusicConvertLayer>,
-    custom_render_width: Option<Bounds<Pixels>>,
     pub is_player: bool,
     scroll_handle: VirtualListScrollHandle,
     play_err: Option<String>,
@@ -72,7 +71,6 @@ impl MusicPlayer {
             },
             player_list: vec![],
             scroll_handle: VirtualListScrollHandle::new(),
-            custom_render_width: None,
             is_player: false,
             play_err: None,
             device_sink: None,
@@ -86,7 +84,7 @@ impl MusicPlayer {
             progress_bar_bounds: None,
             volume_bar_bounds: None,
         };
-        // s.init_subscribe(cx);
+        s.init_subscribe(cx);
         s
     }
 
@@ -148,11 +146,7 @@ impl MusicPlayer {
             let Some(track) = self.track_from_path(path) else {
                 continue;
             };
-            if self
-                .player_list
-                .iter()
-                .any(|item| item.music_file == track.music_file)
-            {
+            if self.player_list.iter().any(|item| item.music_file == track.music_file){
                 continue;
             }
             added.push(track);
@@ -271,11 +265,7 @@ impl MusicPlayer {
         }
     }
 
-    fn position_from_drag(
-        &self,
-        position: Point<Pixels>,
-        bounds: Bounds<Pixels>,
-    ) -> Option<Duration> {
+    fn position_from_drag( &self, position: Point<Pixels>, bounds: Bounds<Pixels> ) -> Option<Duration> {
         let total = self.total_duration?;
         let left = bounds.origin.x.as_f32();
         let width = bounds.size.width.as_f32().max(1.0);
@@ -411,25 +401,10 @@ impl MusicPlayer {
         .detach();
     }
 
-    fn player_progress_control_ui(
-        &self,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let total = self
-            .total_duration
-            .unwrap_or_else(|| Duration::from_secs(0));
-
-        let display_position = self
-            .scrub_position
-            .filter(|_| self.is_scrubbing)
-            .unwrap_or(self.current_position);
-
-        let progress_bar_width = self
-            .progress_bar_bounds
-            .as_ref()
-            .map(|bounds| bounds.size.width.as_f32())
-            .unwrap_or(0.0);
+    fn player_progress_control_ui( &self,_: &mut Window, cx: &mut Context<Self> ) -> impl IntoElement {
+        let total = self.total_duration.unwrap_or_else(|| Duration::from_secs(0));
+        let display_position = self .scrub_position .filter(|_| self.is_scrubbing).unwrap_or(self.current_position);
+        let progress_bar_width = self .progress_bar_bounds .as_ref() .map(|bounds| bounds.size.width.as_f32()) .unwrap_or(0.0);
 
         let progress_ratio = if total.as_secs_f32() > 0.0 {
             (display_position.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
@@ -471,9 +446,7 @@ impl MusicPlayer {
             })
             .on_drag_move::<ProgressDrag>(cx.listener(
                 |this, event: &DragMoveEvent<ProgressDrag>, _window, _cx| {
-                    if let Some(target) =
-                        this.position_from_drag(event.event.position, event.bounds)
-                    {
+                    if let Some(target) = this.position_from_drag(event.event.position, event.bounds) {
                         this.is_scrubbing = true;
                         this.scrub_position = Some(target);
                     }
@@ -509,8 +482,6 @@ impl MusicPlayer {
                     .bg(rgb_u8(59, 130, 246)),
             )
     }
-
-
 
     fn player_list_vm(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_virtual_list(
@@ -597,154 +568,148 @@ impl MusicPlayer {
             )
     }
 
+    fn player_controll_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement{
+
+        h_flex()
+            .gap_2()
+            .child(
+                div()
+                    .size(px(28.))
+                    .rounded_full()
+                    .bg(rgb_u8(241, 245, 249))
+                    .border_1()
+                    .border_color(rgb_u8(203, 213, 225))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(12.))
+                    .text_color(rgb_u8(15, 23, 42))
+                    .id("music_prev_button")
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _event, _window, cx| {
+                        this.prev_music(cx);
+                    }))
+                    .child("<"),
+            )
+            .child(
+                div()
+                    .size(px(36.))
+                    .rounded_full()
+                    .bg(rgb_u8(59, 130, 246))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(14.))
+                    .text_color(white())
+                    .cursor_pointer()
+                    .id("music_play_button")
+                    .on_click(cx.listener(|this, _event, _window, cx| {
+                        this.toggle_play(cx);
+                    }))
+                    .child(
+                        (if self.is_player {
+                            div().child("■")
+                        } else {
+                            div().child("▶")
+                        })
+                    ),
+            )
+            .child(
+                div()
+                    .size(px(28.))
+                    .rounded_full()
+                    .bg(rgb_u8(241, 245, 249))
+                    .border_1()
+                    .border_color(rgb_u8(203, 213, 225))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(12.))
+                    .text_color(rgb_u8(15, 23, 42))
+                    .cursor_pointer()
+                    .id("music_nest_button")
+                    .on_click(cx.listener(|this, _event, _window, cx| {
+                        this.next_music(cx);
+                    }))
+                    .child(">"),
+            )
+    }
+
     fn player_volume_control_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let volume_ratio = self.volume.clamp(0.0, 1.0);
         let volume_bar_width = 150.0;
+
         h_flex()
-            .w_full()
-            .gap_4()
-            .justify_center()
-            .items_center()
-            .flex_shrink_0()
-            .child(self.player_list_ui(window, cx))
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(
-                        div()
-                            .size(px(28.))
-                            .rounded_full()
-                            .bg(rgb_u8(241, 245, 249))
-                            .border_1()
-                            .border_color(rgb_u8(203, 213, 225))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(12.))
-                            .text_color(rgb_u8(15, 23, 42))
-                            .id("music_prev_button")
-                            .cursor_pointer()
-                            .on_click(cx.listener(|this, _event, _window, cx| {
-                                this.prev_music(cx);
-                            }))
-                            .child("<"),
-                    )
-                    .child(
-                        div()
-                            .size(px(36.))
-                            .rounded_full()
-                            .bg(rgb_u8(59, 130, 246))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(14.))
-                            .text_color(white())
-                            .cursor_pointer()
-                            .id("music_play_button")
-                            .on_click(cx.listener(|this, _event, _window, cx| {
-                                this.toggle_play(cx);
-                            }))
-                            .child(
-                                (if self.is_player {
-                                    div().child("■")
-                                } else {
-                                    div().child("▶")
-                                })
-                            ),
-                    )
-                    .child(
-                        div()
-                            .size(px(28.))
-                            .rounded_full()
-                            .bg(rgb_u8(241, 245, 249))
-                            .border_1()
-                            .border_color(rgb_u8(203, 213, 225))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(12.))
-                            .text_color(rgb_u8(15, 23, 42))
-                            .cursor_pointer()
-                            .id("music_nest_button")
-                            .on_click(cx.listener(|this, _event, _window, cx| {
-                                this.next_music(cx);
-                            }))
-                            .child(">"),
-                    )
-                    .child(
-                        h_flex()
-                            .w(px(220.))
-                            .gap_2()
-                            .items_center()
-                            .ml_auto()
-                            .child(img("icon/icons8-voice-100.png").size(px(24.)))
-                            .child(
-                                div()
-                                    .text_size(px(11.))
-                                    .text_color(rgb_u8(100, 116, 139))
-                                    .child(format!("{:.0}%", volume_ratio * 100.0)),
-                            )
-                            .child(
-                                div()
-                                    .h(px(8.))
-                                    .w(px(volume_bar_width))
-                                    .rounded_full()
-                                    .bg(rgb_u8(226, 232, 240))
-                                    .cursor_pointer()
-                                    .on_prepaint({
-                                        let volume_bar_entity = cx.entity();
-                                        move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
-                                            let _ = volume_bar_entity.update(cx, |this, _cx| {
-                                                this.volume_bar_bounds = Some(bounds);
-                                            });
-                                        }
-                                    })
-                                    .id("music_volume_bar")
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener(|this, event: &MouseDownEvent, _window, _cx| {
-                                            if let Some(bounds) = this.volume_bar_bounds {
-                                                let ratio =
-                                                    this.volume_from_position(event.position, bounds);
-                                                this.set_volume(ratio);
-                                            }
-                                        }),
-                                    )
-                                    .on_drag(VolumeDrag, |_value, _offset, _window, cx| {
-                                        cx.new(|_| Empty)
-                                    })
-                                    .on_drag_move::<VolumeDrag>(cx.listener(
-                                        |this, event: &DragMoveEvent<VolumeDrag>, _window, _cx| {
-                                            let left = event.bounds.origin.x.as_f32();
-                                            let width = event.bounds.size.width.as_f32().max(1.0);
-                                            let ratio = ((event.event.position.x.as_f32() - left)
-                                                / width)
-                                                .clamp(0.0, 1.0);
-                                            this.set_volume(ratio);
-                                        },
-                                    ))
-                                    .child(
-                                        div()
-                                            .h(px(8.))
-                                            .w(px(volume_bar_width * volume_ratio))
-                                            .rounded_full()
-                                            .bg(rgb_u8(148, 163, 184)),
-                                    ),
-                            ),
-                    ),
-            )
+        .child(
+            h_flex()
+                .w(px(220.))
+                .gap_2()
+                .items_center()
+                .ml_auto()
+                .child(img("icon/icons8-voice-100.png").size(px(24.)))
+                .child(
+                    div()
+                        .w(px(35.))
+                        .text_size(px(11.))
+                        .text_color(rgb_u8(100, 116, 139))
+                        .child(format!("{:.0}%", volume_ratio * 100.0)),
+                )
+                .child(
+                    div()
+                        .h(px(8.))
+                        .w(px(volume_bar_width))
+                        .rounded_full()
+                        .bg(rgb_u8(226, 232, 240))
+                        .cursor_pointer()
+                        .on_prepaint({
+                            let volume_bar_entity = cx.entity();
+                            move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
+                                let _ = volume_bar_entity.update(cx, |this, _cx| {
+                                    this.volume_bar_bounds = Some(bounds);
+                                });
+                            }
+                        })
+                        .id("music_volume_bar")
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, event: &MouseDownEvent, _window, _cx| {
+                                if let Some(bounds) = this.volume_bar_bounds {
+                                    let ratio =
+                                        this.volume_from_position(event.position, bounds);
+                                    this.set_volume(ratio);
+                                }
+                            }),
+                        )
+                        .on_drag(VolumeDrag, |_value, _offset, _window, cx| {
+                            cx.new(|_| Empty)
+                        })
+                        .on_drag_move::<VolumeDrag>(cx.listener(
+                            |this, event: &DragMoveEvent<VolumeDrag>, _window, _cx| {
+                                let left = event.bounds.origin.x.as_f32();
+                                let width = event.bounds.size.width.as_f32().max(1.0);
+                                let ratio = ((event.event.position.x.as_f32() - left)
+                                    / width)
+                                    .clamp(0.0, 1.0);
+                                this.set_volume(ratio);
+                            },
+                        ))
+                        .child(
+                            div()
+                                .h(px(8.))
+                                .w(px(volume_bar_width * volume_ratio))
+                                .rounded_full()
+                                .bg(rgb_u8(148, 163, 184)),
+                        ),
+                ),
+        )
+
     }
 }
 
 impl Render for MusicPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let total = self
-            .total_duration
-            .unwrap_or_else(|| Duration::from_secs(0));
-        let display_position = self
-            .scrub_position
-            .filter(|_| self.is_scrubbing)
-            .unwrap_or(self.current_position);
+        let total = self .total_duration.unwrap_or_else(|| Duration::from_secs(0));
+        let display_position = self.scrub_position.filter(|_| self.is_scrubbing).unwrap_or(self.current_position);
 
         v_flex()
             .size_full()
@@ -756,8 +721,7 @@ impl Render for MusicPlayer {
             }))
             .child(
                 div()
-                    .flex_grow()
-                    // .bg(rgb(0x0F172A))
+                    .border_color(rgb(0xE2E8F0))
                     .flex_grow()
                     .flex()
                     .justify_center()
@@ -786,7 +750,6 @@ impl Render for MusicPlayer {
                                     .mb_3()
                                     .child(
                                         markdown(
-                                            // "没有加载音源".to_string()
                                             if let Some(r) = self.play_err.clone() {
                                                 r
                                             } else {
@@ -813,7 +776,14 @@ impl Render for MusicPlayer {
                                     .child(Self::format_time(total)),
                             ),
                     )
-                    .child(self.player_volume_control_ui(window, cx)),
+                    .child(
+                        h_flex()
+                            .justify_center()
+                            .gap_4()
+                            .child(self.player_list_ui(window, cx))
+                            .child(self.player_controll_ui(window, cx))
+                            .child(self.player_volume_control_ui(window, cx))
+                    ),
             )
     }
 }

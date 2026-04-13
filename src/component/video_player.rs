@@ -25,15 +25,15 @@ use crate::com::rgb_u8;
 
 
 pub struct VideoPlayer {
-    current_player: String,
+    current_player_video: String,
     player_list: Vec<String>,
-    scroll_handle: VirtualListScrollHandle,
-    volume: f32,
-    playbin: Option<gst::Element>,
-    appsink: Option<gst_app::AppSink>,
+    vm_scroll_handle: VirtualListScrollHandle,
+    video_player_volume: f32,
+    video_frame_pipline: Option<gst::Element>,
+    video_frame_data: Option<gst_app::AppSink>,
     is_player: bool,
-    duration: Option<Duration>,
-    position: Duration,
+    video_total_duration: Option<Duration>,
+    video_player_duration: Duration,
     video_aspect: f32,
     is_scrubbing: bool,
     scrub_position: Option<Duration>,
@@ -50,7 +50,6 @@ pub struct VideoPlayer {
     last_error: Option<String>,
     bus_watch_started: bool,
     pending_drop_images: Vec<Arc<RenderImage>>,
-    last_volume_before_mute: f32,
 }
 
 impl VideoPlayer {
@@ -58,15 +57,16 @@ impl VideoPlayer {
         let _ = (window, cx);
         let _ = gst::init();
         Self {
-            current_player: "".to_string(),
+            current_player_video: "".to_string(),
             player_list: vec![],
-            scroll_handle:VirtualListScrollHandle::new(),
-            volume: 0.6,
-            playbin: None,
-            appsink: None,
+            vm_scroll_handle:VirtualListScrollHandle::new(),
+            video_player_volume: 0.6,
+            video_frame_pipline: None,
+            video_frame_data: None,
+            video_player_duration: Duration::from_secs(0),
+
             is_player: false,
-            duration: None,
-            position: Duration::from_secs(0),
+            video_total_duration: None,
             video_aspect: 16.0 / 9.0,
             is_scrubbing: false,
             scrub_position: None,
@@ -83,12 +83,12 @@ impl VideoPlayer {
             last_error: None,
             bus_watch_started: false,
             pending_drop_images: Vec::new(),
-            last_volume_before_mute: 0.6,
+
         }
     }
 
     fn ensure_pipeline(&mut self) -> Result<()> {
-        if self.playbin.is_some() {
+        if self.video_frame_pipline.is_some() {
             return Ok(());
         }
 
@@ -112,12 +112,12 @@ impl VideoPlayer {
             .build();
 
         playbin.set_property("video-sink", &appsink);
-        playbin.set_property("volume", &(self.volume as f64));
+        playbin.set_property("volume", &(self.video_player_volume as f64));
         playbin.set_property("uri", &uri);
         playbin.set_state(gst::State::Paused)?;
 
-        self.appsink = Some(appsink);
-        self.playbin = Some(playbin);
+        self.video_frame_data = Some(appsink);
+        self.video_frame_pipline = Some(playbin);
         self.start_frame_thread();
         Ok(())
     }
@@ -127,7 +127,7 @@ impl VideoPlayer {
             return;
         }
 
-        let Some(appsink) = self.appsink.clone() else {
+        let Some(appsink) = self.video_frame_data.clone() else {
             return;
         };
 
@@ -200,7 +200,7 @@ impl VideoPlayer {
     }
 
     fn video_uri(&self) -> Option<String> {
-        let trimmed = self.current_player.trim();
+        let trimmed = self.current_player_video.trim();
         if trimmed.is_empty() {
             return None;
         }
@@ -225,7 +225,7 @@ impl VideoPlayer {
         if self.ensure_pipeline().is_err() {
             return;
         }
-        if let Some(playbin) = &self.playbin {
+        if let Some(playbin) = &self.video_frame_pipline {
             let _ = playbin.set_state(gst::State::Playing);
             self.is_player = true;
             self.ensure_bus_watch(cx);
@@ -235,7 +235,7 @@ impl VideoPlayer {
     }
 
     fn pause(&mut self) {
-        if let Some(playbin) = &self.playbin {
+        if let Some(playbin) = &self.video_frame_pipline {
             let _ = playbin.set_state(gst::State::Paused);
         }
         self.is_player = false;
@@ -245,7 +245,7 @@ impl VideoPlayer {
         if self.bus_watch_started {
             return;
         }
-        let Some(playbin) = self.playbin.clone() else {
+        let Some(playbin) = self.video_frame_pipline.clone() else {
             return;
         };
         let Some(bus) = playbin.bus() else {
@@ -255,14 +255,10 @@ impl VideoPlayer {
         self.bus_watch_started = true;
         self.bus_watch_task = Some(cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(100))
-                    .await;
+                cx.background_executor().timer(Duration::from_millis(100)).await;
 
                 let Some(msg) = bus.timed_pop(gst::ClockTime::from_mseconds(0)) else {
-                    let keep_running = this
-                        .update(cx, |this, _| this.playbin.is_some())
-                        .unwrap_or(false);
+                    let keep_running = this.update(cx, |this, _| this.video_frame_data.is_some()).unwrap_or(false);
                     if !keep_running {
                         break;
                     }
@@ -333,18 +329,18 @@ impl VideoPlayer {
     }
 
     fn update_progress(&mut self, cx: &mut Context<Self>) -> bool {
-        if let Some(playbin) = &self.playbin {
+        if let Some(playbin) = &self.video_frame_pipline {
             if let Some(pos) = playbin.query_position::<gst::ClockTime>() {
-                self.position = clock_to_duration(pos);
-                // println!("[video] pos={}ms", self.position.as_millis());
+                self.video_player_duration = clock_to_duration(pos);
+                // println!("[video] pos={}ms", self.video_player_duration.as_millis());
             }
-            let needs_duration = self.duration.map(|d| d.as_nanos() == 0).unwrap_or(true);
+            let needs_duration = self.video_total_duration.map(|d| d.as_nanos() == 0).unwrap_or(true);
             if needs_duration {
                 if let Some(total) = playbin.query_duration::<gst::ClockTime>() {
                     let duration = clock_to_duration(total);
                     // println!("[video] duration={}ms", duration.as_millis());
                     if duration.as_nanos() > 0 {
-                        self.duration = Some(duration);
+                        self.video_total_duration = Some(duration);
                     }
                 }
             }
@@ -362,7 +358,7 @@ impl VideoPlayer {
         let (seq, width, height, data) = {
             let guard = buffer.lock().unwrap();
             if guard.seq == self.last_frame_seq {
-                return self.playbin.is_some();
+                return self.video_frame_pipline.is_some();
             }
             (guard.seq, guard.width, guard.height, guard.data.clone())
         };
@@ -380,7 +376,7 @@ impl VideoPlayer {
             }
         }
 
-        let should_continue = self.playbin.is_some();
+        let should_continue = self.video_frame_pipline.is_some();
         if !should_continue {
             self.frame_task = None;
         }
@@ -391,13 +387,13 @@ impl VideoPlayer {
         if self.ensure_pipeline().is_err() {
             return;
         }
-        if let Some(playbin) = &self.playbin {
+        if let Some(playbin) = &self.video_frame_pipline {
             let nanos = position.as_nanos().min(u64::MAX as u128) as u64;
             let target = gst::ClockTime::from_nseconds(nanos);
 
             let ok = playbin.seek_simple(gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, target);
             // println!("[video] seek ok={:?} pos={}ms", ok, position.as_millis());
-            self.position = position;
+            self.video_player_duration = position;
         }
     }
 
@@ -406,7 +402,7 @@ impl VideoPlayer {
         position: Point<Pixels>,
         bounds: Bounds<Pixels>,
     ) -> Option<Duration> {
-        let total = self.duration?;
+        let total = self.video_total_duration?;
         if total.as_nanos() == 0 {
             return None;
         }
@@ -431,26 +427,9 @@ impl VideoPlayer {
     }
 
     fn set_volume(&mut self, volume: f32) {
-        self.volume = volume.clamp(0.0, 1.0);
-        if self.volume > 0.0 {
-            self.last_volume_before_mute = self.volume;
-        }
-        if let Some(playbin) = &self.playbin {
-            playbin.set_property("volume", &(self.volume as f64));
-        }
-    }
-
-    fn toggle_mute(&mut self) {
-        if self.volume <= 0.0 {
-            let restore = if self.last_volume_before_mute > 0.0 {
-                self.last_volume_before_mute
-            } else {
-                0.6
-            };
-            self.set_volume(restore);
-        } else {
-            self.last_volume_before_mute = self.volume;
-            self.set_volume(0.0);
+        self.video_player_volume = volume.clamp(0.0, 1.0);
+        if let Some(playbin) = &self.video_frame_pipline {
+            playbin.set_property("volume", &(self.video_player_volume as f64));
         }
     }
 
@@ -467,7 +446,7 @@ impl VideoPlayer {
             return;
         }
 
-        self.current_player = added[0].clone();
+        self.current_player_video = added[0].clone();
         self.player_list.extend(added);
         self.reset_pipeline();
         self.play(cx);
@@ -486,14 +465,14 @@ impl VideoPlayer {
     }
 
     fn reset_pipeline(&mut self) {
-        if let Some(playbin) = &self.playbin {
+        if let Some(playbin) = &self.video_frame_pipline {
             let _ = playbin.set_state(gst::State::Null);
         }
-        self.playbin = None;
-        self.appsink = None;
+        self.video_frame_pipline = None;
+        self.video_frame_data = None;
         self.is_player = false;
-        self.duration = None;
-        self.position = Duration::from_secs(0);
+        self.video_total_duration = None;
+        self.video_player_duration = Duration::from_secs(0);
         self.is_scrubbing = false;
         self.scrub_position = None;
         self.last_error = None;
@@ -524,7 +503,7 @@ impl VideoPlayer {
         if next.is_empty() {
             return;
         }
-        self.current_player = next;
+        self.current_player_video = next;
         self.reset_pipeline();
         self.play(cx);
     }
@@ -537,7 +516,7 @@ impl VideoPlayer {
         let current = self
             .player_list
             .iter()
-            .position(|item| item == &self.current_player);
+            .position(|item| item == &self.current_player_video);
         let index = match current {
             Some(i) if i > 0 => i - 1,
             Some(_) => len - 1,
@@ -554,7 +533,7 @@ impl VideoPlayer {
         let current = self
             .player_list
             .iter()
-            .position(|item| item == &self.current_player);
+            .position(|item| item == &self.current_player_video);
         let index = match current {
             Some(i) if i + 1 < len => i + 1,
             Some(_) => 0,
@@ -590,32 +569,27 @@ impl VideoPlayer {
                                     .h_flex()
                                     .child(data.clone()),
                             )
-                            // .child(if view.current_player.music_id == data.music_id {
-                            //     div().child("正在播放").into_any_element()
-                            // } else {
-                            //     Button::new(("music-play-index-", index))
-                            //         .label("播放")
-                            //         .on_click({
-                            //             let c = data.clone();
-                            //             cx.listener(move |_, _, _, cx| {
-                            //                 let mut cx_async = cx.to_async().clone();
-                            //                 let state_handle = cx.global::<GlobalState>().0.clone();
-                            //                 let c = c.clone();
-                            //                 cx.spawn(|_, _: &mut AsyncApp| async move {
-                            //                     state_handle.update(&mut cx_async, |_, cx| {
-                            //                         cx.emit(StateEvent::TogglePlayMusic(c.clone()))
-                            //                     });
-                            //                 })
-                            //                 .detach()
-                            //             })
-                            //         })
-                            //         .into_any_element()
-                            // })
+                            .child(if view.current_player_video == data {
+                                div().child("正在播放").into_any_element()
+                            } else {
+                                Button::new(("music-play-index-", index))
+                                    .label("播放")
+                                    .on_click({
+                                        let c = data.clone();
+                                        cx.listener(move |this, _, _, cx| {
+                                            let c = c.clone();
+                                            this.current_player_video = c;
+                                            this.reset_pipeline();
+                                            this.play(cx);
+                                        })
+                                    })
+                                    .into_any_element()
+                            })
                     })
                     .collect()
             },
         )
-        .track_scroll(&self.scroll_handle)
+        .track_scroll(&self.vm_scroll_handle)
     }
 
     fn player_list_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -633,7 +607,7 @@ impl VideoPlayer {
                             .size_full()
                             .child(self.player_list_vm(window, cx))
                             .child(
-                                Scrollbar::vertical(&self.scroll_handle)
+                                Scrollbar::vertical(&self.vm_scroll_handle)
                                     .scrollbar_show(ScrollbarShow::Always)
                                     .axis(ScrollbarAxis::Vertical),
                             ),
@@ -648,7 +622,7 @@ impl VideoPlayer {
 
 
     fn player_volume_control_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let volume_ratio = self.volume.clamp(0.0, 1.0);
+        let volume_ratio = self.video_player_volume.clamp(0.0, 1.0);
         let volume_bar_width = 150.0;
 
         h_flex()
@@ -661,6 +635,7 @@ impl VideoPlayer {
                     .child(img("icon/icons8-voice-100.png").size(px(24.)))
                     .child(
                         div()
+                            .w(px(35.))
                             .text_size(px(11.))
                             .text_color(rgb_u8(100, 116, 139))
                             .child(format!("{:.0}%", volume_ratio * 100.0)),
@@ -721,21 +696,14 @@ impl VideoPlayer {
 impl Render for VideoPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.drain_dropped_images(window);
-        let total = self.duration.unwrap_or_else(|| Duration::from_secs(0));
-        let display_position = self
-            .scrub_position
-            .filter(|_| self.is_scrubbing)
-            .unwrap_or(self.position);
+        let total = self.video_total_duration.unwrap_or_else(|| Duration::from_secs(0));
+        let display_position = self.scrub_position.filter(|_| self.is_scrubbing).unwrap_or(self.video_player_duration);
         let progress_ratio = if total.as_secs_f32() > 0.0 {
             (display_position.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
         } else {
             0.0
         };
-        let progress_bar_width = self
-            .progress_bar_bounds
-            .as_ref()
-            .map(|bounds| bounds.size.width.as_f32())
-            .unwrap_or(0.0);
+        let progress_bar_width = self.progress_bar_bounds.as_ref().map(|bounds| bounds.size.width.as_f32()) .unwrap_or(0.0);
         let progress_bar_entity = cx.entity();
         let aspect = self.video_aspect.max(0.01);
 
@@ -752,9 +720,7 @@ impl Render for VideoPlayer {
                 (max_w, height_for_width)
             }
         };
-        let volume_bar_width = 150.;
-        let volume_ratio = self.volume.clamp(0.0, 1.0);
-        // println!("video w:{} video h:{}", video_width, video_height);
+
         v_flex()
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
                 this.handle_file_drop(paths, cx);
@@ -847,6 +813,7 @@ impl Render for VideoPlayer {
                                     }
                                 }),
                             )
+
                             .on_mouse_up_out(
                                 MouseButton::Left,
                                 cx.listener(|this, _event, _window, _cx| {
@@ -882,8 +849,8 @@ impl Render for VideoPlayer {
                                             if let Some(player_err) = self.last_error.clone(){
                                                 player_err.to_string()
                                             } else {
-                                                if !self.current_player.is_empty() {
-                                                    self.current_player.clone()
+                                                if !self.current_player_video.is_empty() {
+                                                    self.current_player_video.clone()
                                                 }else{
                                                     "没有加载视频来源".to_string()
                                                 }
@@ -974,9 +941,7 @@ impl Render for VideoPlayer {
                                             }))
                                             .child(">"),
                                     )
-                                    .child(
-                                        self.player_volume_control_ui(window, cx)
-                                    )
+                                    .child(self.player_volume_control_ui(window, cx) )
                             )
 
                     ),
@@ -986,7 +951,7 @@ impl Render for VideoPlayer {
 
 impl Drop for VideoPlayer {
     fn drop(&mut self) {
-        if let Some(playbin) = &self.playbin {
+        if let Some(playbin) = &self.video_frame_pipline {
             let _ = playbin.set_state(gst::State::Null);
         }
         self.stop_frame_thread();

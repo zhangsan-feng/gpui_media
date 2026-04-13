@@ -12,7 +12,7 @@ use std::rc::Rc;
 pub struct RecommendPage {
     music_data: Vec<MusicConvertLayer>,
     hovered_id: Option<String>,
-    is_loading:bool,
+    is_loading: bool,
     scroll_handle: VirtualListScrollHandle,
 }
 
@@ -21,7 +21,7 @@ impl RecommendPage {
         let mut s = RecommendPage {
             music_data: Vec::new(),
             hovered_id: None,
-            is_loading:false,
+            is_loading: false,
             scroll_handle: VirtualListScrollHandle::new(),
         };
         s.init_component_data(cx);
@@ -68,80 +68,74 @@ impl Render for RecommendPage {
                 .gap_2()
                 .p_4()
                 .size_full()
-                .child(
-                    if self.is_loading {
-                        div()
-                            .child("加载中...")
-                            .into_any_element()
-                    }
-                    else{
-                        v_virtual_list(
-                            cx.entity().clone(),
-                            "recommend-music-vm-list",
-                            Rc::new(
-                                self.music_data
-                                    .iter()
-                                    .map(|_| size(px(600.), px(40.)))
-                                    .collect(),
-                            ),
-                            |view, visible_range, _, cx| {
-                                visible_range
-                                    .map(|index| {
-                                        let data = view.music_data[index].clone();
-                                        div()
-                                            .flex()
-                                            .justify_between()
-                                            .w_full()
-                                            .pr_2()
-                                            .child(
-                                                div()
-                                                    .gap_2()
-                                                    .justify_between()
-                                                    .h_flex()
-                                                    .child(
-                                                        img(data.music_pic.clone())
-                                                            .size(px(24.))
-                                                            .rounded_full(),
-                                                    )
-                                                    .child(data.music_author.clone())
-                                                    .child(data.music_platform.clone())
-                                                    .child(data.music_name.clone()),
-                                            )
-                                            .child(
-                                                Button::new(("music-play-index-", index))
-                                                    .label("播放")
-                                                    .on_click({
-                                                        let c = data.clone();
-                                                        cx.listener(move |_, _, _, cx| {
-                                                            let mut cx_async = cx.to_async().clone();
-                                                            let state_handle =
-                                                                cx.global::<GlobalState>().0.clone();
-                                                            let c = c.clone();
-                                                            cx.spawn(|_, _: &mut AsyncApp| async move {
-                                                                state_handle.update(
-                                                                    &mut cx_async,
-                                                                    |_, cx| {
-                                                                        cx.emit(
-                                                                            StateEvent::TogglePlayMusic(
-                                                                                c.clone(),
-                                                                            ),
-                                                                        )
-                                                                    },
-                                                                );
-                                                            })
-                                                            .detach()
+                .child(if self.is_loading {
+                    div().child("加载中...").into_any_element()
+                } else {
+                    v_virtual_list(
+                        cx.entity().clone(),
+                        "recommend-music-vm-list",
+                        Rc::new(
+                            self.music_data
+                                .iter()
+                                .map(|_| size(px(600.), px(40.)))
+                                .collect(),
+                        ),
+                        |view, visible_range, _, cx| {
+                            visible_range
+                                .map(|index| {
+                                    let data = view.music_data[index].clone();
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .w_full()
+                                        .pr_2()
+                                        .child(
+                                            div()
+                                                .gap_2()
+                                                .justify_between()
+                                                .h_flex()
+                                                .child(
+                                                    img(data.music_pic.clone())
+                                                        .size(px(24.))
+                                                        .rounded_full(),
+                                                )
+                                                .child(data.music_author.clone())
+                                                .child(data.music_platform.clone())
+                                                .child(data.music_name.clone()),
+                                        )
+                                        .child(
+                                            Button::new(("music-play-index-", index))
+                                                .label("播放")
+                                                .on_click({
+                                                    let c = data.clone();
+                                                    cx.listener(move |_, _, _, cx| {
+                                                        let mut cx_async = cx.to_async().clone();
+                                                        let state_handle =
+                                                            cx.global::<GlobalState>().0.clone();
+                                                        let c = c.clone();
+                                                        cx.spawn(|_, _: &mut AsyncApp| async move {
+                                                            state_handle.update(
+                                                                &mut cx_async,
+                                                                |_, cx| {
+                                                                    cx.emit(
+                                                                        StateEvent::TogglePlayMusic(
+                                                                            c.clone(),
+                                                                        ),
+                                                                    )
+                                                                },
+                                                            );
                                                         })
-                                                    }),
-                                            )
-                                    })
-                                    .collect()
-                            },
-                        )
-                        .track_scroll(&self.scroll_handle)
-                        .into_any_element()
-                        }
-
-                )
+                                                        .detach()
+                                                    })
+                                                }),
+                                        )
+                                })
+                                .collect()
+                        },
+                    )
+                    .track_scroll(&self.scroll_handle)
+                    .into_any_element()
+                })
                 .child(
                     Scrollbar::vertical(&self.scroll_handle)
                         .scrollbar_show(ScrollbarShow::Always)

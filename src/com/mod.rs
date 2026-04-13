@@ -111,6 +111,7 @@ impl HttpClient {
                 return Err(anyhow::anyhow!("GET请求失败: {}", e));
             }
         };
+        
         Ok(response)
     }
 

@@ -6,8 +6,12 @@
 
 视频播放器需要下载音频编码驱动
 https://gstreamer.freedesktop.org/
+下载完成直接把bin目录加入到环境即可
 
+支持本地音乐拖拽
+支持本地视频拖拽
 ```
+
 ![Snipaste_2026-03-27_17-00-26.png](Snipaste_2026-03-27_17-00-26.png)
-![Snipaste_2026-03-27_16-29-47.png](Snipaste_2026-03-27_16-29-47.png)
-![Snipaste_2026-03-27_16-37-14.png](Snipaste_2026-03-27_16-37-14.png)
+![f6ba6a32-5ae3-4725-b1cf-ced18f034343.png](f6ba6a32-5ae3-4725-b1cf-ced18f034343.png)
+![e4231a13-3d75-4eee-b292-c947bc3fac83.png](e4231a13-3d75-4eee-b292-c947bc3fac83.png)
