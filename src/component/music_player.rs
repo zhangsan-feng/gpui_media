@@ -7,14 +7,11 @@ use anyhow::{Result, anyhow};
 use gpui::AnimationExt as _;
 use gpui::prelude::*;
 use gpui::*;
-use gpui::{InteractiveElement, StatefulInteractiveElement};
+use gpui_component::*;
 use gpui_component::button::Button;
 use gpui_component::popover::Popover;
 use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
-use gpui_component::{
-    Anchor, ElementExt, StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list,
-};
 use log::info;
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 use std::fs::File;
@@ -57,6 +54,7 @@ pub struct MusicPlayer {
 
 impl MusicPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> MusicPlayer {
+        let _ = window;
         let mut s = MusicPlayer {
             current_player: entity::MusicConvertLayer {
                 music_id: "".to_string(),
@@ -121,10 +119,7 @@ impl MusicPlayer {
             return None;
         }
 
-        let file_name = path
-            .file_name()
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.to_string_lossy().to_string());
+        let file_name = path.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
         let file_path = path.to_string_lossy().to_string();
 
         Some(entity::MusicConvertLayer {
@@ -164,11 +159,7 @@ impl MusicPlayer {
 
     fn ensure_track_loaded(&mut self) -> Result<()> {
         self.load_output_deriver()?;
-        let needs_load = self
-            .player
-            .as_ref()
-            .map(|player| player.len() == 0)
-            .unwrap_or(true);
+        let needs_load = self.player.as_ref().map(|player| player.len() == 0).unwrap_or(true);
         if needs_load {
             self.load_music_source()?;
         }
@@ -245,12 +236,8 @@ impl MusicPlayer {
         }
         self.progress_task = Some(cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(200))
-                    .await;
-                let should_continue = this
-                    .update(cx, |this, cx| this.update_audio_progress(cx))
-                    .unwrap_or(false);
+                cx.background_executor().timer(Duration::from_millis(200)).await;
+                let should_continue = this.update(cx, |this, cx| this.update_audio_progress(cx)).unwrap_or(false);
                 if !should_continue {
                     break;
                 }
@@ -289,13 +276,9 @@ impl MusicPlayer {
 
     fn get_music_index(&self) -> Option<usize> {
         let current_index = if !self.current_player.music_id.is_empty() {
-            self.player_list
-                .iter()
-                .position(|music| music.music_id == self.current_player.music_id)
+            self.player_list.iter().position(|music| music.music_id == self.current_player.music_id)
         } else if !self.current_player.music_source.is_empty() {
-            self.player_list
-                .iter()
-                .position(|music| music.music_source == self.current_player.music_source)
+            self.player_list.iter().position(|music| music.music_source == self.current_player.music_source)
         } else {
             None
         };
@@ -401,10 +384,10 @@ impl MusicPlayer {
         .detach();
     }
 
-    fn player_progress_control_ui( &self,_: &mut Window, cx: &mut Context<Self> ) -> impl IntoElement {
+    fn player_progress_control_ui( &self, window: &mut Window, cx: &mut Context<Self> ) -> impl IntoElement {
         let total = self.total_duration.unwrap_or_else(|| Duration::from_secs(0));
-        let display_position = self .scrub_position .filter(|_| self.is_scrubbing).unwrap_or(self.current_position);
-        let progress_bar_width = self .progress_bar_bounds .as_ref() .map(|bounds| bounds.size.width.as_f32()) .unwrap_or(0.0);
+        let display_position = self.scrub_position.filter(|_| self.is_scrubbing).unwrap_or(self.current_position);
+        let progress_bar_width = self.progress_bar_bounds .as_ref().map(|bounds| bounds.size.width.as_f32()).unwrap_or(0.0);
 
         let progress_ratio = if total.as_secs_f32() > 0.0 {
             (display_position.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
@@ -414,72 +397,115 @@ impl MusicPlayer {
 
         let progress_bar_entity = cx.entity();
 
-        div()
-            .h(px(8.))
-            .w_full()
-            .rounded_full()
-            .bg(rgb_u8(226, 232, 240))
-            .cursor_pointer()
-            .on_prepaint({
-                let progress_bar_entity = progress_bar_entity.clone();
-                move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
-                    let _ = progress_bar_entity.update(cx, |this, _cx| {
-                        this.progress_bar_bounds = Some(bounds);
-                    });
-                }
-            })
-            .id("music_progress_bar")
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event: &MouseDownEvent, _window, cx| {
-                    if let Some(bounds) = this.progress_bar_bounds {
-                        if let Some(target) = this.position_from_drag(event.position, bounds) {
-                            this.seek_audio_progress(target, cx);
-                            this.is_scrubbing = false;
-                            this.scrub_position = None;
-                        }
-                    }
-                }),
-            )
-            .on_drag(ProgressDrag, |_value, _offset, _window, cx| {
-                cx.new(|_| Empty)
-            })
-            .on_drag_move::<ProgressDrag>(cx.listener(
-                |this, event: &DragMoveEvent<ProgressDrag>, _window, _cx| {
-                    if let Some(target) = this.position_from_drag(event.event.position, event.bounds) {
-                        this.is_scrubbing = true;
-                        this.scrub_position = Some(target);
-                    }
-                },
-            ))
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|this, _event, _window, cx| {
-                    if this.is_scrubbing {
-                        if let Some(target) = this.scrub_position.take() {
-                            this.seek_audio_progress(target, cx);
-                        }
-                        this.is_scrubbing = false;
-                    }
-                }),
-            )
-            .on_mouse_up_out(
-                MouseButton::Left,
-                cx.listener(|this, _event, _window, cx| {
-                    if this.is_scrubbing {
-                        if let Some(target) = this.scrub_position.take() {
-                            this.seek_audio_progress(target, cx);
-                        }
-                        this.is_scrubbing = false;
-                    }
-                }),
-            )
+        v_flex()
             .child(
                 div()
                     .h(px(8.))
-                    .w(px(progress_bar_width * progress_ratio))
+                    .w_full()
                     .rounded_full()
-                    .bg(rgb_u8(59, 130, 246)),
+                    .bg(rgb_u8(226, 232, 240))
+                    .cursor_pointer()
+                    .on_prepaint({
+                        let progress_bar_entity = progress_bar_entity.clone();
+                        move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
+                            let _ = progress_bar_entity.update(cx, |this, _cx| {
+                                this.progress_bar_bounds = Some(bounds);
+                            });
+                        }
+                    })
+                    .id("music_progress_bar")
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, event: &MouseDownEvent, _window, cx| {
+                            if let Some(bounds) = this.progress_bar_bounds {
+                                if let Some(target) = this.position_from_drag(event.position, bounds) {
+                                    this.seek_audio_progress(target, cx);
+                                    this.is_scrubbing = false;
+                                    this.scrub_position = None;
+                                }
+                            }
+                        }),
+                    )
+                    .on_drag(ProgressDrag, |_value, _offset, _window, cx| {
+                        cx.new(|_| Empty)
+                    })
+                    .on_drag_move::<ProgressDrag>(cx.listener(
+                        |this, event: &DragMoveEvent<ProgressDrag>, _window, _cx| {
+                            if let Some(target) = this.position_from_drag(event.event.position, event.bounds) {
+                                this.is_scrubbing = true;
+                                this.scrub_position = Some(target);
+                            }
+                        },
+                    ))
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(|this, _event, _window, cx| {
+                            if this.is_scrubbing {
+                                if let Some(target) = this.scrub_position.take() {
+                                    this.seek_audio_progress(target, cx);
+                                }
+                                this.is_scrubbing = false;
+                            }
+                        }),
+                    )
+                    .on_mouse_up_out(
+                        MouseButton::Left,
+                        cx.listener(|this, _event, _window, cx| {
+                            if this.is_scrubbing {
+                                if let Some(target) = this.scrub_position.take() {
+                                    this.seek_audio_progress(target, cx);
+                                }
+                                this.is_scrubbing = false;
+                            }
+                        }),
+                    )
+                    .child(
+                        div()
+                            .h(px(8.))
+                            .w(px(progress_bar_width * progress_ratio))
+                            .rounded_full()
+                            .bg(rgb_u8(59, 130, 246)),
+                    )
+
+            )
+            .child(
+                h_flex()
+                    .text_size(px(12.))
+                    .justify_between()
+                    .w_full()
+                    .child(
+                        div()
+                            .w(px(window.bounds().size.width.as_f32().clone() / 2.))
+                            .text_color(rgb_u8(15, 23, 42))
+                            .overflow_x_scrollbar()
+                            .mb_3()
+                            .child(
+                                markdown(
+                                    if let Some(r) = self.play_err.clone() {
+                                        r
+                                    } else {
+                                        if !self.current_player.music_name.is_empty() {
+                                            self.current_player.music_name.clone()
+                                            // "aaaaaa".to_string()
+                                        } else {
+                                            "没有加载音乐来源".to_string()
+                                        }
+                                    }
+                                )
+                                .selectable(true)
+                                .whitespace_nowrap()
+                                .text_color(rgb(0x94A3B8))
+                                .cursor_text(),
+                            )
+                    )
+                    .child(
+                        h_flex()
+                            .flex_shrink_0()
+                            .gap_2()
+                            .child(Self::format_time(display_position))
+                            .child("/")
+                            .child(Self::format_time(total)),
+                    )
             )
     }
 
@@ -541,13 +567,14 @@ impl MusicPlayer {
     }
 
     fn player_list_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        Popover::new("default-open-popover")
+        Popover::new("music-player-open-popover")
             .anchor(Anchor::BottomRight)
             .trigger(Button::new("show-form").label("播放列表").outline())
             .child(
                 div()
                     .h(px(600.))
                     .w(px(800.))
+
                     .child(
                         v_flex()
                             .gap_2()
@@ -558,10 +585,10 @@ impl MusicPlayer {
                                 Scrollbar::vertical(&self.scroll_handle)
                                     .scrollbar_show(ScrollbarShow::Always)
                                     .axis(ScrollbarAxis::Vertical),
-                            ),
+                            )
                     )
                     .with_animation(
-                        "playlist-popover-anim",
+                        "music-player-open-popover-animation",
                         Animation::new(Duration::from_millis(550)).with_easing(ease_in_out),
                         |el, delta| el.opacity(0.2 + 0.8 * delta).h(px(8. + 592. * delta)),
                     ),
@@ -600,18 +627,18 @@ impl MusicPlayer {
                     .items_center()
                     .justify_center()
                     .text_size(px(14.))
-                    .text_color(white())
+                    // .text_color(white())
                     .cursor_pointer()
                     .id("music_play_button")
                     .on_click(cx.listener(|this, _event, _window, cx| {
                         this.toggle_play(cx);
                     }))
                     .child(
-                        (if self.is_player {
+                        if self.is_player {
                             div().child("■")
                         } else {
                             div().child("▶")
-                        })
+                        }
                     ),
             )
             .child(
@@ -708,8 +735,7 @@ impl MusicPlayer {
 
 impl Render for MusicPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let total = self .total_duration.unwrap_or_else(|| Duration::from_secs(0));
-        let display_position = self.scrub_position.filter(|_| self.is_scrubbing).unwrap_or(self.current_position);
+
 
         v_flex()
             .size_full()
@@ -737,45 +763,7 @@ impl Render for MusicPlayer {
                     .border_2()
                     .border_color(rgb(0xE2E8F0))
                     .child(self.player_progress_control_ui(window, cx))
-                    .child(
-                        h_flex()
-                            .text_size(px(12.))
-                            .w_full()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .w(px(window.bounds().size.width.as_f32().clone() / 2.))
-                                    .text_color(rgb_u8(15, 23, 42))
-                                    .overflow_x_scrollbar()
-                                    .mb_3()
-                                    .child(
-                                        markdown(
-                                            if let Some(r) = self.play_err.clone() {
-                                                r
-                                            } else {
-                                                if !self.current_player.music_name.is_empty() {
-                                                    self.current_player.music_name.clone()
-                                                    // "aaaaaa".to_string()
-                                                } else {
-                                                    "没有加载音乐来源".to_string()
-                                                }
-                                            }
-                                        )
-                                        .selectable(true)
-                                        .whitespace_nowrap()
-                                        .text_color(rgb(0x94A3B8))
-                                        .cursor_text(),
-                                    ),
-                            )
-                            .child(
-                                h_flex()
-                                    .flex_shrink_0()
-                                    .gap_2()
-                                    .child(Self::format_time(display_position))
-                                    .child("/")
-                                    .child(Self::format_time(total)),
-                            ),
-                    )
+
                     .child(
                         h_flex()
                             .justify_center()

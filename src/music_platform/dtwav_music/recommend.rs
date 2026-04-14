@@ -28,7 +28,7 @@ impl PlatformInterface for DtWavImpl {
                 // let pic_re = Regex::new(r"pic:\s*'([^']*)'").unwrap();
 
                 let title = title_re
-                    .captures(&html_content) // &html_content 不需要 *
+                    .captures(&html_content)
                     .and_then(|c| c.get(1))
                     .map(|m| m.as_str().to_string())
                     .unwrap_or_else(|| "".to_string());

@@ -1,20 +1,15 @@
-
-use reqwest::header;
-use reqwest::header::HeaderValue;
-
-
-
-
+use reqwest::header::{self, HeaderValue};
 
 
 pub fn headers() -> header::HeaderMap {
+
     let mut headers = header::HeaderMap::new();
     headers.insert("Accept", HeaderValue::from_static("application/json, text/plain, */*"));
     headers.insert("Accept-Language", HeaderValue::from_static("zh-CN,zh;q=0.9"));
     headers.insert("Cache-Control", HeaderValue::from_static("no-cache"));
     headers.insert("Connection", HeaderValue::from_static("keep-alive"));
     headers.insert("Pragma", HeaderValue::from_static("no-cache"));
-    headers.insert("Referer", HeaderValue::from_static("https://www.bilibili.com/"));
+    headers.insert("Referer", HeaderValue::from_static("https://music.90svip.cn/"));
     headers.insert("Sec-Fetch-Dest", HeaderValue::from_static("empty"));
     headers.insert("Sec-Fetch-Mode", HeaderValue::from_static("cors"));
     headers.insert("Sec-Fetch-Site", HeaderValue::from_static("same-origin"));

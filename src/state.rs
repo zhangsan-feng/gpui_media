@@ -1,5 +1,5 @@
 
-use gpui::{AsyncApp, Context, Entity, EventEmitter, Global,};
+use gpui::{ Context, Entity, EventEmitter, Global,};
 
 use reqwest_client::runtime;
 use crate::entity;

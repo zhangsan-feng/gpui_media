@@ -1,3 +1,3 @@
-mod recommend;
+pub mod recommend;
 mod search;
 mod sign;

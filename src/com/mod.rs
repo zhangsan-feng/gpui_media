@@ -39,7 +39,7 @@ impl ResponseHandler for reqwest::Response {
     async fn handle(self) -> Result<serde_json::Value, anyhow::Error> {
         let status = self.status();
         let bytes = self.bytes().await.unwrap_or_default();
-        let body_str = String::from_utf8_lossy(&bytes);
+        // let body_str = String::from_utf8_lossy(&bytes);
 
         if status.is_success() {
             match serde_json::from_slice(&bytes) {
@@ -69,12 +69,7 @@ impl HttpClient {
         }
     }
 
-    pub async fn download_music(
-        &self,
-        file_name: String,
-        url: String,
-        header: HeaderMap,
-    ) -> anyhow::Result<()> {
+    pub async fn download_music(&self,file_name: String,url: String, header: HeaderMap) -> anyhow::Result<()> {
         if Path::new(&file_name).exists() {
             return Ok(());
         }
@@ -83,7 +78,7 @@ impl HttpClient {
         let response = client.get(&url).headers(header).send().await?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("d"));
+            return Err(anyhow::anyhow!("response not 200 "));
         }
 
         let mut file = tokio::fs::File::create(&file_name).await?;
@@ -99,11 +94,7 @@ impl HttpClient {
         Ok(())
     }
 
-    pub async fn get_for_html(
-        &self,
-        url: &str,
-        header: HeaderMap,
-    ) -> Result<Response, anyhow::Error> {
+    pub async fn get_for_html(&self, url: &str, header: HeaderMap ) -> Result<Response, anyhow::Error> {
         let response = match self.client.get(url).headers(header).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -111,15 +102,11 @@ impl HttpClient {
                 return Err(anyhow::anyhow!("GET请求失败: {}", e));
             }
         };
-        
+
         Ok(response)
     }
 
-    pub async fn get(
-        &self,
-        url: &str,
-        header: HeaderMap,
-    ) -> Result<serde_json::Value, anyhow::Error> {
+    pub async fn get(&self, url: &str, header: HeaderMap ) -> Result<serde_json::Value, anyhow::Error> {
         let response = match self.client.get(url).headers(header).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -131,20 +118,8 @@ impl HttpClient {
         response.handle().await
     }
 
-    pub async fn post(
-        &self,
-        url: &str,
-        header: HeaderMap,
-        body: serde_json::Value,
-    ) -> Result<serde_json::Value, anyhow::Error> {
-        let response = match self
-            .client
-            .post(url)
-            .headers(header)
-            .json(&body)
-            .send()
-            .await
-        {
+    pub async fn post( &self, url: &str, header: HeaderMap, body: serde_json::Value ) -> Result<serde_json::Value, anyhow::Error> {
+        let response = match self.client.post(url).headers(header).json(&body).send() .await {
             Ok(r) => r,
             Err(e) => {
                 info!("POST请求失败 [{}]: {}", url, e);
@@ -155,11 +130,7 @@ impl HttpClient {
         response.handle().await
     }
 
-    pub async fn post_form(
-        &self,
-        url: String,
-        form: multipart::Form,
-    ) -> Result<serde_json::Value, anyhow::Error> {
+    pub async fn post_form( &self, url: String,form: multipart::Form) -> Result<serde_json::Value, anyhow::Error> {
         let response = match self.client.post(&url).multipart(form).send().await {
             Ok(r) => r,
             Err(e) => {

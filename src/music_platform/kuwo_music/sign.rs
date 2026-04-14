@@ -3,7 +3,7 @@ use chrono::Utc;
 
 use gpui::http_client::http::{header, HeaderValue};
 use crate::com::call_js;
-use crate::music_platform::kugou_music::sign;
+use crate::music_platform::kuwo_music::sign;
 
 pub fn headers() -> header::HeaderMap {
 

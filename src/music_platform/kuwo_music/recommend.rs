@@ -9,11 +9,13 @@ https://www.kuwo.cn/api/www/classify/playlist/getTagPlayList?id=1848  翻唱
 https://www.kuwo.cn/api/www/classify/playlist/getTagPlayList?id=621 网络
 https://www.kuwo.cn/api/www/classify/playlist/getTagPlayList?id=146 伤感
 
+
+isListenFee false 是免费
 */
 
 use reqwest::{ Url};
 use crate::com::HttpClient;
-use crate::music_platform::kugou_music::sign;
+use crate::music_platform::kuwo_music::sign;
 
 
 

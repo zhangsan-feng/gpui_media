@@ -4,7 +4,7 @@ use crate::component::video_player::VideoPlayer;
 use gpui::*;
 use gpui_component::{Root, h_flex, v_flex};
 use std::time::Duration;
-use gpui_component::button::Button;
+
 
 
 
@@ -109,7 +109,7 @@ impl Render for HomeView {
                     .child(
                         v_flex().size_full().child(
                             div()
-                                .flex_grow()
+                                .size_full()
                                 .child(match self.select_id {
                                     Page::RecommendPage => self.recommend_page.clone().into_any_element(),
                                     Page::SearchPage => div().into_any_element(),

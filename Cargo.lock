@@ -2920,6 +2920,7 @@ dependencies = [
  "image",
  "log",
  "md5",
+ "rand 0.8.5",
  "raw-window-handle",
  "regex",
  "reqwest",

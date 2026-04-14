@@ -26,7 +26,7 @@ impl MusicConvertLayer{
 
 pub struct DefaultPlatformInterface;
 impl PlatformInterface for DefaultPlatformInterface{
-    fn download(&self, params: &MusicConvertLayer) ->anyhow::Result<MusicConvertLayer> {
+    fn download(&self, _: &MusicConvertLayer) ->anyhow::Result<MusicConvertLayer> {
         anyhow::bail!("No platform implemented yet")
     }
 }
