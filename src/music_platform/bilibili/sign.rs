@@ -1,13 +1,17 @@
 
 use reqwest::header;
 use reqwest::header::HeaderValue;
+use serde::{Deserialize, Serialize};
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct  SignStruct{
+    pub w_rid:String,
+    pub wts:String,
+}
 
 
 
-
-
-
-pub fn headers() -> header::HeaderMap {
+pub(crate) fn headers() -> header::HeaderMap {
     let mut headers = header::HeaderMap::new();
     headers.insert("Accept", HeaderValue::from_static("application/json, text/plain, */*"));
     headers.insert("Accept-Language", HeaderValue::from_static("zh-CN,zh;q=0.9"));

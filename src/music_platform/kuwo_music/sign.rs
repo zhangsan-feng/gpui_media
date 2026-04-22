@@ -30,12 +30,12 @@ pub fn headers() -> header::HeaderMap {
     headers.insert("sec-ch-ua-platform", HeaderValue::from_static("\"Windows\""));
     headers.insert(header::COOKIE, cookie.parse().unwrap());
     let secret = sign::secret(cookie).unwrap();
-    headers.insert("Secret", secret.parse().unwrap());
+    headers.insert("Secret", secret.to_string().as_str().parse().unwrap());
     headers
 }
 
 
-pub fn secret(cookie: String) -> Result<String, anyhow::Error> {
+pub fn secret(cookie: String) -> Result<serde_json::Value, anyhow::Error> {
     call_js(
         "./src/music_platform/kugou_music/sign.js",
         "getSecret",
@@ -43,9 +43,9 @@ pub fn secret(cookie: String) -> Result<String, anyhow::Error> {
     )
 }
 
-pub fn uuid() -> Result<String, anyhow::Error> {
+pub fn uuid() -> Result<serde_json::Value, anyhow::Error> {
     call_js(
-        "./src/music_platform/kugou_music/sign.js",
+        include_str!("./sign.js"),
         "getReqId",
         vec![],
     )

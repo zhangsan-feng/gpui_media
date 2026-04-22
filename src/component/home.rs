@@ -1,25 +1,21 @@
-use crate::component::music_player::MusicPlayer;
-use crate::component::recommend_page::RecommendPage;
+
+use crate::component::music_recommend::MusicRecommend;
 use crate::component::video_player::VideoPlayer;
 use gpui::*;
 use gpui_component::{Root, h_flex, v_flex};
 use std::time::Duration;
 
 
-
-
 #[derive(PartialEq, Clone, Copy)]
 pub enum Page {
-    RecommendPage,
-    SearchPage,
-    MusicPlayerPage,
+    MusicRecommendPage,
     VideoPlayerPage,
 }
 
 pub struct HomeView {
     select_id: Page,
-    recommend_page: Entity<RecommendPage>,
-    music_player_page: Entity<MusicPlayer>,
+    recommend_page: Entity<MusicRecommend>,
+
     video_player_page: Entity<VideoPlayer>,
 }
 
@@ -29,9 +25,8 @@ impl HomeView {
             cx.notify();
         });
         let s = HomeView {
-            select_id: Page::RecommendPage,
-            recommend_page: cx.new(|cx| RecommendPage::new(window, cx)),
-            music_player_page: cx.new(|cx| MusicPlayer::new(window, cx)),
+            select_id: Page::MusicRecommendPage,
+            recommend_page: cx.new(|cx| MusicRecommend::new(window, cx)),
             video_player_page: cx.new(|cx| VideoPlayer::new(window, cx)),
         };
         s
@@ -74,17 +69,12 @@ impl HomeView {
                 rgb_to_u32(233, 238, 246)
             })
     }
-
-
 }
 
 impl Render for HomeView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let window_size = window.bounds().size;
         let content_anim_id = match self.select_id {
-            Page::RecommendPage => "home-view-recommend",
-            Page::SearchPage => "home-view-search",
-            Page::MusicPlayerPage => "music-player-page",
+            Page::MusicRecommendPage => "home-view-recommend",
             Page::VideoPlayerPage => "video-player-page",
         };
         v_flex()
@@ -101,9 +91,7 @@ impl Render for HomeView {
                             .w(px(240.))
                             .bg(rgb_to_u32(233, 238, 246))
                             // .rounded_2xl()
-                            .child(self.render_nav_item("歌曲推荐", Page::RecommendPage, cx))
-                            .child(self.render_nav_item("歌曲搜索", Page::SearchPage, cx))
-                            .child(self.render_nav_item("音频播放器", Page::MusicPlayerPage, cx))
+                            .child(self.render_nav_item("歌曲推荐", Page::MusicRecommendPage, cx))
                             .child(self.render_nav_item("视频播放器", Page::VideoPlayerPage, cx)),
                     )
                     .child(
@@ -111,11 +99,7 @@ impl Render for HomeView {
                             div()
                                 .size_full()
                                 .child(match self.select_id {
-                                    Page::RecommendPage => self.recommend_page.clone().into_any_element(),
-                                    Page::SearchPage => div().into_any_element(),
-                                    Page::MusicPlayerPage => {
-                                        self.music_player_page.clone().into_any_element()
-                                    }
+                                    Page::MusicRecommendPage => self.recommend_page.clone().into_any_element(),
                                     Page::VideoPlayerPage => {
                                         self.video_player_page.clone().into_any_element()
                                     }

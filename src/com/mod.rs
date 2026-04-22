@@ -1,32 +1,31 @@
-use anyhow::Error;
+use anyhow::{Context, Error};
 use deno_core::{JsRuntime, RuntimeOptions, serde_v8};
 use futures_util::StreamExt;
 use gpui::http_client::http::HeaderMap;
 use gpui::*;
 use log::info;
 use reqwest::{Response, multipart};
-use std::fs;
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
 
-pub fn call_js(js_path: &str, fn_name: &str, params: Vec<String>) -> Result<String, Error> {
-    let js_code = fs::read_to_string(js_path)?;
+pub fn call_js(js_code: &str, fn_name: &str, params: Vec<String>) -> anyhow::Result<serde_json::Value, Error> {
+
     let mut runtime = JsRuntime::new(RuntimeOptions::default());
-    runtime.execute_script("<init>", js_code)?;
-    let args = params
-        .into_iter()
+    // println!("{}", js_code);
+    runtime.execute_script("<init>", js_code.to_string()).context("init js runtime failed")?;
+    let args = params.into_iter()
         .map(|p| serde_json::to_string(&p).unwrap())
         .collect::<Vec<_>>()
         .join(",");
 
     let code = format!("{fn_name}({args})");
-    let result = runtime.execute_script("<call>", code)?;
+    let result = runtime.execute_script("<call>", code).context("call js failed")?;
     let context = runtime.main_context();
     let isolate = runtime.v8_isolate();
     deno_core::v8::scope_with_context!(scope, isolate, context);
 
     let local = deno_core::v8::Local::new(scope, result);
-    let result: String = serde_v8::from_v8(scope, local)?;
+    let result: serde_json::Value = serde_v8::from_v8(scope, local)?;
 
     Ok(result)
 }
@@ -69,11 +68,12 @@ impl HttpClient {
         }
     }
 
-    pub async fn download_music(&self,file_name: String,url: String, header: HeaderMap) -> anyhow::Result<()> {
+    pub async fn download_music(&self, file_name: String,url: String, header: HeaderMap) -> anyhow::Result<()> {
         if Path::new(&file_name).exists() {
             return Ok(());
         }
 
+        println!("当前下载: {}", file_name);
         let client = reqwest::Client::new();
         let response = client.get(&url).headers(header).send().await?;
 

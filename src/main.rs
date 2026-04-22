@@ -3,6 +3,7 @@ mod component;
 mod entity;
 mod music_platform;
 mod state;
+mod video_platform;
 
 use gpui::*;
 use gpui_component::*;
@@ -48,7 +49,9 @@ pub fn logger_init(logger_path: &str) {
                 message
             ))
         })
-        .filter(|metadata| metadata.level() == Level::Info)
+        .filter(|metadata| {
+            metadata.level() == Level::Info && !metadata.target().starts_with("symphonia")
+        })
         .level(log::LevelFilter::Info)
         .level(log::LevelFilter::Error)
         .level(log::LevelFilter::Trace)
@@ -134,15 +137,16 @@ fn main() {
 
     app.run(move |cx| {
         let mut window_options = WindowOptions::default();
-        window_options.window_bounds = Some(WindowBounds::centered(size(px(1200.), px(700.)), cx));
-        window_options.window_min_size = Some(size(px(1200.), px(700.)));
+        let window_size = size(px(1200.), px(700.));
+        window_options.window_bounds = Some(WindowBounds::centered(window_size, cx));
+        window_options.window_min_size = Some(window_size);
 
         cx.open_window(window_options, |window, app| {
-            // window.set_background_appearance(WindowBackgroundAppearance::Transparent);
             gpui_component::init(app);
-            // let transparent = Theme::global(app).transparent;
-            // Theme::global_mut(app).background = transparent;
-            // state::new_state(app);
+
+            window.set_background_appearance(WindowBackgroundAppearance::MicaBackdrop);
+            let transparent = Theme::global(app).transparent;
+            Theme::global_mut(app).background = transparent;
 
             let state_entity = app.new(|cx| State::new(cx));
             app.set_global(GlobalState(state_entity));

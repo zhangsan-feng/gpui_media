@@ -32,7 +32,7 @@ pub async fn detail(pid:&str, page:&str) ->Result<serde_json::Value, anyhow::Err
         params.append_pair("rn", "30");
         params.append_pair("httpsStatus", "1");
         let id =  sign::uuid()?;
-        params.append_pair("reqId", id.as_str());
+        params.append_pair("reqId", id.as_str().expect(""));
         params.append_pair("plat", "web_www");
         params.append_pair("from", "");
     }
@@ -53,7 +53,7 @@ pub async fn call(page:&str) ->Result<serde_json::Value, anyhow::Error>{
         params.append_pair("order", "hot");   // hot
         params.append_pair("httpsStatus", "1");
         let id =  sign::uuid()?;
-        params.append_pair("reqId", id.as_str());
+        params.append_pair("reqId", id.as_str().unwrap());
         params.append_pair("plat", "web_www");
         params.append_pair("from", "");
     }

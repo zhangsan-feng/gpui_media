@@ -14,6 +14,7 @@ pub struct MusicConvertLayer{
     pub func: Arc<dyn PlatformInterface>,
 }
 
+
 pub trait PlatformInterface: Send + Sync{
     fn download(&self, params: &MusicConvertLayer) ->anyhow::Result<MusicConvertLayer>;
 }
@@ -30,3 +31,14 @@ impl PlatformInterface for DefaultPlatformInterface{
         anyhow::bail!("No platform implemented yet")
     }
 }
+
+
+
+#[derive(Clone)]
+pub struct VideoConvertLayer{
+    pub video_id:String,
+    pub video_name:String,
+    pub video_source:String,
+    pub video_file:String,
+}
+

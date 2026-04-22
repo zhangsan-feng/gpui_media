@@ -14,11 +14,7 @@ impl PlatformInterface for V90VipImpl {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
 
-                let download_file = format!(
-                    "./music/{}_{}.mp3",
-                    params.music_name,
-                   params.music_id
-                );
+                let download_file = format!("./music/{}_{}.mp3", params.music_name, params.music_id);
                 HttpClient::new()
                     .download_music(download_file.clone(), params.music_source.clone(), headers())
                     .await
