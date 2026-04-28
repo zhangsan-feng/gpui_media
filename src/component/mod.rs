@@ -1,5 +1,8 @@
 pub mod home;
 mod music_player;
-mod music_recommend;
 mod video_player;
+mod template_page;
+mod music_page;
+mod video_page;
+
 

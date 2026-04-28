@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 use gpui::*;
 use gpui_component::{h_flex, v_flex, VirtualListScrollHandle};
+use gpui_component::input::InputState;
 use gstreamer::prelude::ElementExt;
 use gstreamer_app::gst;
 use gstreamer_app as gst_app;
@@ -16,7 +17,7 @@ pub struct VideoPlayer {
     current_player_video: String,
     player_list: Vec<String>,
     video_request_headers: header::HeaderMap,
-    vm_scroll_handle: VirtualListScrollHandle,
+    vm_vm_scroll_handle: VirtualListScrollHandle,
     video_player_volume: f32,
     video_frame_pipline: Option<gst::Element>,
     video_frame_data: Option<gst_app::AppSink>,
@@ -39,6 +40,7 @@ pub struct VideoPlayer {
     last_error: Option<String>,
     bus_watch_started: bool,
     pending_drop_images: Vec<Arc<RenderImage>>,
+    input_text:Entity<InputState>
 }
 
 impl Drop for VideoPlayer {
@@ -93,7 +95,7 @@ impl Render for VideoPlayer {
                             .justify_center()
                             .items_center()
                             .child(self.player_list_ui(window, cx))
-                            .child(self.player_controll_ui(window, cx))
+                            .child(self.player_control_ui(window, cx))
                             .child(self.player_volume_control_ui(window, cx)),
                     )
             )

@@ -6,7 +6,7 @@ use gpui_component::button::Button;
 use gpui_component::popover::Popover;
 use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
-use crate::com::rgb_u8;
+use crate::component::home::rgb_to_u32;
 use crate::component::music_player::{MusicPlayer, ProgressDrag, VolumeDrag};
 use crate::state::{GlobalState, StateEvent};
 
@@ -31,7 +31,7 @@ impl MusicPlayer {
                     .h(px(8.))
                     .w_full()
                     .rounded_full()
-                    .bg(rgb_u8(226, 232, 240))
+                    .bg(rgb_to_u32(226, 232, 240))
                     .cursor_pointer()
                     .on_prepaint({
                         let progress_bar_entity = progress_bar_entity.clone();
@@ -92,7 +92,7 @@ impl MusicPlayer {
                             .h(px(8.))
                             .w(px(progress_bar_width * progress_ratio))
                             .rounded_full()
-                            .bg(rgb_u8(59, 130, 246)),
+                            .bg(rgb_to_u32(59, 130, 246)),
                     )
 
             )
@@ -104,7 +104,7 @@ impl MusicPlayer {
                     .child(
                         div()
                             .w(px(window.bounds().size.width.as_f32().clone() * 0.7))
-                            .text_color(rgb_u8(15, 23, 42))
+                            .text_color(rgb_to_u32(15, 23, 42))
                             .overflow_x_scrollbar()
                             .mb_3()
                             .child(
@@ -137,7 +137,7 @@ impl MusicPlayer {
             )
     }
 
-    fn player_list_vm(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn player_list_vm(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_virtual_list(
             cx.entity().clone(),
             "music-player-vm-list",
@@ -191,7 +191,7 @@ impl MusicPlayer {
                     .collect()
             },
         )
-            .track_scroll(&self.scroll_handle)
+            .track_scroll(&self.vm_scroll_handle)
     }
 
     pub(crate) fn player_list_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -210,7 +210,7 @@ impl MusicPlayer {
                             .size_full()
                             .child(self.player_list_vm(window, cx))
                             .child(
-                                Scrollbar::vertical(&self.scroll_handle)
+                                Scrollbar::vertical(&self.vm_scroll_handle)
                                     .scrollbar_show(ScrollbarShow::Always)
                                     .axis(ScrollbarAxis::Vertical),
                             )
@@ -223,7 +223,7 @@ impl MusicPlayer {
             )
     }
 
-    pub(crate) fn player_controll_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement{
+    pub(crate) fn player_control_ui(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement{
 
         h_flex()
             .gap_2()
@@ -231,14 +231,14 @@ impl MusicPlayer {
                 div()
                     .size(px(28.))
                     .rounded_full()
-                    .bg(rgb_u8(241, 245, 249))
+                    .bg(rgb_to_u32(241, 245, 249))
                     .border_1()
-                    .border_color(rgb_u8(203, 213, 225))
+                    .border_color(rgb_to_u32(203, 213, 225))
                     .flex()
                     .items_center()
                     .justify_center()
                     .text_size(px(12.))
-                    .text_color(rgb_u8(15, 23, 42))
+                    .text_color(rgb_to_u32(15, 23, 42))
                     .id("music_prev_button")
                     .cursor_pointer()
                     .on_click(cx.listener(|this, _event, _window, cx| {
@@ -250,7 +250,7 @@ impl MusicPlayer {
                 div()
                     .size(px(36.))
                     .rounded_full()
-                    .bg(rgb_u8(59, 130, 246))
+                    .bg(rgb_to_u32(59, 130, 246))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -273,14 +273,14 @@ impl MusicPlayer {
                 div()
                     .size(px(28.))
                     .rounded_full()
-                    .bg(rgb_u8(241, 245, 249))
+                    .bg(rgb_to_u32(241, 245, 249))
                     .border_1()
-                    .border_color(rgb_u8(203, 213, 225))
+                    .border_color(rgb_to_u32(203, 213, 225))
                     .flex()
                     .items_center()
                     .justify_center()
                     .text_size(px(12.))
-                    .text_color(rgb_u8(15, 23, 42))
+                    .text_color(rgb_to_u32(15, 23, 42))
                     .cursor_pointer()
                     .id("music_nest_button")
                     .on_click(cx.listener(|this, _event, _window, cx| {
@@ -306,7 +306,7 @@ impl MusicPlayer {
                         div()
                             .w(px(35.))
                             .text_size(px(11.))
-                            .text_color(rgb_u8(100, 116, 139))
+                            .text_color(rgb_to_u32(100, 116, 139))
                             .child(format!("{:.0}%", volume_ratio * 100.0)),
                     )
                     .child(
@@ -314,7 +314,7 @@ impl MusicPlayer {
                             .h(px(8.))
                             .w(px(volume_bar_width))
                             .rounded_full()
-                            .bg(rgb_u8(226, 232, 240))
+                            .bg(rgb_to_u32(226, 232, 240))
                             .cursor_pointer()
                             .on_prepaint({
                                 let volume_bar_entity = cx.entity();
@@ -353,7 +353,7 @@ impl MusicPlayer {
                                     .h(px(8.))
                                     .w(px(volume_bar_width * volume_ratio))
                                     .rounded_full()
-                                    .bg(rgb_u8(148, 163, 184)),
+                                    .bg(rgb_to_u32(148, 163, 184)),
                             ),
                     ),
             )

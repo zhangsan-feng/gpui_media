@@ -39,10 +39,7 @@ impl PlatformInterface for V90VipImpl {
 
 async fn request_web_api(url:&str) -> anyhow::Result<Vec<MusicConvertLayer>> {
     let mut call_back = Vec::new();
-    let response = HttpClient::new()
-        .get_for_html(url, headers())
-        .await
-        .context("Failed to fetch HTML")?;
+    let response = HttpClient::new().get_for_html(url, headers()).await.context("Failed to fetch HTML")?;
 
     let body = response.text().await?;
     let re = Regex::new(r"\[\{(.*?)\}\]")?;

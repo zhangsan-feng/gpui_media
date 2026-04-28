@@ -17,7 +17,7 @@ use reqwest_client::ReqwestClient;
 use rust_embed::RustEmbed;
 
 pub fn logger_init(logger_path: &str) {
-    let date = chrono::Local::now().format("%Y-%m-%d");
+    // let date = chrono::Local::now().format("%Y-%m-%d");
     // let logfile_path = format!("{}{}.log", logger_path, date);
     // let mut logfile_path = PathBuf::from(logger_path);
     // logfile_path.push(format!("{}.log", date));
@@ -140,13 +140,17 @@ fn main() {
         let window_size = size(px(1200.), px(700.));
         window_options.window_bounds = Some(WindowBounds::centered(window_size, cx));
         window_options.window_min_size = Some(window_size);
-
+        window_options.titlebar = Some(TitlebarOptions{
+            title: None,
+            appears_transparent: false,
+            traffic_light_position: None,
+        });
         cx.open_window(window_options, |window, app| {
             gpui_component::init(app);
 
-            window.set_background_appearance(WindowBackgroundAppearance::MicaBackdrop);
-            let transparent = Theme::global(app).transparent;
-            Theme::global_mut(app).background = transparent;
+            // window.set_background_appearance(WindowBackgroundAppearance::MicaBackdrop);
+            // let transparent = Theme::global(app).transparent;
+            // Theme::global_mut(app).background = transparent;
 
             let state_entity = app.new(|cx| State::new(cx));
             app.set_global(GlobalState(state_entity));

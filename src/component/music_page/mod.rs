@@ -1,3 +1,7 @@
+
+
+
+
 use std::iter::Inspect;
 use crate::entity::MusicConvertLayer;
 use crate::music_platform;
@@ -12,22 +16,22 @@ use gpui_component::input::{Input, InputState};
 use crate::component::music_player::MusicPlayer;
 
 #[derive(Clone)]
-pub struct MusicRecommend {
+pub struct MusicRecommendPage {
     music_data: Vec<MusicConvertLayer>,
     hovered_id: Option<String>,
     is_loading: bool,
-    scroll_handle: VirtualListScrollHandle,
+    vm_scroll_handle: VirtualListScrollHandle,
     music_player_page: Entity<MusicPlayer>,
     music_search_keyword:Entity<InputState>
 }
 
-impl MusicRecommend {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> MusicRecommend {
-        let mut s = MusicRecommend {
+impl MusicRecommendPage {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> MusicRecommendPage {
+        let mut s = MusicRecommendPage {
             music_data: Vec::new(),
             hovered_id: None,
             is_loading: false,
-            scroll_handle: VirtualListScrollHandle::new(),
+            vm_scroll_handle: VirtualListScrollHandle::new(),
             music_player_page: cx.new(|cx| MusicPlayer::new(window, cx)),
             music_search_keyword:cx.new(|cx| InputState::new(window, cx).placeholder("input search music"))
 
@@ -65,7 +69,7 @@ impl MusicRecommend {
                 Err(e) => info!("tokio runtime error: {:?}", e),
             }
         })
-        .detach();
+            .detach();
     }
 
     fn vm_btn_play_music(&self, data:MusicConvertLayer, index:usize,cx: &mut Context<Self>) -> impl IntoElement {
@@ -129,12 +133,12 @@ impl MusicRecommend {
                     })
                     .collect()
             },
-    )
-        .track_scroll(&self.scroll_handle)
+        )
+            .track_scroll(&self.vm_scroll_handle)
     }
 }
 
-impl Render for MusicRecommend {
+impl Render for MusicRecommendPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
 
         v_flex()
@@ -186,7 +190,7 @@ impl Render for MusicRecommend {
                                         .h_full()
                                         .w(px(15.))
                                         .child(
-                                            Scrollbar::vertical(&self.scroll_handle)
+                                            Scrollbar::vertical(&self.vm_scroll_handle)
                                                 .scrollbar_show(ScrollbarShow::Always)
                                                 .axis(ScrollbarAxis::Vertical)
                                         )

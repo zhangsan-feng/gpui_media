@@ -2902,7 +2902,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_music"
+name = "gpui_media"
 version = "0.1.0"
 dependencies = [
  "anyhow",

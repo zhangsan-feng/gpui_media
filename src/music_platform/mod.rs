@@ -6,15 +6,15 @@ use crate::entity::MusicConvertLayer;
 pub mod kuwo_music;
 pub mod dtwav_music;
 pub mod xmwav_music;
-
-mod bilibili;
 mod _90svip;
 
 /*
 
 
 搜索平台
-https://flac.life/
+https://flac.life/   有验证
+
+
 https://www.pjmp3.com/
 https://music.90svip.cn/
 https://www.yeyulingfeng.com/tools/music/
@@ -28,8 +28,8 @@ https://dtwav.com/
 https://xmwav.net/
 https://music.90svip.cn/
 
-https://m.9ku.com/
-https://m.uzz.me/
+https://m.9ku.com/   歌曲太老
+https://m.uzz.me/   有 cf
 https://www.gequbao.com/
 
 

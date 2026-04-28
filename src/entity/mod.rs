@@ -34,11 +34,17 @@ impl PlatformInterface for DefaultPlatformInterface{
 
 
 
-#[derive(Clone)]
-pub struct VideoConvertLayer{
-    pub video_id:String,
-    pub video_name:String,
-    pub video_source:String,
-    pub video_file:String,
-}
 
+#[derive(Clone)]
+pub struct StreamMedioConvertLayer {
+    pub id: String,
+    pub name: String,
+    pub author: String,
+    pub pic: String,
+    pub platform: String,
+    pub source: String,
+    pub file: String,
+    pub headers: reqwest::header::HeaderMap,
+    pub func_call: Option<Arc<dyn Fn()>>,
+    pub settings:String,
+}

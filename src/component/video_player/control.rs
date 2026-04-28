@@ -14,8 +14,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use std::time::Duration;
+use gpui_component::input::InputState;
 use reqwest::header;
 use url::Url;
+use v8::ModuleStatus::Instantiated;
 use crate::component::video_player::{FrameBuffer, VideoPlayer};
 use crate::state::{GlobalState, StateEvent};
 use crate::state::StateEvent::{ TogglePlayVideo, UpdateVideoPlatyList};
@@ -38,9 +40,9 @@ impl VideoPlayer {
         let _ = gst::init();
         let mut s = Self {
             current_player_video: "".to_string(),
-            player_list: vec![],
+            player_list: Vec::from([]),
             video_request_headers: default_headers,
-            vm_scroll_handle: VirtualListScrollHandle::new(),
+            vm_vm_scroll_handle: VirtualListScrollHandle::new(),
             video_player_volume: 0.6,
             video_frame_pipline: None,
             video_frame_data: None,
@@ -64,6 +66,7 @@ impl VideoPlayer {
             last_error: None,
             bus_watch_started: false,
             pending_drop_images: Vec::new(),
+            input_text:cx.new(|cx| InputState::new(window, cx).placeholder("手动加载链接播放"))
         };
         s.init_subscribe(cx);
         s
@@ -531,8 +534,7 @@ impl VideoPlayer {
             return;
         }
         self.current_player_video = next;
-        self.reset_pipeline();
-        self.play(cx);
+        self.refresh(cx);
     }
 
     pub(crate) fn prev_video(&mut self, cx: &mut Context<Self>) {
@@ -563,6 +565,10 @@ impl VideoPlayer {
         self.switch_to_index(index, cx);
     }
 
+    pub(crate) fn refresh(&mut self, cx: &mut Context<Self>)  {
+        self.reset_pipeline();
+        self.play(cx)
+    }
 
 }
 

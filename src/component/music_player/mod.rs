@@ -2,7 +2,7 @@ use std::time::Duration;
 use gpui::*;
 use gpui_component::*;
 use rodio::{MixerDeviceSink, Player};
-use crate::com::rgb_u8;
+use crate::component::home::rgb_to_u32;
 use crate::entity;
 
 pub mod control;
@@ -19,7 +19,7 @@ pub struct MusicPlayer {
     pub current_player: entity::MusicConvertLayer,
     pub player_list: Vec<entity::MusicConvertLayer>,
     pub is_player: bool,
-    scroll_handle: VirtualListScrollHandle,
+    vm_scroll_handle: VirtualListScrollHandle,
     play_err: Option<String>,
     device_sink: Option<MixerDeviceSink>,
     player: Option<Player>,
@@ -41,7 +41,7 @@ impl Render for MusicPlayer {
 
         v_flex()
             .size_full()
-            .bg(rgb_u8(248, 250, 252))
+            .bg(rgb_to_u32(248, 250, 252))
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
                 this.handle_file_drop(paths, cx);
             }))
@@ -60,7 +60,7 @@ impl Render for MusicPlayer {
                             .justify_center()
                             .gap_4()
                             .child(self.player_list_ui(window, cx))
-                            .child(self.player_controll_ui(window, cx))
+                            .child(self.player_control_ui(window, cx))
                             .child(self.player_volume_control_ui(window, cx))
                     ),
             )

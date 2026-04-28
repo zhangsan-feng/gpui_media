@@ -1,4 +1,4 @@
-use crate::com::rgb_u8;
+
 use crate::entity;
 use crate::entity::{DefaultPlatformInterface};
 use crate::state::StateEvent::{TogglePlayMusic, UpdatePlatyList};
@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
-use crate::component::music_player::{MusicPlayer, ProgressDrag, VolumeDrag};
+use crate::component::music_player::{MusicPlayer,VolumeDrag};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer::prelude::ElementExt;
@@ -36,7 +36,7 @@ impl MusicPlayer {
                 func: Arc::new(DefaultPlatformInterface),
             },
             player_list: vec![],
-            scroll_handle: VirtualListScrollHandle::new(),
+            vm_scroll_handle: VirtualListScrollHandle::new(),
             is_player: false,
             play_err: None,
             device_sink: None,
@@ -409,24 +409,22 @@ impl MusicPlayer {
                         cx.notify()
                     }),
                 Ok(Err(e)) => {
-                    entity.update(&mut cx_async, |this, cx| {
+                    entity.update(&mut cx_async, |this, _| {
                         this.play_err = Some(e.to_string());
                         // this.next_music(cx);
                     });
                     info!("http error: {:?}", e);
                 }
                 Err(e) => {
-                    entity.update(&mut cx_async, |this, cx| {
+                    entity.update(&mut cx_async, |this, _| {
                         this.play_err = Some(e.to_string());
                         // this.next_music(cx);
                     });
                     info!("tokio runtime error: {:?}", e);
                 }
             }
-        })
-        .detach();
+        }).detach();
     }
-    
 }
 
 
