@@ -13,7 +13,7 @@ use gpui_component::{StyledExt, VirtualListScrollHandle, v_flex, v_virtual_list,
 use log::info;
 use std::rc::Rc;
 use gpui_component::input::{Input, InputState};
-use crate::component::music_player::MusicPlayer;
+use crate::drive::music_player::MusicPlayer;
 
 #[derive(Clone)]
 pub struct MusicRecommendPage {
@@ -44,7 +44,7 @@ impl MusicRecommendPage {
         let global_state = cx.global::<GlobalState>().0.read(cx).clone();
         let entity = cx.entity().clone();
         let mut cx_async = cx.to_async().clone();
-        let state_handle = cx.global::<GlobalState>().0.clone();
+        let state_handler = cx.global::<GlobalState>().0.clone();
 
         self.is_loading = true;
 
@@ -61,15 +61,14 @@ impl MusicRecommendPage {
 
                         cx.notify()
                     });
-                    state_handle.update(&mut cx_async, |_, cx| {
+                    state_handler.update(&mut cx_async, |_, cx| {
                         cx.emit(StateEvent::UpdatePlatyList(r));
                     });
                 }
                 Ok(Err(e)) => info!("http error: {:?}", e),
                 Err(e) => info!("tokio runtime error: {:?}", e),
             }
-        })
-            .detach();
+        }).detach();
     }
 
     fn vm_btn_play_music(&self, data:MusicConvertLayer, index:usize,cx: &mut Context<Self>) -> impl IntoElement {
@@ -80,11 +79,11 @@ impl MusicRecommendPage {
                 let c = data.clone();
                 cx.listener(move |_, _, _, cx| {
                     let mut cx_async = cx.to_async().clone();
-                    let state_handle =
+                    let state_handler =
                         cx.global::<GlobalState>().0.clone();
                     let c = c.clone();
                     cx.spawn(|_, _: &mut AsyncApp| async move {
-                        state_handle.update(
+                        state_handler.update(
                             &mut cx_async,
                             |_, cx| {
                                 cx.emit(

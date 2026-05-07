@@ -7,7 +7,7 @@ use gpui_component::popover::Popover;
 use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
 use crate::component::home::rgb_to_u32;
-use crate::component::music_player::{MusicPlayer, ProgressDrag, VolumeDrag};
+use crate::drive::music_player::{MusicPlayer, ProgressDrag, VolumeDrag};
 use crate::state::{GlobalState, StateEvent};
 
 impl MusicPlayer {
@@ -175,10 +175,10 @@ impl MusicPlayer {
                                         let c = data.clone();
                                         cx.listener(move |_, _, _, cx| {
                                             let mut cx_async = cx.to_async().clone();
-                                            let state_handle = cx.global::<GlobalState>().0.clone();
+                                            let state_handler = cx.global::<GlobalState>().0.clone();
                                             let c = c.clone();
                                             cx.spawn(|_, _: &mut AsyncApp| async move {
-                                                state_handle.update(&mut cx_async, |_, cx| {
+                                                state_handler.update(&mut cx_async, |_, cx| {
                                                     cx.emit(StateEvent::TogglePlayMusic(c.clone()))
                                                 });
                                             })

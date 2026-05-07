@@ -8,7 +8,7 @@ use gpui_component::input::Input;
 use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
 use crate::component::home::rgb_to_u32;
-use crate::component::video_player::{ProgressDrag, VideoPlayer, VolumeDrag};
+use crate::drive::video_player::{ProgressDrag, VideoPlayer, VolumeDrag};
 
 
 impl VideoPlayer {
@@ -42,7 +42,7 @@ impl VideoPlayer {
                                         cx.listener(move |this, _, _, cx| {
                                             let c = c.clone();
                                             this.current_player_video = c;
-                                            this.reset_pipeline();
+
                                             this.play(cx);
                                         })
                                     })
@@ -50,6 +50,9 @@ impl VideoPlayer {
                             })
                             .child(
                                 Button::new(("video-refresh-btn", index)).label("刷新")
+                                    .on_click(cx.listener(|this, event, window, cx|{
+                                        this.refresh(cx);
+                                    }))
                             )
                     })
                     .collect()
@@ -266,7 +269,7 @@ impl VideoPlayer {
                     .w_full()
                     .child(
                         div()
-                            .w(px(window.bounds().size.width.as_f32().clone() * 0.7))
+                            .w(px(window.bounds().size.width.as_f32().clone() * 0.4))
                             .text_color(rgb_to_u32(15, 23, 42))
                             .overflow_x_scrollbar()
                             .mb_3()
@@ -276,7 +279,7 @@ impl VideoPlayer {
                                     if self.current_player_video.is_empty() {
                                     "没有加载视频来源".to_string()
                                     } else {
-                                        self.current_player_video.to_string()
+                                        format!("{} / {}", self.player_name, self.current_player_video.to_string())
                                     })
                                     .selectable(true)
                                     .text_color(rgb(0x94A3B8))
@@ -358,8 +361,7 @@ impl VideoPlayer {
             )
     }
 
-    pub(crate) fn video_frame_ui(&self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-
+    pub(crate) fn video_frame_ui(&self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex_grow()
             .flex()
@@ -374,12 +376,12 @@ impl VideoPlayer {
                 div()
                     .size_full()
                     .flex()
+                    .overflow_hidden()
                     .justify_center()
                     .items_center()
                     .child(
                         img(frame)
-                            .w_full()
-                            .h_full()
+                            .size_full()
                             .object_fit(ObjectFit::Contain),
                     )
                     .into_any_element()
@@ -388,8 +390,7 @@ impl VideoPlayer {
                     .flex_grow()
                     .justify_center()
                     .items_center()
-                    .w(window.bounds().size.width * 0.5)
-                    .h(window.bounds().size.height * 0.5)
+                    .size_full()
                     .overflow_hidden()
                     .overflow_scrollbar()
                     .child(

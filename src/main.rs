@@ -4,6 +4,7 @@ mod entity;
 mod music_platform;
 mod state;
 mod video_platform;
+mod drive;
 
 use gpui::*;
 use gpui_component::*;

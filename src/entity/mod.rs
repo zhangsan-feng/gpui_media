@@ -33,18 +33,14 @@ impl PlatformInterface for DefaultPlatformInterface{
 }
 
 
-
-
 #[derive(Clone)]
 pub struct StreamMedioConvertLayer {
     pub id: String,
     pub name: String,
-    pub author: String,
-    pub pic: String,
-    pub platform: String,
-    pub source: String,
-    pub file: String,
+    pub img: String,
+    pub detail_link: String,
+    pub detail_set:Vec<String>,
     pub headers: reqwest::header::HeaderMap,
-    pub func_call: Option<Arc<dyn Fn()>>,
-    pub settings:String,
+    pub detail_func: Arc<dyn Fn(String) -> Vec<String> + Send + Sync>,
+    pub play_func: Arc<dyn Fn(String) -> String + Send + Sync>,
 }

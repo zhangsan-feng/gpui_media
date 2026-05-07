@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
-use crate::component::music_player::{MusicPlayer,VolumeDrag};
+use crate::drive::music_player::{MusicPlayer, VolumeDrag};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer::prelude::ElementExt;
@@ -56,10 +56,10 @@ impl MusicPlayer {
     }
     
     fn init_subscribe(&mut self, cx: &mut Context<Self>) {
-        let state_handle = cx.global::<GlobalState>().0.clone();
+        let state_handler = cx.global::<GlobalState>().0.clone();
 
         cx.subscribe(
-            &state_handle,
+            &state_handler,
             |this: &mut Self, _model, event: &StateEvent, cx| match event {
                 TogglePlayMusic(data) => {
                     // println!("{:?}", data.music_source);
@@ -119,8 +119,8 @@ impl MusicPlayer {
         }
 
         let track_id_for_match = self.current_player.music_id.clone();
-        let state_handle = cx.global::<GlobalState>().0.clone();
-        let tokio_handler = state_handle.read(cx).clone().tokio_handle;
+        let state_handler = cx.global::<GlobalState>().0.clone();
+        let tokio_handler = state_handler.read(cx).clone().tokio_handle;
         let entity = cx.entity().clone();
         let mut cx_async = cx.to_async().clone();
 
@@ -393,8 +393,8 @@ impl MusicPlayer {
 
         let mut cx_async = cx.to_async().clone();
         let entity = cx.entity().clone();
-        let state_handle = cx.global::<GlobalState>().0.clone();
-        let tokio_handler = state_handle.read(cx).clone().tokio_handle;
+        let state_handler = cx.global::<GlobalState>().0.clone();
+        let tokio_handler = state_handler.read(cx).clone().tokio_handle;
         let music_layer = self.current_player.clone();
 
         cx.spawn(|_, _: &mut AsyncApp| async move {

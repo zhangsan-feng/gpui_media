@@ -1,32 +1,31 @@
 
 use crate::component::music_page::MusicRecommendPage;
-use crate::component::video_player::VideoPlayer;
+use crate::drive::video_player::VideoPlayer;
 use gpui::*;
 use gpui_component::{Root, h_flex, v_flex};
 use std::time::Duration;
-use crate::component::template_page::TemplatePage;
+use crate::component::video_page::VideoRecommendPage;
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum Page {
     MusicRecommendPage,
-    VideoPlayerPage,
-    TemplatesPage,
+    VideoRecommendPage,
 }
 
 pub struct HomeView {
     select_id: Page,
-    recommend_page: Entity<MusicRecommendPage>,
+    music_recommend_page: Entity<MusicRecommendPage>,
+    video_recommend_page: Entity<VideoRecommendPage>,
     video_player_page: Entity<VideoPlayer>,
-    templates_page: Entity<TemplatePage>,
 }
 
 impl HomeView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> HomeView {
         let s = HomeView {
             select_id: Page::MusicRecommendPage,
-            recommend_page: cx.new(|cx| MusicRecommendPage::new(window, cx)),
+            music_recommend_page: cx.new(|cx| MusicRecommendPage::new(window, cx)),
+            video_recommend_page: cx.new(|cx| VideoRecommendPage::new(window, cx)),
             video_player_page: cx.new(|cx| VideoPlayer::new(window, cx)),
-            templates_page: cx.new(|cx| TemplatePage::new(window, cx)),
         };
         s
     }
@@ -74,8 +73,7 @@ impl Render for HomeView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content_anim_id = match self.select_id {
             Page::MusicRecommendPage => "home-view-recommend",
-            Page::VideoPlayerPage => "video-player-page",
-            Page::TemplatesPage => "home-view-templates",
+            Page::VideoRecommendPage => "video-player-recommend",
         };
         v_flex()
             .size_full()
@@ -92,17 +90,15 @@ impl Render for HomeView {
                             .bg(rgb_to_u32(233, 238, 246))
                             // .rounded_2xl()
                             .child(self.render_nav_item("音乐", Page::MusicRecommendPage, cx))
-                            .child(self.render_nav_item("视频", Page::VideoPlayerPage, cx))
-                            .child(self.render_nav_item("模板", Page::VideoPlayerPage, cx))
+                            .child(self.render_nav_item("视频", Page::VideoRecommendPage, cx))
                     )
                     .child(
                         v_flex().size_full().child(
                             div()
                                 .size_full()
                                 .child(match self.select_id {
-                                    Page::MusicRecommendPage => self.recommend_page.clone().into_any_element(),
-                                    Page::VideoPlayerPage => self.video_player_page.clone().into_any_element(),
-                                    Page::TemplatesPage => self.templates_page.clone().into_any_element(),
+                                    Page::MusicRecommendPage => self.music_recommend_page.clone().into_any_element(),
+                                    Page::VideoRecommendPage => self.video_recommend_page.clone().into_any_element(),
                                 })
                                 .with_animations(
                                     content_anim_id,

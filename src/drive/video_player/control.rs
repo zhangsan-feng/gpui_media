@@ -18,33 +18,27 @@ use gpui_component::input::InputState;
 use reqwest::header;
 use url::Url;
 use v8::ModuleStatus::Instantiated;
-use crate::component::video_player::{FrameBuffer, VideoPlayer};
+use crate::drive::video_player::{FrameBuffer, VideoPlayer};
 use crate::state::{GlobalState, StateEvent};
-use crate::state::StateEvent::{ TogglePlayVideo, UpdateVideoPlatyList};
-
-
+use crate::state::StateEvent::{ TogglePlayVideo};
+use crate::video_platform;
 
 impl VideoPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
 
-        let mut default_headers = header::HeaderMap::new();
-        default_headers.insert(
-            "User-Agent",
-            header::HeaderValue::from_static(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-            ),
-        );
-        
+        let mut headers = header::HeaderMap::new();
 
         let _ = (window);
         let _ = gst::init();
         let mut s = Self {
             current_player_video: "".to_string(),
             player_list: Vec::from([]),
-            video_request_headers: default_headers,
+            player_func:Arc::new(|_: String| String::default()),
+            player_name:"".to_string(),
+            video_request_headers: headers,
             vm_vm_scroll_handle: VirtualListScrollHandle::new(),
             video_player_volume: 0.6,
-            video_frame_pipline: None,
+            video_frame_pipeline: None,
             video_frame_data: None,
             video_player_duration: Duration::from_secs(0),
 
@@ -73,18 +67,44 @@ impl VideoPlayer {
     }
 
     fn init_subscribe(&mut self, cx: &mut Context<Self>) {
-        let state_handle = cx.global::<GlobalState>().0.clone();
+        let state_handler = cx.global::<GlobalState>().0.clone();
+        let tokio_handler = state_handler.read(cx).tokio_handle.clone();
         cx.subscribe(
-            &state_handle,
-            |this: &mut Self, _model, event: &StateEvent, cx| match event {
+            &state_handler,
+            move |this: &mut Self, _model, event: &StateEvent, cx| match event {
                 TogglePlayVideo(data) => {
-                    this.current_player_video = data.clone();
-                    this.reset_pipeline();
-                    this.play(cx);
+                    
+                    
+// #############################################################################
 
-                }
-                UpdateVideoPlatyList(data) => {
-                    this.player_list = data.clone();
+                    let tokio_handler = tokio_handler.clone();
+                    let mut cx_async = cx.to_async().clone();
+                    let entity = cx.entity().clone();
+                    let detail_func = data.detail_func.clone();
+                    let detail_link = data.detail_link.clone();
+                    let play_func = data.play_func.clone();
+                    let name  = data.name.clone();
+                    cx.spawn(|_,_:&mut AsyncApp| async move {
+                        let res = tokio_handler.spawn(async move {
+                            detail_func(detail_link)
+                        });
+                        match res.await {
+                            Ok(r)=> {
+                                entity.update(&mut cx_async, |this, cx|{
+                                    this.player_list = r;
+                                    this.player_func = play_func;
+                                    this.player_name = name;
+                                    cx.notify()
+                                })
+                            }
+                            Err(e)=>{
+                                log::error!("{}", e)
+                            }
+                        }
+
+                    }).detach();
+
+// #############################################################################
                 }
                 _ => {}
             },
@@ -96,7 +116,7 @@ impl VideoPlayer {
         Duration::from_nanos(clock.nseconds())
     }
     fn ensure_pipeline(&mut self) -> Result<()> {
-        if self.video_frame_pipline.is_some() {
+        if self.video_frame_pipeline.is_some() {
             return Ok(());
         }
 
@@ -197,7 +217,7 @@ impl VideoPlayer {
         playbin.set_state(gst::State::Paused)?;
 
         self.video_frame_data = Some(appsink);
-        self.video_frame_pipline = Some(playbin);
+        self.video_frame_pipeline = Some(playbin);
 
         Ok(())
     }
@@ -255,11 +275,43 @@ impl VideoPlayer {
                 self.current_player_video = player.clone();
             }
         }
+        
+// #############################################################################
+        if !self.current_player_video.contains(".m3u8"){
+            let global_state = cx.global::<GlobalState>().0.clone();
+            let tokio_handler = global_state.read(cx).tokio_handle.clone();
+            let mut cx_async = cx.to_async().clone();
+            let entity = cx.entity().clone();
+            let player_func = self.player_func.clone();
+            let video_link = self.current_player_video.clone();
 
+            cx.spawn(|_,_:&mut AsyncApp| async move {
+                let res = tokio_handler.spawn(async move {
+                    player_func(video_link)
+                });
+                match res.await {
+                    Ok(r)=> {
+                        entity.update(&mut cx_async, |this, cx|{
+                            log::info!("{}", r);
+                            if !r.trim().is_empty() && this.current_player_video != r {
+                                this.current_player_video = r;
+                                this.refresh(cx);
+                            }
+                        })
+                    }
+                    Err(e)=>{
+                        log::error!("{}", e)
+                    }
+                }
+            }).detach();
+        }
+
+// #############################################################################
         if self.ensure_pipeline().is_err() {
             return;
         }
-        if let Some(playbin) = &self.video_frame_pipline {
+
+        if let Some(playbin) = &self.video_frame_pipeline {
             let _ = playbin.set_state(gst::State::Playing);
             self.is_player = true;
             self.ensure_bus_watch(cx);
@@ -269,7 +321,7 @@ impl VideoPlayer {
     }
 
     fn pause(&mut self) {
-        if let Some(playbin) = &self.video_frame_pipline {
+        if let Some(playbin) = &self.video_frame_pipeline {
             let _ = playbin.set_state(gst::State::Paused);
         }
         self.is_player = false;
@@ -279,7 +331,7 @@ impl VideoPlayer {
         if self.bus_watch_started {
             return;
         }
-        let Some(playbin) = self.video_frame_pipline.clone() else {
+        let Some(playbin) = self.video_frame_pipeline.clone() else {
             return;
         };
         let Some(bus) = playbin.bus() else {
@@ -364,7 +416,7 @@ impl VideoPlayer {
     }
 
     fn update_progress(&mut self, cx: &mut Context<Self>) -> bool {
-        if let Some(playbin) = &self.video_frame_pipline {
+        if let Some(playbin) = &self.video_frame_pipeline {
             if let Some(pos) = playbin.query_position::<gst::ClockTime>() {
                 self.video_player_duration = self.clock_to_duration(pos);
                 // println!("[video] pos={}ms", self.video_player_duration.as_millis());
@@ -393,7 +445,7 @@ impl VideoPlayer {
         let (seq, width, height, data) = {
             let guard = buffer.lock().unwrap();
             if guard.seq == self.last_frame_seq {
-                return self.video_frame_pipline.is_some();
+                return self.video_frame_pipeline.is_some();
             }
             (guard.seq, guard.width, guard.height, guard.data.clone())
         };
@@ -411,7 +463,7 @@ impl VideoPlayer {
             }
         }
 
-        let should_continue = self.video_frame_pipline.is_some();
+        let should_continue = self.video_frame_pipeline.is_some();
         if !should_continue {
             self.frame_task = None;
         }
@@ -422,7 +474,7 @@ impl VideoPlayer {
         if self.ensure_pipeline().is_err() {
             return;
         }
-        if let Some(playbin) = &self.video_frame_pipline {
+        if let Some(playbin) = &self.video_frame_pipeline {
             let nanos = position.as_nanos().min(u64::MAX as u128) as u64;
             let target = gst::ClockTime::from_nseconds(nanos);
 
@@ -459,7 +511,7 @@ impl VideoPlayer {
 
     pub(crate) fn set_volume(&mut self, volume: f32) {
         self.video_player_volume = volume.clamp(0.0, 1.0);
-        if let Some(playbin) = &self.video_frame_pipline {
+        if let Some(playbin) = &self.video_frame_pipeline {
             playbin.set_property("volume", &(self.video_player_volume as f64));
         }
     }
@@ -495,10 +547,10 @@ impl VideoPlayer {
     }
 
     pub(crate) fn reset_pipeline(&mut self) {
-        if let Some(playbin) = &self.video_frame_pipline {
+        if let Some(playbin) = &self.video_frame_pipeline {
             let _ = playbin.set_state(gst::State::Null);
         }
-        self.video_frame_pipline = None;
+        self.video_frame_pipeline = None;
         self.video_frame_data = None;
         self.is_player = false;
         self.video_total_duration = None;

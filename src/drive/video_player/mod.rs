@@ -16,10 +16,14 @@ mod ui;
 pub struct VideoPlayer {
     current_player_video: String,
     player_list: Vec<String>,
+    player_func:Arc<dyn Fn(String) -> String + Send + Sync>,
+    player_name:String,
     video_request_headers: header::HeaderMap,
+
+
     vm_vm_scroll_handle: VirtualListScrollHandle,
     video_player_volume: f32,
-    video_frame_pipline: Option<gst::Element>,
+    video_frame_pipeline: Option<gst::Element>,
     video_frame_data: Option<gst_app::AppSink>,
     is_player: bool,
     video_total_duration: Option<Duration>,
@@ -45,7 +49,7 @@ pub struct VideoPlayer {
 
 impl Drop for VideoPlayer {
     fn drop(&mut self) {
-        if let Some(playbin) = &self.video_frame_pipline {
+        if let Some(playbin) = &self.video_frame_pipeline {
             let _ = playbin.set_state(gst::State::Null);
         }
         self.stop_frame_thread();

@@ -92,7 +92,7 @@ async fn request_web_api(url:&str) -> anyhow::Result<Vec<MusicConvertLayer>> {
                 "https://myhkw.cn/api/pic?song={}&pic={}&type={}&id=99999&sign={}",
                 music_id, music_pic_id, music_platform, sign
             );
-            println!("{} {} {}", music_source, music_pic, music_name);
+            // println!("{} {} {}", music_source, music_pic, music_name);
 
 
             call_back.push(MusicConvertLayer{
