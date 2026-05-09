@@ -12,7 +12,7 @@ use crate::drive::video_player::{ProgressDrag, VideoPlayer, VolumeDrag};
 
 
 impl VideoPlayer {
-    fn player_list_vm(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn player_list_vm(&self, cx: &mut Context<Self>) -> impl IntoElement {
         v_virtual_list(
             cx.entity().clone(),
             "video-player-vm-list",
@@ -50,7 +50,7 @@ impl VideoPlayer {
                             })
                             .child(
                                 Button::new(("video-refresh-btn", index)).label("刷新")
-                                    .on_click(cx.listener(|this, event, window, cx|{
+                                    .on_click(cx.listener(|this, _, _, cx|{
                                         this.refresh(cx);
                                     }))
                             )
@@ -61,7 +61,7 @@ impl VideoPlayer {
             .track_scroll(&self.vm_vm_scroll_handle)
     }
 
-    pub(crate) fn player_list_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn player_list_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
         Popover::new("video-player-open-popover")
             .anchor(Anchor::BottomRight)
             .trigger(Button::new("show-form").label("菜单").outline())
@@ -97,7 +97,7 @@ impl VideoPlayer {
                                     .p_2()
                                     .gap_2()
                                     .flex_grow()
-                                    .child(self.player_list_vm(window, cx))
+                                    .child(self.player_list_vm(cx))
                                     .child(
                                         div()
                                             .w(px(10.))
@@ -118,7 +118,7 @@ impl VideoPlayer {
             )
     }
 
-    pub(crate) fn player_volume_control_ui(&self, _: &mut Window, cx: &mut Context<Self>,) -> impl IntoElement {
+    pub(crate) fn player_volume_control_ui(&self, cx: &mut Context<Self>,) -> impl IntoElement {
         let volume_ratio = self.video_player_volume.clamp(0.0, 1.0);
         let volume_bar_width = 150.0;
 
@@ -145,25 +145,25 @@ impl VideoPlayer {
                         .cursor_pointer()
                         .on_prepaint({
                             let volume_bar_entity = cx.entity();
-                            move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
-                                let _ = volume_bar_entity.update(cx, |this, _cx| {
+                            move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
+                                let _ = volume_bar_entity.update(cx, |this, _| {
                                     this.volume_bar_bounds = Some(bounds);
                                 });
                             }
                         })
-                        .id("music_volume_bar")
+                        .id("video_volume_bar")
                         .on_mouse_down(
                             MouseButton::Left,
-                            cx.listener(|this, event: &MouseDownEvent, _window, _cx| {
+                            cx.listener(|this, event: &MouseDownEvent, _, _| {
                                 if let Some(bounds) = this.volume_bar_bounds {
                                     let ratio = this.volume_from_position(event.position, bounds);
                                     this.set_volume(ratio);
                                 }
                             }),
                         )
-                        .on_drag(VolumeDrag, |_value, _offset, _window, cx| cx.new(|_| Empty))
+                        .on_drag(VolumeDrag, |_value, _offset, _, cx| cx.new(|_| Empty))
                         .on_drag_move::<VolumeDrag>(cx.listener(
-                            |this, event: &DragMoveEvent<VolumeDrag>, _window, _cx| {
+                            |this, event: &DragMoveEvent<VolumeDrag>, _, _| {
                                 let left = event.bounds.origin.x.as_f32();
                                 let width = event.bounds.size.width.as_f32().max(1.0);
                                 let ratio = ((event.event.position.x.as_f32() - left) / width).clamp(0.0, 1.0);
@@ -202,8 +202,8 @@ impl VideoPlayer {
                     .cursor_pointer()
                     .on_prepaint({
                         let progress_bar_entity = progress_bar_entity.clone();
-                        move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
-                            let _ = progress_bar_entity.update(cx, |this, _cx| {
+                        move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
+                            let _ = progress_bar_entity.update(cx, |this, _| {
                                 this.progress_bar_bounds = Some(bounds);
                             });
                         }
@@ -211,7 +211,7 @@ impl VideoPlayer {
                     .id("video_progress_bar")
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(|this, event: &MouseDownEvent, _window, _cx| {
+                        cx.listener(|this, event: &MouseDownEvent, _, _| {
                             if let Some(bounds) = this.progress_bar_bounds {
                                 if let Some(target) = this.position_from_drag(event.position, bounds){
                                     this.seek_video(target);
@@ -221,11 +221,11 @@ impl VideoPlayer {
                             }
                         }),
                     )
-                    .on_drag(ProgressDrag, |_value, _offset, _window, cx: &mut App| {
+                    .on_drag(ProgressDrag, |_, _, _, cx: &mut App| {
                         cx.new(|_| Empty)
                     })
                     .on_drag_move::<ProgressDrag>(cx.listener(
-                        |this, event: &DragMoveEvent<ProgressDrag>, _window, _cx| {
+                        |this, event: &DragMoveEvent<ProgressDrag>, _, _| {
                             if let Some(target) = this.position_from_drag(event.event.position, event.bounds){
                                 this.is_scrubbing = true;
                                 this.scrub_position = Some(target);
@@ -234,7 +234,7 @@ impl VideoPlayer {
                     ))
                     .on_mouse_up(
                         MouseButton::Left,
-                        cx.listener(|this, _event, _window, _cx| {
+                        cx.listener(|this, _, _, _| {
                             if this.is_scrubbing {
                                 if let Some(target) = this.scrub_position.take() {
                                     this.seek_video(target);
@@ -245,7 +245,7 @@ impl VideoPlayer {
                     )
                     .on_mouse_up_out(
                         MouseButton::Left,
-                        cx.listener(|this, _event, _window, _cx| {
+                        cx.listener(|this, _, _, _| {
                             if this.is_scrubbing {
                                 if let Some(target) = this.scrub_position.take() {
                                     this.seek_video(target);
@@ -295,73 +295,61 @@ impl VideoPlayer {
                     ),
             )
     }
-    pub(crate) fn player_control_ui(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+
+    fn render_control_button(
+        &self,
+        id:impl Into<ElementId>,
+        label:impl IntoElement,
+        click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> impl IntoElement {
+
+        div()
+            .size(px(28.))
+            .rounded_full()
+            .bg(rgb_to_u32(241, 245, 249))
+            .border_1()
+            .border_color(rgb_to_u32(203, 213, 225))
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_size(px(12.))
+            .text_color(rgb_to_u32(15, 23, 42))
+            .cursor_pointer()
+            .id(id)
+            .on_click(click)
+            .child(label)
+    }
+
+    pub(crate) fn player_control_ui(&self, cx: &mut Context<Self>) -> impl IntoElement{
+
         h_flex()
             .gap_2()
             .child(
-                div()
-                    .size(px(28.))
-                    .rounded_full()
-                    .bg(rgb_to_u32(241, 245, 249))
-                    .border_1()
-                    .border_color(rgb_to_u32(203, 213, 225))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(12.))
-                    .text_color(rgb_to_u32(15, 23, 42))
-                    .id("music_prev_button")
-                    .cursor_pointer()
-                    .on_click(cx.listener(|this, _event, _window, cx| {
-                        this.prev_video(cx);
-                    }))
-                    .child("<"),
+                self.render_control_button(
+                    "video_prev_button",
+                    "<",
+                    cx.listener(|this, _, _, cx| { this.prev_video(cx); }))
             )
             .child(
-                div()
-                    .size(px(36.))
-                    .rounded_full()
-                    .bg(rgb_to_u32(59, 130, 246))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(14.))
-                    .text_color(white())
-                    .cursor_pointer()
-                    .id("music_play_button")
-                    .on_click(cx.listener(|this, _event, _window, cx| {
-                        this.toggle_play(cx);
-                    }))
-                    .child(
-                        if self.is_player {
-                            div().child("||")
-                        } else {
-                            div().child("▶")
-                        }
-                    ),
+                self.render_control_button(
+                    "video_play_button",
+                    if self.is_player {
+                        div().child("||")
+                    } else {
+                        div().child("▶")
+                    },
+                    cx.listener(|this, _, _, cx| { this.toggle_play(cx); }))
             )
+
             .child(
-                div()
-                    .size(px(28.))
-                    .rounded_full()
-                    .bg(rgb_to_u32(241, 245, 249))
-                    .border_1()
-                    .border_color(rgb_to_u32(203, 213, 225))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(12.))
-                    .text_color(rgb_to_u32(15, 23, 42))
-                    .cursor_pointer()
-                    .id("music_nest_button")
-                    .on_click(cx.listener(|this, _event, _window, cx| {
-                        this.next_video(cx);
-                    }))
-                    .child(">"),
+                self.render_control_button(
+                    "video_next_button",
+                    ">",
+                    cx.listener(|this, _, _, cx| { this.next_video(cx); }))
             )
     }
 
-    pub(crate) fn video_frame_ui(&self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn video_frame_ui(&self) -> impl IntoElement {
         div()
             .flex_grow()
             .flex()

@@ -277,34 +277,34 @@ impl VideoPlayer {
         }
         
 // #############################################################################
-        if !self.current_player_video.contains(".m3u8"){
-            let global_state = cx.global::<GlobalState>().0.clone();
-            let tokio_handler = global_state.read(cx).tokio_handle.clone();
-            let mut cx_async = cx.to_async().clone();
-            let entity = cx.entity().clone();
-            let player_func = self.player_func.clone();
-            let video_link = self.current_player_video.clone();
 
-            cx.spawn(|_,_:&mut AsyncApp| async move {
-                let res = tokio_handler.spawn(async move {
-                    player_func(video_link)
-                });
-                match res.await {
-                    Ok(r)=> {
-                        entity.update(&mut cx_async, |this, cx|{
-                            log::info!("{}", r);
-                            if !r.trim().is_empty() && this.current_player_video != r {
-                                this.current_player_video = r;
-                                this.refresh(cx);
-                            }
-                        })
+    let global_state = cx.global::<GlobalState>().0.clone();
+    let tokio_handler = global_state.read(cx).tokio_handle.clone();
+    let mut cx_async = cx.to_async().clone();
+    let entity = cx.entity().clone();
+    let player_func = self.player_func.clone();
+    let video_link = self.current_player_video.clone();
+
+    cx.spawn(|_,_:&mut AsyncApp| async move {
+        let res = tokio_handler.spawn(async move {
+            player_func(video_link)
+        });
+        match res.await {
+            Ok(r)=> {
+                entity.update(&mut cx_async, |this, cx|{
+                    log::info!("{}", r);
+                    if !r.trim().is_empty() && this.current_player_video != r {
+                        this.current_player_video = r;
+                        this.refresh(cx);
                     }
-                    Err(e)=>{
-                        log::error!("{}", e)
-                    }
-                }
-            }).detach();
+                })
+            }
+            Err(e)=>{
+                log::error!("{}", e)
+            }
         }
+    }).detach();
+
 
 // #############################################################################
         if self.ensure_pipeline().is_err() {

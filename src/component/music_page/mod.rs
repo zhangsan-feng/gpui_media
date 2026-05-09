@@ -36,11 +36,11 @@ impl MusicRecommendPage {
             music_search_keyword:cx.new(|cx| InputState::new(window, cx).placeholder("input search music"))
 
         };
-        s.init_component_data(cx);
+        s.init_data(cx);
         s
     }
 
-    pub fn init_component_data(&mut self, cx: &mut Context<Self>) {
+    pub fn init_data(&mut self, cx: &mut Context<Self>) {
         let global_state = cx.global::<GlobalState>().0.read(cx).clone();
         let entity = cx.entity().clone();
         let mut cx_async = cx.to_async().clone();

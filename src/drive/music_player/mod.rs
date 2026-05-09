@@ -59,9 +59,9 @@ impl Render for MusicPlayer {
                         h_flex()
                             .justify_center()
                             .gap_4()
-                            .child(self.player_list_ui(window, cx))
-                            .child(self.player_control_ui(window, cx))
-                            .child(self.player_volume_control_ui(window, cx))
+                            .child(self.player_list_ui(cx))
+                            .child(self.player_control_ui( cx))
+                            .child(self.player_volume_control_ui( cx))
                     ),
             )
     }

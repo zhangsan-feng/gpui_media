@@ -83,7 +83,7 @@ impl Render for VideoPlayer {
             .size_full()
             .p_2()
             .gap_2()
-            .child(self.video_frame_ui(window, cx))
+            .child(self.video_frame_ui())
             .child(
                 v_flex()
                     .gap_2()
@@ -98,9 +98,9 @@ impl Render for VideoPlayer {
                             .gap_4()
                             .justify_center()
                             .items_center()
-                            .child(self.player_list_ui(window, cx))
-                            .child(self.player_control_ui(window, cx))
-                            .child(self.player_volume_control_ui(window, cx)),
+                            .child(self.player_list_ui(cx))
+                            .child(self.player_control_ui(cx))
+                            .child(self.player_volume_control_ui(cx)),
                     )
             )
     }

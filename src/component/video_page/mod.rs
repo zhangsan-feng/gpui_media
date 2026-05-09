@@ -22,11 +22,11 @@ impl VideoRecommendPage{
             vm_scroll_handle: VirtualListScrollHandle::new(),
         };
 
-        s.init_video_recommend(window, cx);
+        // s.init_data(window, cx);
         s
     }
 
-    pub fn init_video_recommend(&self, window: &mut Window, cx: &mut Context<Self>){
+    pub fn init_data(&self, window: &mut Window, cx: &mut Context<Self>){
         let global_state = cx.global::<GlobalState>().0.clone();
         let tokio_handler = global_state.read(cx).tokio_handle.clone();
         let mut cx_async = cx.to_async().clone();
@@ -115,17 +115,17 @@ impl VideoRecommendPage {
                                                 style.background = Some(rgb_to_u32(226, 232, 240).into());
                                                 style
                                             })
-                                            .on_click(cx.listener(move |_this, _event, _window, _cx| {
+                                            .on_click(cx.listener(move |_, _, window, cx| {
                                                 let data = data.clone();
 
-                                                _cx.open_window(window_center_options(_window, 1300., 700.), move |window, app| {
+                                                cx.open_window(window_center_options(window, 1300., 700.), move |window, app| {
                                                     let view = app.new(|cx| VideoPlayer::new(window, cx));
                                                     app.new(|cx| Root::new(view, window, cx))
                                                 }).expect("TODO: panic message");
 
-                                                let state_handler = _cx.global::<GlobalState>().0.clone();
-                                                let mut cx_async = _cx.to_async().clone();
-                                                _cx.spawn(|_, _: &mut AsyncApp| async move {
+                                                let state_handler = cx.global::<GlobalState>().0.clone();
+                                                let mut cx_async = cx.to_async().clone();
+                                                cx.spawn(|_, _: &mut AsyncApp| async move {
                                                     state_handler.update(&mut cx_async, |_, cx| {
                                                         cx.emit(StateEvent::TogglePlayVideo(data.clone()))
                                                     });

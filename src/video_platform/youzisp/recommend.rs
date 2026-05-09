@@ -26,6 +26,9 @@ fn detail_func(url:String) -> Vec<String> {
 }
 
 fn play_func(url:String) -> String {
+    if url.contains(".m3u8"){
+        return url
+    }
     log::info!("{}", format!("https://youzisp.tv{}", url));
 
     tokio::task::block_in_place(|| {
