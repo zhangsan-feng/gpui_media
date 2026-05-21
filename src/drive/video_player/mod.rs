@@ -8,16 +8,16 @@ use gstreamer::prelude::ElementExt;
 use gstreamer_app::gst;
 use gstreamer_app as gst_app;
 use reqwest::header;
+use crate::entity::NetworkStatic;
+
 pub mod control;
 mod ui;
 
 
 
 pub struct VideoPlayer {
-    current_player_video: String,
-    player_list: Vec<String>,
-    player_func:Arc<dyn Fn(String) -> String + Send + Sync>,
-    player_name:String,
+    current_player: NetworkStatic,
+    player_list: Vec<NetworkStatic>,
     video_request_headers: header::HeaderMap,
 
 
@@ -74,7 +74,7 @@ struct FrameBuffer {
 
 impl Render for VideoPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.drop_video_frame(window);
+        self.free_video_frame(window);
 
         v_flex()
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {

@@ -1,5 +1,5 @@
 [package]
-name = "gpui_media"
+name = "resource_download_gui"
 version = "0.1.0"
 edition = "2024"
 
@@ -18,11 +18,8 @@ tokio = {version = "1.49.0", features = ["full"]}
 futures-util="0.3.31"
 serde_json = "1.0.149"
 rust-embed = "8.11.0"
-deno_core = "0.398.0" 
-v8 = "147.1.0"
+deno_core = "0.400.0"
 md5 = "0.8.0"
-rodio = { version = "0.22.2", features = ["playback"] }
-scraper= "0.26.0"
 regex = "1.12.3"
 uuid = { version = "1.22.0", features = ["v4"] }
 gstreamer = "0.25.1"
@@ -31,4 +28,5 @@ gstreamer-video = "0.25.0"
 image = "0.25.8"
 url = "2.5.7"
 rand = "0.10.1"
+scraper= "0.27.0"
 jsonpath_lib="0.3.0"

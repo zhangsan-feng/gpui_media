@@ -4,40 +4,31 @@ use anyhow::{Context};
 use std::result::Result::Ok;
 use log::info;
 use regex::Regex;
-use crate::{com::HttpClient, entity::{MusicConvertLayer, PlatformInterface}, music_platform::_90svip::{entity::RecpmmondMusicEntity, sign::headers}};
+use crate::{com::HttpClient, entity::{NetworkStatic, NetworkStaticInterface}, music_platform::_90svip::{entity::RecpmmondMusicEntity, sign::headers}};
 
 
 
 struct V90VipImpl;
-impl PlatformInterface for V90VipImpl {
-    fn download(&self, params: &MusicConvertLayer) -> anyhow::Result<MusicConvertLayer> {
+impl NetworkStaticInterface for V90VipImpl {
+    fn download(&self, params: &NetworkStatic) {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
 
-                let download_file = format!("./music/{}_{}.mp3", params.music_name, params.music_id);
+                let download_file = format!("./music/{}_{}.mp3", params.name, params.id);
                 HttpClient::new()
-                    .download_music(download_file.clone(), params.music_source.clone(), headers())
+                    .download_music(download_file.clone(), params.source.clone(), headers())
                     .await
                     .expect("download file error");
-
-                Ok(MusicConvertLayer {
-                    music_id: params.music_id.clone(),
-                    music_platform: params.music_platform.clone(),
-                    music_name: params.music_name.clone(),
-                    music_author: params.music_author.clone(),
-                    music_pic: params.music_pic.clone(),
-                    music_source: params.music_source.to_string(),
-                    music_file: download_file,
-                    func: params.func.clone(),
-                    music_time: params.music_time.clone(),
-                })
             })
         })
+    }
+    fn play(&self, params: &NetworkStatic) -> String {
+        params.clone().source
     }
 }
 
 
-async fn request_web_api(url:&str) -> anyhow::Result<Vec<MusicConvertLayer>> {
+async fn request_web_api(url:&str) -> anyhow::Result<Vec<NetworkStatic>> {
     let mut call_back = Vec::new();
     let response = HttpClient::new().get_for_html(url, headers()).await.context("Failed to fetch HTML")?;
 
@@ -95,16 +86,14 @@ async fn request_web_api(url:&str) -> anyhow::Result<Vec<MusicConvertLayer>> {
             // println!("{} {} {}", music_source, music_pic, music_name);
 
 
-            call_back.push(MusicConvertLayer{
-                music_id: music_id.to_string(),
-                music_name: music_name.to_string(),
-                music_author: music_author.to_string(),
-                music_pic: music_pic,
-                music_platform: music_platform.to_string(),
-                music_time: "".to_string(),
-                music_source: music_source,
-                music_file: "".to_string(),
+            call_back.push(NetworkStatic{
+                id: music_id.to_string(),
+                name: music_name.to_string(),
+                author: music_author.to_string(),
+                img: music_pic,
+                source: music_source,
                 func:Arc::new(V90VipImpl),
+                headers: headers(),
             });
         }
     }
@@ -114,7 +103,8 @@ async fn request_web_api(url:&str) -> anyhow::Result<Vec<MusicConvertLayer>> {
 
 // https://myhkw.cn/api/lyrics?song=2603500959&type=wy&id=99999&sign=2c/5z5DNZV/M2&ksc=2603500959&_=1776151073362
 // format!("https://myhkw.cn/api/lyrics?song={}&type={}&id=99999&sign={}ksc=2603500959&_={}", )
-pub async fn call() -> anyhow::Result<Vec<MusicConvertLayer>>{
+
+pub async fn call() -> anyhow::Result<Vec<NetworkStatic>>{
 
     let mut call_back = Vec::new();
     let url_list = vec![

@@ -56,13 +56,13 @@ https://www.xuandm.com/
 https://www.renren.pro/
 
 */
-use crate::entity::StreamMedioConvertLayer;
+use crate::entity::NetworkStatic;
 
 mod youzisp;
 
 
 
-pub async fn recommend() -> Vec<StreamMedioConvertLayer>{
+pub async fn recommend() -> Vec<NetworkStatic>{
     let mut  call_back = Vec::new();
     call_back.extend(youzisp::recommend::recommend().await);
     

@@ -4,7 +4,7 @@ use regex::Regex;
 use scraper::{Html, Selector};
 use uuid::Uuid;
 use crate::com::HttpClient;
-use crate::entity::{ StreamMedioConvertLayer};
+use crate::entity::{NetworkStatic};
 use crate::video_platform::youzisp::headers;
 
 
@@ -52,7 +52,7 @@ fn play_func(url:String) -> String {
     })
 }
 
-async fn request_web() -> Vec<StreamMedioConvertLayer>{
+async fn request_web() -> Vec<NetworkStatic>{
     let mut call_back = Vec::from([]);
 
     let response = HttpClient::new()
@@ -79,16 +79,12 @@ async fn request_web() -> Vec<StreamMedioConvertLayer>{
                 }
                 log::info!("{}, {}, {}", name, link, img);
 
-                call_back.push(StreamMedioConvertLayer{
-                    id: Uuid::new_v4().to_string(),
-                    name:name,
-                    img:img,
-                    detail_link: link.to_string(),
-                    detail_set: vec![],
-                    headers: headers(),
-                    detail_func: Arc::new(detail_func),
-                    play_func: Arc::new(play_func),
-                })
+                // call_back.push(NetworkStatic{
+                //     id: Uuid::new_v4().to_string(),
+                //     name:name,
+                //     img:Some(img),
+                // 
+                // })
             }
         }
     }
@@ -96,6 +92,6 @@ async fn request_web() -> Vec<StreamMedioConvertLayer>{
 }
 
 
-pub async fn recommend() -> Vec<StreamMedioConvertLayer>{
+pub async fn recommend() -> Vec<NetworkStatic>{
     request_web().await
 }

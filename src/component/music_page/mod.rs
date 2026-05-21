@@ -1,9 +1,4 @@
-
-
-
-
-use std::iter::Inspect;
-use crate::entity::MusicConvertLayer;
+use crate::entity;
 use crate::music_platform;
 use crate::state::{GlobalState, StateEvent};
 use gpui::*;
@@ -17,7 +12,7 @@ use crate::drive::music_player::MusicPlayer;
 
 #[derive(Clone)]
 pub struct MusicRecommendPage {
-    music_data: Vec<MusicConvertLayer>,
+    music_data: Vec<entity::NetworkStatic>,
     hovered_id: Option<String>,
     is_loading: bool,
     vm_scroll_handle: VirtualListScrollHandle,
@@ -62,7 +57,7 @@ impl MusicRecommendPage {
                         cx.notify()
                     });
                     state_handler.update(&mut cx_async, |_, cx| {
-                        cx.emit(StateEvent::UpdatePlatyList(r));
+                        cx.emit(StateEvent::UpdateMusicPlatyList(r));
                     });
                 }
                 Ok(Err(e)) => info!("http error: {:?}", e),
@@ -71,7 +66,7 @@ impl MusicRecommendPage {
         }).detach();
     }
 
-    fn vm_btn_play_music(&self, data:MusicConvertLayer, index:usize,cx: &mut Context<Self>) -> impl IntoElement {
+    fn vm_btn_play_music(&self, data:entity::NetworkStatic, index:usize,cx: &mut Context<Self>) -> impl IntoElement {
 
         Button::new(("music-play-index-", index))
             .label("播放")
@@ -121,10 +116,9 @@ impl MusicRecommendPage {
                                     .gap_2()
                                     .justify_between()
                                     .h_flex()
-                                    .child(img(data.music_pic.clone()).size(px(24.)).rounded_full())
-                                    .child(data.music_author.clone())
-                                    .child(data.music_platform.clone())
-                                    .child(data.music_name.clone()),
+                                    .child(img(data.img.clone()).size(px(24.)).rounded_full())
+                                    .child(data.author.clone())
+                                    .child(data.name.clone()),
                             )
                             .child(
                                 view.vm_btn_play_music(data, index, cx)

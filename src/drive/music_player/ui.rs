@@ -46,7 +46,7 @@ impl MusicPlayer {
                         MouseButton::Left,
                         cx.listener(|this, event: &MouseDownEvent, _, cx| {
                             if let Some(bounds) = this.progress_bar_bounds {
-                                if let Some(target) = this.position_from_drag(event.position, bounds) {
+                                if let Some(target) = this.get_progress_position(event.position, bounds) {
                                     this.seek_audio_progress(target, cx);
                                     this.is_scrubbing = false;
                                     this.scrub_position = None;
@@ -59,7 +59,7 @@ impl MusicPlayer {
                     })
                     .on_drag_move::<ProgressDrag>(cx.listener(
                         |this, event: &DragMoveEvent<ProgressDrag>, _, _cx| {
-                            if let Some(target) = this.position_from_drag(event.event.position, event.bounds) {
+                            if let Some(target) = this.get_progress_position(event.event.position, event.bounds) {
                                 this.is_scrubbing = true;
                                 this.scrub_position = Some(target);
                             }
@@ -112,11 +112,13 @@ impl MusicPlayer {
                                     if let Some(r) = self.play_err.clone() {
                                         r
                                     } else {
-                                        if !self.current_player.music_name.is_empty() {
-                                            self.current_player.music_name.clone()
-                                            // "aaaaaa".to_string()
-                                        } else {
+                                        if self.current_player.name.is_empty() {
                                             "没有加载音乐来源".to_string()
+                                        } else {
+                                            format!("{} / {}",
+                                                    self.current_player.name,
+                                                    self.current_player.source.to_string()
+                                            )
                                         }
                                     }
                                 )
@@ -161,12 +163,11 @@ impl MusicPlayer {
                                     .gap_2()
                                     .justify_between()
                                     .h_flex()
-                                    .child(img(data.music_pic.clone()).size(px(24.)).rounded_full())
-                                    .child(data.music_author.clone())
-                                    .child(data.music_platform.clone())
-                                    .child(data.music_name.clone()),
+                                    .child(img(data.img.clone()).size(px(24.)).rounded_full())
+                                    .child(data.author.clone())
+                                    .child(data.name.clone()),
                             )
-                            .child(if view.current_player.music_id == data.music_id {
+                            .child(if view.current_player.id == data.id {
                                 div().child("正在播放").into_any_element()
                             } else {
                                 Button::new(("music-play-index-", index))
@@ -316,8 +317,8 @@ impl MusicPlayer {
                                 cx.listener(|this, event: &MouseDownEvent, _, _cx| {
                                     if let Some(bounds) = this.volume_bar_bounds {
                                         let ratio =
-                                            this.volume_from_position(event.position, bounds);
-                                        this.set_volume(ratio);
+                                            this.get_volume_position(event.position, bounds);
+                                        this.set_volume_size(ratio);
                                     }
                                 }),
                             )
@@ -331,7 +332,7 @@ impl MusicPlayer {
                                     let ratio = ((event.event.position.x.as_f32() - left)
                                         / width)
                                         .clamp(0.0, 1.0);
-                                    this.set_volume(ratio);
+                                    this.set_volume_size(ratio);
                                 },
                             ))
                             .child(

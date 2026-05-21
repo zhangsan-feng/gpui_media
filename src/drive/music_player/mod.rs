@@ -1,7 +1,7 @@
 use std::time::Duration;
 use gpui::*;
 use gpui_component::*;
-use rodio::{MixerDeviceSink, Player};
+use gstreamer as gst;
 use crate::component::home::rgb_to_u32;
 use crate::entity;
 
@@ -16,13 +16,12 @@ struct VolumeDrag;
 
 
 pub struct MusicPlayer {
-    pub current_player: entity::MusicConvertLayer,
-    pub player_list: Vec<entity::MusicConvertLayer>,
+    pub current_player: entity::NetworkStatic,
+    pub player_list: Vec<entity::NetworkStatic>,
     pub is_player: bool,
     vm_scroll_handle: VirtualListScrollHandle,
     play_err: Option<String>,
-    device_sink: Option<MixerDeviceSink>,
-    player: Option<Player>,
+    audio_pipeline: Option<gst::Element>,
     total_duration: Option<Duration>,
     current_position: Duration,
     is_scrubbing: bool,

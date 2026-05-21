@@ -1,11 +1,9 @@
 
 use log::info;
-use crate::entity::MusicConvertLayer;
+use crate::entity;
 
 
-pub mod kuwo_music;
-pub mod dtwav_music;
-pub mod xmwav_music;
+
 mod _90svip;
 
 /*
@@ -39,7 +37,7 @@ https://www.gequbao.com/
 
 
 
-pub async  fn music_recommend() -> anyhow::Result<Vec<MusicConvertLayer>>{
+pub async  fn music_recommend() -> anyhow::Result<Vec<entity::NetworkStatic>>{
     let mut call_back = Vec::new();
 
     
@@ -71,7 +69,7 @@ pub async  fn music_recommend() -> anyhow::Result<Vec<MusicConvertLayer>>{
 
 }
 
-pub fn music_search(keyword:&str) -> anyhow::Result<Vec<MusicConvertLayer>>{
+pub fn music_search(keyword:&str) -> anyhow::Result<Vec<entity::NetworkStatic>>{
     let mut call_back = Vec::new();
 
     Ok(call_back)

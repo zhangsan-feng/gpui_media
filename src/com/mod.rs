@@ -1,5 +1,5 @@
-use anyhow::{Context, Error};
-use deno_core::{JsRuntime, RuntimeOptions, serde_v8};
+use anyhow::Context;
+use deno_core::{JsRuntime, RuntimeOptions, serde_v8, v8};
 use futures_util::StreamExt;
 use gpui::http_client::http::HeaderMap;
 use gpui::*;
@@ -8,7 +8,11 @@ use reqwest::{Response, multipart};
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
 
-pub fn call_js(js_code: &str, fn_name: &str, params: Vec<String>) -> anyhow::Result<serde_json::Value, Error> {
+pub fn call_js(
+    js_code: &str,
+    fn_name: &str,
+    params: Vec<String>,
+) -> anyhow::Result<serde_json::Value> {
 
     let mut runtime = JsRuntime::new(RuntimeOptions::default());
     // println!("{}", js_code);
@@ -22,9 +26,9 @@ pub fn call_js(js_code: &str, fn_name: &str, params: Vec<String>) -> anyhow::Res
     let result = runtime.execute_script("<call>", code).context("call js failed")?;
     let context = runtime.main_context();
     let isolate = runtime.v8_isolate();
-    deno_core::v8::scope_with_context!(scope, isolate, context);
+    v8::scope_with_context!(scope, isolate, &context);
 
-    let local = deno_core::v8::Local::new(scope, result);
+    let local = v8::Local::new(scope, result);
     let result: serde_json::Value = serde_v8::from_v8(scope, local)?;
 
     Ok(result)

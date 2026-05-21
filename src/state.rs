@@ -3,7 +3,7 @@ use gpui::{ Context, Entity, EventEmitter, Global,};
 
 use reqwest_client::runtime;
 use crate::entity;
-use crate::entity::StreamMedioConvertLayer;
+use crate::entity::{NetworkStatic};
 
 #[derive(Clone)]
 pub struct State {
@@ -13,9 +13,10 @@ pub struct State {
 
 
 pub enum StateEvent {
-    TogglePlayMusic(entity::MusicConvertLayer),
-    UpdatePlatyList(Vec<entity::MusicConvertLayer>),
-    TogglePlayVideo(StreamMedioConvertLayer),
+    TogglePlayMusic(entity::NetworkStatic),
+    UpdateMusicPlatyList(Vec<entity::NetworkStatic>),
+    TogglePlayVideo(NetworkStatic),
+    UpdateVideoPlayList(Vec<NetworkStatic>),
 }
 
 

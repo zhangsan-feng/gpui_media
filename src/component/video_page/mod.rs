@@ -1,3 +1,4 @@
+
 use gpui::*;
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::{h_flex, v_flex, Root, VirtualListScrollHandle, v_virtual_list};
@@ -5,12 +6,11 @@ use std::rc::Rc;
 use crate::com::window_center_options;
 use crate::component::home::rgb_to_u32;
 use crate::drive::video_player::VideoPlayer;
-use crate::entity::StreamMedioConvertLayer;
 use crate::state::{GlobalState, StateEvent};
-use crate::video_platform;
+use crate::{entity, video_platform};
 
 pub struct VideoRecommendPage{
-    pub recommend_video:Vec<StreamMedioConvertLayer>,
+    pub recommend_video:Vec<entity::NetworkStatic>,
     vm_scroll_handle: VirtualListScrollHandle,
 }
 
@@ -23,6 +23,7 @@ impl VideoRecommendPage{
         };
 
         // s.init_data(window, cx);
+        // s.open_video_window(window, cx);
         s
     }
 
@@ -49,6 +50,13 @@ impl VideoRecommendPage{
             }
 
         }).detach();
+    }
+
+    fn open_video_window(&self, window: &mut Window, cx: &mut Context<Self>){
+        cx.open_window(window_center_options(window, 1300., 700.), move |window, app| {
+            let view = app.new(|cx| VideoPlayer::new(window, cx));
+            app.new(|cx| Root::new(view, window, cx))
+        }).expect("open window failed");
     }
 }
 
@@ -115,14 +123,9 @@ impl VideoRecommendPage {
                                                 style.background = Some(rgb_to_u32(226, 232, 240).into());
                                                 style
                                             })
-                                            .on_click(cx.listener(move |_, _, window, cx| {
+                                            .on_click(cx.listener(move |this, _, window, cx| {
                                                 let data = data.clone();
-
-                                                cx.open_window(window_center_options(window, 1300., 700.), move |window, app| {
-                                                    let view = app.new(|cx| VideoPlayer::new(window, cx));
-                                                    app.new(|cx| Root::new(view, window, cx))
-                                                }).expect("TODO: panic message");
-
+                                                this.open_video_window(window, cx);
                                                 let state_handler = cx.global::<GlobalState>().0.clone();
                                                 let mut cx_async = cx.to_async().clone();
                                                 cx.spawn(|_, _: &mut AsyncApp| async move {

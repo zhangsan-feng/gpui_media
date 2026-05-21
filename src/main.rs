@@ -1,39 +1,26 @@
 mod com;
 mod component;
+mod drive;
 mod entity;
 mod music_platform;
 mod state;
 mod video_platform;
-mod drive;
 
 use gpui::*;
 use gpui_component::*;
-use log::{Level, info};
+use log::{info, Level};
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
-
 use crate::state::{GlobalState, State};
 use reqwest_client::ReqwestClient;
 use rust_embed::RustEmbed;
 
+
 pub fn logger_init(logger_path: &str) {
-    // let date = chrono::Local::now().format("%Y-%m-%d");
-    // let logfile_path = format!("{}{}.log", logger_path, date);
-    // let mut logfile_path = PathBuf::from(logger_path);
-    // logfile_path.push(format!("{}.log", date));
-    //
-    // if let Some(parent) = logfile_path.parent() {
-    //     if !parent.exists() {
-    //         let _ = std::fs::create_dir_all(parent);
-    //     }
-    // }
-
-    // println!("{}", logfile_path);
-
     match std::fs::create_dir("./music") {
-        Ok(e) => {}
-        Err(e) => {}
+        Ok(_e) => {}
+        Err(_e) => {}
     }
 
     let mut dispatch = fern::Dispatch::new();
@@ -59,18 +46,12 @@ pub fn logger_init(logger_path: &str) {
         .level(log::LevelFilter::Warn)
         .level(log::LevelFilter::Debug)
         .chain(std::io::stdout());
-    // .chain(fern::log_file(logfile_path).expect("Failed to create log file"));
     dispatch.apply().unwrap();
 
-    info!("init logger success")
+    info!("init logger success");
+
+    let _ = logger_path;
 }
-
-/*
-
-https://longbridge.github.io/gpui-component/
-
-
-*/
 
 #[derive(RustEmbed)]
 #[folder = "./src/icon"]
@@ -125,8 +106,13 @@ impl AssetSource for MergedAssets {
     }
 }
 
-fn main() {
+
+
+#[tokio::main]
+async fn main() {
+
     logger_init("./");
+
     let http_client = ReqwestClient::user_agent("gpui").unwrap();
     let assets = MergedAssets {
         local_directories: vec![PathBuf::from("/"), PathBuf::from("./src/icon")],
@@ -141,17 +127,13 @@ fn main() {
         let window_size = size(px(1200.), px(700.));
         window_options.window_bounds = Some(WindowBounds::centered(window_size, cx));
         window_options.window_min_size = Some(window_size);
-        window_options.titlebar = Some(TitlebarOptions{
+        window_options.titlebar = Some(TitlebarOptions {
             title: None,
             appears_transparent: false,
             traffic_light_position: None,
         });
         cx.open_window(window_options, |window, app| {
             gpui_component::init(app);
-
-            // window.set_background_appearance(WindowBackgroundAppearance::MicaBackdrop);
-            // let transparent = Theme::global(app).transparent;
-            // Theme::global_mut(app).background = transparent;
 
             let state_entity = app.new(|cx| State::new(cx));
             app.set_global(GlobalState(state_entity));

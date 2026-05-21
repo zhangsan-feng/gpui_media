@@ -31,8 +31,8 @@ impl VideoPlayer {
                             .justify_between()
                             .w_full()
                             .pr_2()
-                            .child(data.clone())
-                            .child(if view.current_player_video == data {
+                            .child(data.name.clone())
+                            .child(if view.current_player.source == data.source {
                                 div().child("正在播放").into_any_element()
                             } else {
                                 Button::new(("video-play-btn", index))
@@ -41,7 +41,7 @@ impl VideoPlayer {
                                         let c = data.clone();
                                         cx.listener(move |this, _, _, cx| {
                                             let c = c.clone();
-                                            this.current_player_video = c;
+                                            this.current_player = c;
 
                                             this.play(cx);
                                         })
@@ -84,8 +84,8 @@ impl VideoPlayer {
                                         Button::new("load-video-url-btn")
                                             .label("加载")
                                             .on_click(cx.listener(|this, _, _, cx|{
-                                                this.player_list.push(this.input_text.read(cx).text().to_string()) ;
-                                                this.refresh(cx);
+                                                // this.player_list.push(this.input_text.read(cx).text().to_string()) ;
+                                                // this.refresh(cx);
                                             }))
                                     )
                             )
@@ -156,8 +156,8 @@ impl VideoPlayer {
                             MouseButton::Left,
                             cx.listener(|this, event: &MouseDownEvent, _, _| {
                                 if let Some(bounds) = this.volume_bar_bounds {
-                                    let ratio = this.volume_from_position(event.position, bounds);
-                                    this.set_volume(ratio);
+                                    let ratio = this.get_volume_position(event.position, bounds);
+                                    this.set_volume_size(ratio);
                                 }
                             }),
                         )
@@ -167,7 +167,7 @@ impl VideoPlayer {
                                 let left = event.bounds.origin.x.as_f32();
                                 let width = event.bounds.size.width.as_f32().max(1.0);
                                 let ratio = ((event.event.position.x.as_f32() - left) / width).clamp(0.0, 1.0);
-                                this.set_volume(ratio);
+                                this.set_volume_size(ratio);
                             },
                         ))
                         .child(
@@ -213,8 +213,8 @@ impl VideoPlayer {
                         MouseButton::Left,
                         cx.listener(|this, event: &MouseDownEvent, _, _| {
                             if let Some(bounds) = this.progress_bar_bounds {
-                                if let Some(target) = this.position_from_drag(event.position, bounds){
-                                    this.seek_video(target);
+                                if let Some(target) = this.get_progress_position(event.position, bounds){
+                                    this.seek_video_progress(target);
                                     this.is_scrubbing = false;
                                     this.scrub_position = None;
                                 }
@@ -226,7 +226,7 @@ impl VideoPlayer {
                     })
                     .on_drag_move::<ProgressDrag>(cx.listener(
                         |this, event: &DragMoveEvent<ProgressDrag>, _, _| {
-                            if let Some(target) = this.position_from_drag(event.event.position, event.bounds){
+                            if let Some(target) = this.get_progress_position(event.event.position, event.bounds){
                                 this.is_scrubbing = true;
                                 this.scrub_position = Some(target);
                             }
@@ -237,7 +237,7 @@ impl VideoPlayer {
                         cx.listener(|this, _, _, _| {
                             if this.is_scrubbing {
                                 if let Some(target) = this.scrub_position.take() {
-                                    this.seek_video(target);
+                                    this.seek_video_progress(target);
                                 }
                                 this.is_scrubbing = false;
                             }
@@ -248,7 +248,7 @@ impl VideoPlayer {
                         cx.listener(|this, _, _, _| {
                             if this.is_scrubbing {
                                 if let Some(target) = this.scrub_position.take() {
-                                    this.seek_video(target);
+                                    this.seek_video_progress(target);
                                 }
                                 this.is_scrubbing = false;
                             }
@@ -276,11 +276,15 @@ impl VideoPlayer {
                             .child(
 
                                 markdown(
-                                    if self.current_player_video.is_empty() {
+                                    if self.current_player.source.is_empty() {
                                     "没有加载视频来源".to_string()
                                     } else {
-                                        format!("{} / {}", self.player_name, self.current_player_video.to_string())
-                                    })
+                                        format!("{} / {}",
+                                                self.current_player.name,
+                                                self.current_player.source.to_string()
+                                        )
+                                    }
+                                )
                                     .selectable(true)
                                     .text_color(rgb(0x94A3B8))
                                     .cursor_text()
