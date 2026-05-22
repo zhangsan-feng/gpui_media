@@ -2824,6 +2824,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui_medio"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "deno_core",
+ "fern",
+ "futures-util",
+ "gpui",
+ "gpui-component",
+ "gpui_platform",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-video",
+ "image",
+ "jsonpath_lib",
+ "log",
+ "md5",
+ "rand 0.10.1",
+ "regex",
+ "reqwest",
+ "reqwest_client",
+ "rust-embed",
+ "scraper",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "gpui_platform"
 version = "0.1.0"
 source = "git+https://github.com/zed-industries/zed#c512c72b634d9e3f7c907846ee111f68cf41dbbb"
@@ -5733,38 +5765,6 @@ checksum = "22d392791f3c6802a1905a509e9d1a6039cbbcb5e9e00e5a6d3661f7c874f390"
 dependencies = [
  "potential_utf",
  "serde_core",
-]
-
-[[package]]
-name = "resource_download_gui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "deno_core",
- "fern",
- "futures-util",
- "gpui",
- "gpui-component",
- "gpui_platform",
- "gstreamer",
- "gstreamer-app",
- "gstreamer-video",
- "image",
- "jsonpath_lib",
- "log",
- "md5",
- "rand 0.10.1",
- "regex",
- "reqwest",
- "reqwest_client",
- "rust-embed",
- "scraper",
- "serde",
- "serde_json",
- "tokio",
- "url",
- "uuid",
 ]
 
 [[package]]

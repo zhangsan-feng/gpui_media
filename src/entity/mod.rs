@@ -1,6 +1,8 @@
+use std::fmt::Debug;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use log::info;
 use url::Url;
 
 #[derive(Clone)]
@@ -29,9 +31,17 @@ impl Default for NetworkStatic {
     }
 }
 
-pub trait NetworkStaticInterface{
-    fn download(&self, params:&NetworkStatic);
-    fn play(&self, params:&NetworkStatic) -> String;
+impl Debug for NetworkStatic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NetworkStatic")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("img", &self.img)
+            .field("author", &self.author)
+            .field("headers", &self.headers)
+            .field("source", &self.source)
+            .finish()
+    }
 }
 
 impl NetworkStatic{
@@ -42,6 +52,13 @@ impl NetworkStatic{
         self.func.play(self)
     }
 }
+
+pub trait NetworkStaticInterface{
+    fn download(&self, params:&NetworkStatic);
+    fn play(&self, params:&NetworkStatic) -> String;
+    fn detail(&self, params:&NetworkStatic) -> Vec<NetworkStatic>;
+}
+
 
 pub struct LocalStatic;
 impl NetworkStaticInterface for LocalStatic{
@@ -61,5 +78,8 @@ impl NetworkStaticInterface for LocalStatic{
         Url::from_file_path(Path::new(source))
             .map(|uri| uri.to_string())
             .unwrap_or_else(|_| source.to_string())
+    }
+    fn detail(&self, params:&NetworkStatic) -> Vec<NetworkStatic>{
+        Vec::new()
     }
 }

@@ -48,12 +48,13 @@ https://www.taopianzy.com/index.html
 
 
 https://youzisp.tv
+https://www.keke2.app/
+https://www.renren.pro/
 https://www.bttwo.org/
+
 https://www.appmovie.link/
 https://dmbus.cc/
-https://www.keke2.app/
-https://www.xuandm.com/
-https://www.renren.pro/
+
 
 */
 use crate::entity::NetworkStatic;

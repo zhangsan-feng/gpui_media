@@ -545,6 +545,10 @@ impl VideoPlayer {
 
     pub(crate) fn play(&mut self, cx: &mut Context<Self>) {
 
+        if self.current_player.source.is_empty() && self.player_list.is_empty() {
+            return;
+        }
+        
         if self.current_player.source.is_empty() && !self.player_list.is_empty() {
             if let Some(player) = self.player_list.first() {
                 self.current_player = player.clone();
@@ -552,10 +556,12 @@ impl VideoPlayer {
         }
 
         // #############################################################################  播放逻辑
-
+        
         self.current_player.source = self.current_player.play(self.current_player.source.as_str());
 
         // #############################################################################  播放逻辑
+        
+        
         if let Err(err) = self.set_pipeline() {
             self.last_error = Some(format!("failed to build pipeline: {err}"));
             self.is_player = false;

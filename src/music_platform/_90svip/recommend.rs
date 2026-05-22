@@ -25,6 +25,9 @@ impl NetworkStaticInterface for V90VipImpl {
     fn play(&self, params: &NetworkStatic) -> String {
         params.clone().source
     }
+    fn detail(&self, params: &NetworkStatic) -> Vec<NetworkStatic> {
+        Vec::new()
+    }
 }
 
 

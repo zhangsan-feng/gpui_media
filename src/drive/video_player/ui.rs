@@ -31,6 +31,7 @@ impl VideoPlayer {
                             .justify_between()
                             .w_full()
                             .pr_2()
+                            .child(format!("第 {} 集", index))
                             .child(data.name.clone())
                             .child(if view.current_player.source == data.source {
                                 div().child("正在播放").into_any_element()
@@ -74,21 +75,21 @@ impl VideoPlayer {
                             .gap_2()
                             .p_4()
                             .size_full()
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .child(
-                                        Input::new(&self.input_text)
-                                    )
-                                    .child(
-                                        Button::new("load-video-url-btn")
-                                            .label("加载")
-                                            .on_click(cx.listener(|this, _, _, cx|{
-                                                // this.player_list.push(this.input_text.read(cx).text().to_string()) ;
-                                                // this.refresh(cx);
-                                            }))
-                                    )
-                            )
+                            // .child(
+                            //     h_flex()
+                            //         .gap_2()
+                            //         .child(
+                            //             Input::new(&self.input_text)
+                            //         )
+                            //         .child(
+                            //             Button::new("load-video-url-btn")
+                            //                 .label("加载")
+                            //                 .on_click(cx.listener(|this, _, _, cx|{
+                            //                     // this.player_list.push(this.input_text.read(cx).text().to_string()) ;
+                            //                     // this.refresh(cx);
+                            //                 }))
+                            //         )
+                            // )
                             .child(
                                 h_flex()
                                     .border_1()

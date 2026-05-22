@@ -1,8 +1,10 @@
+mod recommond;
 
 use gpui::*;
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::{h_flex, v_flex, Root, VirtualListScrollHandle, v_virtual_list};
 use std::rc::Rc;
+use log::info;
 use crate::com::window_center_options;
 use crate::component::home::rgb_to_u32;
 use crate::drive::video_player::VideoPlayer;
@@ -21,8 +23,7 @@ impl VideoRecommendPage{
             recommend_video:Vec::new(),
             vm_scroll_handle: VirtualListScrollHandle::new(),
         };
-
-        // s.init_data(window, cx);
+        s.init_data(window, cx);
         // s.open_video_window(window, cx);
         s
     }
@@ -112,6 +113,7 @@ impl VideoRecommendPage {
                                         let _img = data.img.clone();
                                         let name = data.name.clone();
                                         v_flex()
+                                            .rounded_2xl()
                                             .id(data.id.to_string())
                                             .gap_2()
                                             .p_2()
@@ -125,14 +127,28 @@ impl VideoRecommendPage {
                                             })
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 let data = data.clone();
-                                                this.open_video_window(window, cx);
                                                 let state_handler = cx.global::<GlobalState>().0.clone();
+                                                let tokio_handler = state_handler.read(cx).tokio_handle.clone();
                                                 let mut cx_async = cx.to_async().clone();
+                                                this.open_video_window(window, cx);
                                                 cx.spawn(|_, _: &mut AsyncApp| async move {
-                                                    state_handler.update(&mut cx_async, |_, cx| {
-                                                        cx.emit(StateEvent::TogglePlayVideo(data.clone()))
+                                                    let res = tokio_handler.spawn(async move{
+                                                        data.func.detail(&data.clone())
                                                     });
+                                                    match res.await {
+                                                        Ok(r)=>{
+                                                            state_handler.update(&mut cx_async, |_, cx| {
+                                                                cx.emit(StateEvent::UpdateVideoPlayList(r.clone()))
+                                                            });
+                                                        }
+                                                        Err(e)=>{
+                                                            info!("tokio run error:{}", e)
+                                                        }
+                                                    }
                                                 }).detach();
+
+
+
                                             }))
                                             .justify_center()
                                             .text_center()
