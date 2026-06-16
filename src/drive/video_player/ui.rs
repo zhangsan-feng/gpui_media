@@ -59,7 +59,7 @@ impl VideoPlayer {
                     .collect()
             },
         )
-            .track_scroll(&self.vm_vm_scroll_handle)
+            .track_scroll(&self.vm_scroll_handle)
     }
 
     pub(crate) fn player_list_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -104,7 +104,7 @@ impl VideoPlayer {
                                             .w(px(10.))
                                             .h_full()
                                             .child(
-                                                Scrollbar::vertical(&self.vm_vm_scroll_handle)
+                                                Scrollbar::vertical(&self.vm_scroll_handle)
                                                     .scrollbar_show(ScrollbarShow::Always)
                                                     .axis(ScrollbarAxis::Vertical)
                                             )

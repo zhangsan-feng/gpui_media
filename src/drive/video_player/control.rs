@@ -34,7 +34,7 @@ impl VideoPlayer {
             current_player: entity::NetworkStatic::default(),
             player_list: Vec::from([]),
             video_request_headers: headers,
-            vm_vm_scroll_handle: VirtualListScrollHandle::new(),
+            vm_scroll_handle: VirtualListScrollHandle::new(),
             video_player_volume: 0.6,
             video_frame_pipeline: None,
             video_frame_data: None,

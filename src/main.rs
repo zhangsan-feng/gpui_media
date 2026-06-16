@@ -10,6 +10,7 @@ use gpui::*;
 use gpui_component::*;
 use log::{info, Level};
 use std::borrow::Cow;
+use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 use crate::state::{GlobalState, State};
@@ -18,10 +19,6 @@ use rust_embed::RustEmbed;
 
 
 pub fn logger_init(logger_path: &str) {
-    match std::fs::create_dir("./music") {
-        Ok(_e) => {}
-        Err(_e) => {}
-    }
 
     let mut dispatch = fern::Dispatch::new();
     dispatch = dispatch
@@ -112,6 +109,9 @@ impl AssetSource for MergedAssets {
 async fn main() {
 
     logger_init("./");
+
+
+
 
     let http_client = ReqwestClient::user_agent("gpui").unwrap();
     let assets = MergedAssets {

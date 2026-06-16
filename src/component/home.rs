@@ -36,8 +36,6 @@ pub fn rgb_to_u32(r: u8, g: u8, b: u8) -> Rgba {
     rgb(color)
 }
 
-
-
 impl HomeView {
     fn render_nav_item(&self, label: &'static str, page: Page, cx: &Context<Self>) -> impl Element {
         let is_selected = self.select_id == page.clone();

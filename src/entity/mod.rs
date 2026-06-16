@@ -1,8 +1,6 @@
 use std::fmt::Debug;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use std::path::Path;
-use log::info;
 use url::Url;
 
 #[derive(Clone)]

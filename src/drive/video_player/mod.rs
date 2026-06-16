@@ -20,8 +20,7 @@ pub struct VideoPlayer {
     player_list: Vec<NetworkStatic>,
     video_request_headers: header::HeaderMap,
 
-
-    vm_vm_scroll_handle: VirtualListScrollHandle,
+    vm_scroll_handle: VirtualListScrollHandle,
     video_player_volume: f32,
     video_frame_pipeline: Option<gst::Element>,
     video_frame_data: Option<gst_app::AppSink>,
