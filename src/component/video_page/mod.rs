@@ -1,63 +1,62 @@
 mod recommond;
 
-use gpui::*;
-use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
-use gpui_component::{h_flex, v_flex, Root, VirtualListScrollHandle, v_virtual_list};
-use std::rc::Rc;
-use log::info;
 use crate::com::window_center_options;
 use crate::component::home::rgb_to_u32;
 use crate::drive::video_player::VideoPlayer;
 use crate::state::{GlobalState, StateEvent};
-use crate::{entity, video_platform};
+use crate::{drive, video_platform};
+use gpui::*;
+use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
+use gpui_component::{Root, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list};
+use log::info;
+use std::rc::Rc;
 
-pub struct VideoRecommendPage{
-    pub recommend_video:Vec<entity::NetworkStatic>,
+pub struct VideoRecommendPage {
+    pub recommend_video: Vec<drive::NetworkStatic>,
     vm_scroll_handle: VirtualListScrollHandle,
 }
 
-
-impl VideoRecommendPage{
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> VideoRecommendPage{
-        let s  = VideoRecommendPage{
-            recommend_video:Vec::new(),
+impl VideoRecommendPage {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> VideoRecommendPage {
+        let s = VideoRecommendPage {
+            recommend_video: Vec::new(),
             vm_scroll_handle: VirtualListScrollHandle::new(),
         };
-        s.init_data(window, cx);
+        // s.init_data(window, cx);
         // s.open_video_window(window, cx);
         s
     }
 
-    pub fn init_data(&self, window: &mut Window, cx: &mut Context<Self>){
+    pub fn init_data(&self, _: &mut Window, cx: &mut Context<Self>) {
         let global_state = cx.global::<GlobalState>().0.clone();
         let tokio_handler = global_state.read(cx).tokio_handle.clone();
         let mut cx_async = cx.to_async().clone();
         let entity = cx.entity().clone();
 
-        cx.spawn(|_,_:&mut AsyncApp| async move {
-            let res = tokio_handler.spawn(async move {
-                video_platform::recommend().await
-            });
+        cx.spawn(|_, _: &mut AsyncApp| async move {
+            let res = tokio_handler.spawn(async move { video_platform::recommend().await });
             match res.await {
-                Ok(r)=> {
-                    entity.update(&mut cx_async, |this, cx|{
-                        this.recommend_video = r;
-                        cx.notify()
-                    })
-                }
-                Err(e)=>{
+                Ok(r) => entity.update(&mut cx_async, |this, cx| {
+                    this.recommend_video = r;
+                    cx.notify()
+                }),
+                Err(e) => {
                     log::error!("{}", e)
                 }
             }
-
-        }).detach();
+        })
+        .detach();
     }
 
-    fn open_video_window(&self, window: &mut Window, cx: &mut Context<Self>){
-        cx.open_window(window_center_options(window, 1300., 700.), move |window, app| {
-            let view = app.new(|cx| VideoPlayer::new(window, cx));
-            app.new(|cx| Root::new(view, window, cx))
-        }).expect("open window failed");
+    fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.open_window(
+            window_center_options(window, 1300., 700.),
+            move |window, app| {
+                let view = app.new(|cx| VideoPlayer::new(window, cx));
+                app.new(|cx| Root::new(view, window, cx))
+            },
+        )
+        .expect("open window failed");
     }
 }
 
@@ -99,69 +98,70 @@ impl VideoRecommendPage {
                 visible_range
                     .map(|row_index| {
                         let start = row_index * columns_per_row;
-                        let end = ((row_index + 1) * columns_per_row).min(view.recommend_video.len());
+                        let end =
+                            ((row_index + 1) * columns_per_row).min(view.recommend_video.len());
 
-                        h_flex()
-                            .w_full()
-                            .gap_3()
-                            .p_2()
-                            .children(
-                                view.recommend_video[start..end]
-                                    .iter()
-                                    .cloned()
-                                    .map(|data| {
-                                        let _img = data.img.clone();
-                                        let name = data.name.clone();
-                                        v_flex()
-                                            .rounded_2xl()
-                                            .id(data.id.to_string())
-                                            .gap_2()
-                                            .p_2()
-                                            .cursor_pointer()
-                                            .border_1()
-                                            .border_color(rgb(0xE2E8F0))
-                                            .bg(rgb_to_u32(248, 250, 252))
-                                            .hover(|mut style| {
-                                                style.background = Some(rgb_to_u32(226, 232, 240).into());
-                                                style
-                                            })
-                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                let data = data.clone();
-                                                let state_handler = cx.global::<GlobalState>().0.clone();
-                                                let tokio_handler = state_handler.read(cx).tokio_handle.clone();
-                                                let mut cx_async = cx.to_async().clone();
-                                                this.open_video_window(window, cx);
-                                                cx.spawn(|_, _: &mut AsyncApp| async move {
-                                                    let res = tokio_handler.spawn(async move{
-                                                        data.func.detail(&data.clone())
-                                                    });
-                                                    match res.await {
-                                                        Ok(r)=>{
-                                                            state_handler.update(&mut cx_async, |_, cx| {
-                                                                cx.emit(StateEvent::UpdateVideoPlayList(r.clone()))
-                                                            });
-                                                        }
-                                                        Err(e)=>{
-                                                            info!("tokio run error:{}", e)
-                                                        }
+                        h_flex().w_full().gap_3().p_2().children(
+                            view.recommend_video[start..end]
+                                .iter()
+                                .cloned()
+                                .map(|data| {
+                                    let _img = data.img.clone();
+                                    let name = data.name.clone();
+                                    v_flex()
+                                        .rounded_2xl()
+                                        .id(data.id.to_string())
+                                        .gap_2()
+                                        .p_2()
+                                        .cursor_pointer()
+                                        .border_1()
+                                        .border_color(rgb(0xE2E8F0))
+                                        .bg(rgb_to_u32(248, 250, 252))
+                                        .hover(|mut style| {
+                                            style.background =
+                                                Some(rgb_to_u32(226, 232, 240).into());
+                                            style
+                                        })
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            let data = data.clone();
+                                            let state_handler =
+                                                cx.global::<GlobalState>().0.clone();
+                                            let tokio_handler =
+                                                state_handler.read(cx).tokio_handle.clone();
+                                            let mut cx_async = cx.to_async().clone();
+                                            this.open_window(window, cx);
+                                            cx.spawn(|_, _: &mut AsyncApp| async move {
+                                                let res = tokio_handler.spawn(async move {
+                                                    data.func.detail(&data.clone())
+                                                });
+                                                match res.await {
+                                                    Ok(r) => {
+                                                        state_handler.update(
+                                                            &mut cx_async,
+                                                            |_, cx| {
+                                                                cx.emit(
+                                                                    StateEvent::UpdateVideoPlayList(
+                                                                        r.clone(),
+                                                                    ),
+                                                                )
+                                                            },
+                                                        );
                                                     }
-                                                }).detach();
-
-
-
-                                            }))
-                                            .justify_center()
-                                            .text_center()
-                                            .w(px(Self::CARD_WIDTH))
-                                            .h(px(Self::CARD_HEIGHT))
-                                            .child(
-                                                img(_img)
-                                                    .size_full()
-                                                    .object_fit(ObjectFit::Contain),
-                                            )
-                                            .child(name)
-                                    }),
-                            )
+                                                    Err(e) => {
+                                                        info!("tokio run error:{}", e)
+                                                    }
+                                                }
+                                            })
+                                            .detach();
+                                        }))
+                                        .justify_center()
+                                        .text_center()
+                                        .w(px(Self::CARD_WIDTH))
+                                        .h(px(Self::CARD_HEIGHT))
+                                        .child(img(_img).size_full().object_fit(ObjectFit::Contain))
+                                        .child(name)
+                                }),
+                        )
                     })
                     .collect()
             },
@@ -185,14 +185,11 @@ impl Render for VideoRecommendPage {
                     .child(self.vm_list(cx, columns_per_row)),
             )
             .child(
-                div()
-                    .h_full()
-                    .w(px(15.))
-                    .child(
-                        Scrollbar::vertical(&self.vm_scroll_handle)
-                            .scrollbar_show(ScrollbarShow::Always)
-                            .axis(ScrollbarAxis::Vertical),
-                    ),
+                div().h_full().w(px(15.)).child(
+                    Scrollbar::vertical(&self.vm_scroll_handle)
+                        .scrollbar_show(ScrollbarShow::Always)
+                        .axis(ScrollbarAxis::Vertical),
+                ),
             )
     }
 }

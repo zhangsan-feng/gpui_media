@@ -1,28 +1,28 @@
-
-use crate::entity;
-use crate::entity::NetworkStatic;
+use crate::com::window_center_options;
+use crate::drive;
+use crate::drive::music_player::MusicPlayer;
+use crate::drive::video_player::VideoPlayer;
 use crate::state::StateEvent::{TogglePlayMusic, UpdateMusicPlatyList};
 use crate::state::{GlobalState, StateEvent};
 use anyhow::{Result, anyhow};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::*;
-use log::{error, info};
+use gstreamer as gst;
+use gstreamer::prelude::ElementExt as GstElementExt;
+use gstreamer::prelude::*;
+use log::error;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
-use crate::drive::music_player::MusicPlayer;
-use gstreamer as gst;
-use gstreamer::prelude::*;
-use gstreamer::prelude::ElementExt as GstElementExt;
 
 impl MusicPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> MusicPlayer {
         let _ = window;
         let mut s = MusicPlayer {
-            current_player: entity::NetworkStatic::default(),
+            current_player: drive::NetworkStatic::default(),
             player_list: vec![],
             vm_scroll_handle: VirtualListScrollHandle::new(),
             is_player: false,
@@ -41,7 +41,18 @@ impl MusicPlayer {
         s.init_subscribe(cx);
         s
     }
-    
+
+    fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.open_window(
+            window_center_options(window, 1300., 700.),
+            move |window, app| {
+                let view = app.new(|cx| VideoPlayer::new(window, cx));
+                app.new(|cx| Root::new(view, window, cx))
+            },
+        )
+        .expect("open window failed");
+    }
+
     fn init_subscribe(&mut self, cx: &mut Context<Self>) {
         let state_handler = cx.global::<GlobalState>().0.clone();
 
@@ -60,7 +71,7 @@ impl MusicPlayer {
                 _ => {}
             },
         )
-            .detach();
+        .detach();
     }
 
     pub(crate) fn format_time(&self, duration: Duration) -> String {
@@ -69,7 +80,7 @@ impl MusicPlayer {
         let seconds = total_secs % 60;
         format!("{:02}:{:02}", minutes, seconds)
     }
-    
+
     fn set_pipeline(&mut self, _cx: &mut Context<Self>) -> Result<()> {
         let _ = gst::init();
         if let Some(playbin) = &self.audio_pipeline {
@@ -128,23 +139,25 @@ impl MusicPlayer {
         Ok(())
     }
 
-
-    fn handler_local_file(&self, path: &Path) -> Option<entity::NetworkStatic> {
+    fn handler_local_file(&self, path: &Path) -> Option<drive::NetworkStatic> {
         if !path.is_file() {
             return None;
         }
 
-        let file_name = path.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
+        let file_name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.to_string_lossy().to_string());
         let file_path = path.to_string_lossy().to_string();
 
-        Some(entity::NetworkStatic {
+        Some(drive::NetworkStatic {
             id: Uuid::new_v4().to_string(),
             name: file_name.to_string(),
             img: "".to_string(),
             author: "".to_string(),
             headers: Default::default(),
-            source:file_path,
-            func: Arc::new(entity::LocalStatic),
+            source: file_path,
+            func: Arc::new(drive::LocalStatic),
         })
     }
 
@@ -154,7 +167,11 @@ impl MusicPlayer {
             let Some(track) = self.handler_local_file(path) else {
                 continue;
             };
-            if self.player_list.iter().any(|item| item.source == track.source){
+            if self
+                .player_list
+                .iter()
+                .any(|item| item.source == track.source)
+            {
                 continue;
             }
             added.push(track);
@@ -234,8 +251,12 @@ impl MusicPlayer {
         }
         self.progress_task = Some(cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor().timer(Duration::from_millis(200)).await;
-                let should_continue = this.update(cx, |this, cx| this.update_audio_progress(cx)).unwrap_or(false);
+                cx.background_executor()
+                    .timer(Duration::from_millis(200))
+                    .await;
+                let should_continue = this
+                    .update(cx, |this, cx| this.update_audio_progress(cx))
+                    .unwrap_or(false);
                 if !should_continue {
                     break;
                 }
@@ -250,7 +271,11 @@ impl MusicPlayer {
         }
     }
 
-    pub(crate) fn get_progress_position(&self, position: Point<Pixels>, bounds: Bounds<Pixels> ) -> Option<Duration> {
+    pub(crate) fn get_progress_position(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+    ) -> Option<Duration> {
         let total = self.total_duration?;
         let left = bounds.origin.x.as_f32();
         let width = bounds.size.width.as_f32().max(1.0);
@@ -259,7 +284,11 @@ impl MusicPlayer {
         Some(Duration::from_secs_f32(seconds))
     }
 
-    pub(crate) fn get_volume_position(&self, position: Point<Pixels>, bounds: Bounds<Pixels>) -> f32 {
+    pub(crate) fn get_volume_position(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+    ) -> f32 {
         let left = bounds.origin.x.as_f32();
         let width = bounds.size.width.as_f32().max(1.0);
         ((position.x.as_f32() - left) / width).clamp(0.0, 1.0)
@@ -267,9 +296,13 @@ impl MusicPlayer {
 
     fn get_music_index(&self) -> Option<usize> {
         let current_index = if !self.current_player.id.is_empty() {
-            self.player_list.iter().position(|music| music.id == self.current_player.id)
+            self.player_list
+                .iter()
+                .position(|music| music.id == self.current_player.id)
         } else if !self.current_player.source.is_empty() {
-            self.player_list.iter().position(|music| music.source == self.current_player.source)
+            self.player_list
+                .iter()
+                .position(|music| music.source == self.current_player.source)
         } else {
             None
         };
@@ -314,7 +347,7 @@ impl MusicPlayer {
         self.play_current_music(cx);
     }
 
-    fn play_current_music(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn play_current_music(&mut self, cx: &mut Context<Self>) {
         if let Err(e) = self.reset_pipeline(cx) {
             self.play_err = Some(e.to_string());
             error!("reset_pipeline failed in play_current_music: {}", e);
@@ -341,7 +374,6 @@ impl MusicPlayer {
     }
 
     fn play(&mut self, cx: &mut Context<Self>) {
-
         if self.current_player.source.is_empty() && !self.player_list.is_empty() {
             if let Some(player) = self.player_list.first() {
                 self.current_player = player.clone();
@@ -350,7 +382,9 @@ impl MusicPlayer {
             }
         }
 
-        self.current_player.source = self.current_player.play(self.current_player.source.as_str());
+        self.current_player.source = self
+            .current_player
+            .play(self.current_player.source.as_str());
 
         if self.audio_pipeline.is_none() {
             if let Err(e) = self.set_pipeline(cx) {
@@ -376,6 +410,4 @@ impl MusicPlayer {
         }
         self.is_player = false;
     }
-
-
 }

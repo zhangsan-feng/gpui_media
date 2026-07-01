@@ -13,17 +13,21 @@ pub fn call_js(
     fn_name: &str,
     params: Vec<String>,
 ) -> anyhow::Result<serde_json::Value> {
-
     let mut runtime = JsRuntime::new(RuntimeOptions::default());
     // println!("{}", js_code);
-    runtime.execute_script("<init>", js_code.to_string()).context("init js runtime failed")?;
-    let args = params.into_iter()
+    runtime
+        .execute_script("<init>", js_code.to_string())
+        .context("init js runtime failed")?;
+    let args = params
+        .into_iter()
         .map(|p| serde_json::to_string(&p).unwrap())
         .collect::<Vec<_>>()
         .join(",");
 
     let code = format!("{fn_name}({args})");
-    let result = runtime.execute_script("<call>", code).context("call js failed")?;
+    let result = runtime
+        .execute_script("<call>", code)
+        .context("call js failed")?;
     let context = runtime.main_context();
     let isolate = runtime.v8_isolate();
     v8::scope_with_context!(scope, isolate, &context);
@@ -72,7 +76,12 @@ impl HttpClient {
         }
     }
 
-    pub async fn download_music(&self, file_name: String,url: String, header: HeaderMap) -> anyhow::Result<()> {
+    pub async fn download_file(
+        &self,
+        file_name: String,
+        url: String,
+        header: HeaderMap,
+    ) -> anyhow::Result<()> {
         if Path::new(&file_name).exists() {
             return Ok(());
         }
@@ -98,7 +107,11 @@ impl HttpClient {
         Ok(())
     }
 
-    pub async fn get_for_html(&self, url: &str, header: HeaderMap ) -> Result<Response, anyhow::Error> {
+    pub async fn get_for_html(
+        &self,
+        url: &str,
+        header: HeaderMap,
+    ) -> Result<Response, anyhow::Error> {
         let response = match self.client.get(url).headers(header).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -110,7 +123,11 @@ impl HttpClient {
         Ok(response)
     }
 
-    pub async fn get(&self, url: &str, header: HeaderMap ) -> Result<serde_json::Value, anyhow::Error> {
+    pub async fn get(
+        &self,
+        url: &str,
+        header: HeaderMap,
+    ) -> Result<serde_json::Value, anyhow::Error> {
         let response = match self.client.get(url).headers(header).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -122,8 +139,20 @@ impl HttpClient {
         response.handle().await
     }
 
-    pub async fn post( &self, url: &str, header: HeaderMap, body: serde_json::Value ) -> Result<serde_json::Value, anyhow::Error> {
-        let response = match self.client.post(url).headers(header).json(&body).send() .await {
+    pub async fn post(
+        &self,
+        url: &str,
+        header: HeaderMap,
+        body: serde_json::Value,
+    ) -> Result<serde_json::Value, anyhow::Error> {
+        let response = match self
+            .client
+            .post(url)
+            .headers(header)
+            .json(&body)
+            .send()
+            .await
+        {
             Ok(r) => r,
             Err(e) => {
                 info!("POST请求失败 [{}]: {}", url, e);
@@ -134,7 +163,11 @@ impl HttpClient {
         response.handle().await
     }
 
-    pub async fn post_form( &self, url: String,form: multipart::Form) -> Result<serde_json::Value, anyhow::Error> {
+    pub async fn post_form(
+        &self,
+        url: String,
+        form: multipart::Form,
+    ) -> Result<serde_json::Value, anyhow::Error> {
         let response = match self.client.post(&url).multipart(form).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -145,7 +178,6 @@ impl HttpClient {
         response.handle().await
     }
 }
-
 
 pub fn window_center_options(window: &mut Window, w: f32, h: f32) -> WindowOptions {
     let parent_bounds = window.bounds();

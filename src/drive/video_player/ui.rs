@@ -1,15 +1,13 @@
-use std::rc::Rc;
-use std::time::Duration;
+use crate::component::home::rgb_to_u32;
+use crate::drive::video_player::{ProgressDrag, VideoPlayer, VolumeDrag};
 use gpui::*;
 use gpui_component::button::Button;
 use gpui_component::popover::Popover;
-use gpui_component::{h_flex, v_flex, v_virtual_list, Anchor, ElementExt, StyledExt};
-use gpui_component::input::Input;
 use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
-use crate::component::home::rgb_to_u32;
-use crate::drive::video_player::{ProgressDrag, VideoPlayer, VolumeDrag};
-
+use gpui_component::{Anchor, ElementExt, h_flex, v_flex, v_virtual_list};
+use std::rc::Rc;
+use std::time::Duration;
 
 impl VideoPlayer {
     fn player_list_vm(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -50,16 +48,17 @@ impl VideoPlayer {
                                     .into_any_element()
                             })
                             .child(
-                                Button::new(("video-refresh-btn", index)).label("刷新")
-                                    .on_click(cx.listener(|this, _, _, cx|{
+                                Button::new(("video-refresh-btn", index))
+                                    .label("刷新")
+                                    .on_click(cx.listener(|this, _, _, cx| {
                                         this.refresh(cx);
-                                    }))
+                                    })),
                             )
                     })
                     .collect()
             },
         )
-            .track_scroll(&self.vm_scroll_handle)
+        .track_scroll(&self.vm_scroll_handle)
     }
 
     pub(crate) fn player_list_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -73,7 +72,7 @@ impl VideoPlayer {
                     .child(
                         v_flex()
                             .gap_2()
-                            .p_4()
+                            .p_2()
                             .size_full()
                             // .child(
                             //     h_flex()
@@ -100,16 +99,13 @@ impl VideoPlayer {
                                     .flex_grow()
                                     .child(self.player_list_vm(cx))
                                     .child(
-                                        div()
-                                            .w(px(10.))
-                                            .h_full()
-                                            .child(
-                                                Scrollbar::vertical(&self.vm_scroll_handle)
-                                                    .scrollbar_show(ScrollbarShow::Always)
-                                                    .axis(ScrollbarAxis::Vertical)
-                                            )
-                                    )
-                            )
+                                        div().w(px(10.)).h_full().child(
+                                            Scrollbar::vertical(&self.vm_scroll_handle)
+                                                .scrollbar_show(ScrollbarShow::Always)
+                                                .axis(ScrollbarAxis::Vertical),
+                                        ),
+                                    ),
+                            ),
                     )
                     .with_animation(
                         "video-player-open-popover-animation",
@@ -119,7 +115,7 @@ impl VideoPlayer {
             )
     }
 
-    pub(crate) fn player_volume_control_ui(&self, cx: &mut Context<Self>,) -> impl IntoElement {
+    pub(crate) fn player_volume_control_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let volume_ratio = self.video_player_volume.clamp(0.0, 1.0);
         let volume_bar_width = 150.0;
 
@@ -167,7 +163,8 @@ impl VideoPlayer {
                             |this, event: &DragMoveEvent<VolumeDrag>, _, _| {
                                 let left = event.bounds.origin.x.as_f32();
                                 let width = event.bounds.size.width.as_f32().max(1.0);
-                                let ratio = ((event.event.position.x.as_f32() - left) / width).clamp(0.0, 1.0);
+                                let ratio = ((event.event.position.x.as_f32() - left) / width)
+                                    .clamp(0.0, 1.0);
                                 this.set_volume_size(ratio);
                             },
                         ))
@@ -182,18 +179,32 @@ impl VideoPlayer {
         )
     }
 
-    pub(crate) fn player_progress_control_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let total = self.video_total_duration.unwrap_or_else(|| Duration::from_secs(0));
-        let display_position = self.scrub_position.filter(|_| self.is_scrubbing).unwrap_or(self.video_player_duration);
+    pub(crate) fn player_progress_control_ui(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let total = self
+            .video_total_duration
+            .unwrap_or_else(|| Duration::from_secs(0));
+        let display_position = self
+            .scrub_position
+            .filter(|_| self.is_scrubbing)
+            .unwrap_or(self.video_player_duration);
         let progress_ratio = if total.as_secs_f32() > 0.0 {
             (display_position.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
         } else {
             0.0
         };
-        let progress_bar_width = self.progress_bar_bounds.as_ref().map(|bounds| bounds.size.width.as_f32()).unwrap_or(0.0);
+        let progress_bar_width = self
+            .progress_bar_bounds
+            .as_ref()
+            .map(|bounds| bounds.size.width.as_f32())
+            .unwrap_or(0.0);
         let progress_bar_entity = cx.entity();
 
         v_flex()
+            .gap_2()
             .child(
                 div()
                     .h(px(8.))
@@ -214,7 +225,9 @@ impl VideoPlayer {
                         MouseButton::Left,
                         cx.listener(|this, event: &MouseDownEvent, _, _| {
                             if let Some(bounds) = this.progress_bar_bounds {
-                                if let Some(target) = this.get_progress_position(event.position, bounds){
+                                if let Some(target) =
+                                    this.get_progress_position(event.position, bounds)
+                                {
                                     this.seek_video_progress(target);
                                     this.is_scrubbing = false;
                                     this.scrub_position = None;
@@ -222,12 +235,12 @@ impl VideoPlayer {
                             }
                         }),
                     )
-                    .on_drag(ProgressDrag, |_, _, _, cx: &mut App| {
-                        cx.new(|_| Empty)
-                    })
+                    .on_drag(ProgressDrag, |_, _, _, cx: &mut App| cx.new(|_| Empty))
                     .on_drag_move::<ProgressDrag>(cx.listener(
                         |this, event: &DragMoveEvent<ProgressDrag>, _, _| {
-                            if let Some(target) = this.get_progress_position(event.event.position, event.bounds){
+                            if let Some(target) =
+                                this.get_progress_position(event.event.position, event.bounds)
+                            {
                                 this.is_scrubbing = true;
                                 this.scrub_position = Some(target);
                             }
@@ -275,20 +288,18 @@ impl VideoPlayer {
                             .overflow_x_scrollbar()
                             .mb_3()
                             .child(
-
-                                markdown(
-                                    if self.current_player.source.is_empty() {
+                                markdown(if self.current_player.source.is_empty() {
                                     "没有加载视频来源".to_string()
-                                    } else {
-                                        format!("{} / {}",
-                                                self.current_player.name,
-                                                self.current_player.source.to_string()
-                                        )
-                                    }
-                                )
-                                    .selectable(true)
-                                    .text_color(rgb(0x94A3B8))
-                                    .cursor_text()
+                                } else {
+                                    format!(
+                                        "{} / {}",
+                                        self.current_player.name,
+                                        self.current_player.source.to_string()
+                                    )
+                                })
+                                .selectable(true)
+                                .text_color(rgb(0x94A3B8))
+                                .cursor_text(),
                             ),
                     )
                     .child(
@@ -303,11 +314,10 @@ impl VideoPlayer {
 
     fn render_control_button(
         &self,
-        id:impl Into<ElementId>,
-        label:impl IntoElement,
+        id: impl Into<ElementId>,
+        label: impl IntoElement,
         click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> impl IntoElement {
-
         div()
             .size(px(28.))
             .rounded_full()
@@ -325,33 +335,34 @@ impl VideoPlayer {
             .child(label)
     }
 
-    pub(crate) fn player_control_ui(&self, cx: &mut Context<Self>) -> impl IntoElement{
-
+    pub(crate) fn player_control_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
         h_flex()
             .gap_2()
-            .child(
-                self.render_control_button(
-                    "video_prev_button",
-                    "<",
-                    cx.listener(|this, _, _, cx| { this.prev_video(cx); }))
-            )
-            .child(
-                self.render_control_button(
-                    "video_play_button",
-                    if self.is_player {
-                        div().child("||")
-                    } else {
-                        div().child("▶")
-                    },
-                    cx.listener(|this, _, _, cx| { this.toggle_play(cx); }))
-            )
-
-            .child(
-                self.render_control_button(
-                    "video_next_button",
-                    ">",
-                    cx.listener(|this, _, _, cx| { this.next_video(cx); }))
-            )
+            .child(self.render_control_button(
+                "video_prev_button",
+                "<",
+                cx.listener(|this, _, _, cx| {
+                    this.prev_video(cx);
+                }),
+            ))
+            .child(self.render_control_button(
+                "video_play_button",
+                if self.is_player {
+                    div().child("◼")
+                } else {
+                    div().child("▶")
+                },
+                cx.listener(|this, _, _, cx| {
+                    this.toggle_play(cx);
+                }),
+            ))
+            .child(self.render_control_button(
+                "video_next_button",
+                ">",
+                cx.listener(|this, _, _, cx| {
+                    this.next_video(cx);
+                }),
+            ))
     }
 
     pub(crate) fn video_frame_ui(&self) -> impl IntoElement {
@@ -372,11 +383,7 @@ impl VideoPlayer {
                     .overflow_hidden()
                     .justify_center()
                     .items_center()
-                    .child(
-                        img(frame)
-                            .size_full()
-                            .object_fit(ObjectFit::Contain),
-                    )
+                    .child(img(frame).size_full().object_fit(ObjectFit::Contain))
                     .into_any_element()
             } else {
                 v_flex()
@@ -392,9 +399,9 @@ impl VideoPlayer {
                         } else {
                             "没有加载视频来源".to_string()
                         })
-                            .selectable(true)
-                            .text_color(rgb(0x94A3B8))
-                            .cursor_text()
+                        .selectable(true)
+                        .text_color(rgb(0x94A3B8))
+                        .cursor_text(),
                     )
                     .into_any_element()
             })

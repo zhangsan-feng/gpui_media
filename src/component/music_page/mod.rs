@@ -1,23 +1,23 @@
-use crate::entity;
+use crate::drive;
+use crate::drive::music_player::MusicPlayer;
 use crate::music_platform;
 use crate::state::{GlobalState, StateEvent};
 use gpui::*;
 use gpui_component::button::Button;
+use gpui_component::input::{Input, InputState};
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
-use gpui_component::{StyledExt, VirtualListScrollHandle, v_flex, v_virtual_list, h_flex};
+use gpui_component::{StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list};
 use log::info;
 use std::rc::Rc;
-use gpui_component::input::{Input, InputState};
-use crate::drive::music_player::MusicPlayer;
 
 #[derive(Clone)]
 pub struct MusicRecommendPage {
-    music_data: Vec<entity::NetworkStatic>,
+    music_data: Vec<drive::NetworkStatic>,
     hovered_id: Option<String>,
     is_loading: bool,
     vm_scroll_handle: VirtualListScrollHandle,
     music_player_page: Entity<MusicPlayer>,
-    music_search_keyword:Entity<InputState>
+    music_search_keyword: Entity<InputState>,
 }
 
 impl MusicRecommendPage {
@@ -28,8 +28,8 @@ impl MusicRecommendPage {
             is_loading: false,
             vm_scroll_handle: VirtualListScrollHandle::new(),
             music_player_page: cx.new(|cx| MusicPlayer::new(window, cx)),
-            music_search_keyword:cx.new(|cx| InputState::new(window, cx).placeholder("input search music"))
-
+            music_search_keyword: cx
+                .new(|cx| InputState::new(window, cx).placeholder("input search music")),
         };
         s.init_data(cx);
         s
@@ -63,38 +63,35 @@ impl MusicRecommendPage {
                 Ok(Err(e)) => info!("http error: {:?}", e),
                 Err(e) => info!("tokio runtime error: {:?}", e),
             }
-        }).detach();
+        })
+        .detach();
     }
 
-    fn vm_btn_play_music(&self, data:entity::NetworkStatic, index:usize,cx: &mut Context<Self>) -> impl IntoElement {
-
+    fn vm_btn_play_music(
+        &self,
+        data: drive::NetworkStatic,
+        index: usize,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         Button::new(("music-play-index-", index))
             .label("播放")
             .on_click({
                 let c = data.clone();
                 cx.listener(move |_, _, _, cx| {
                     let mut cx_async = cx.to_async().clone();
-                    let state_handler =
-                        cx.global::<GlobalState>().0.clone();
+                    let state_handler = cx.global::<GlobalState>().0.clone();
                     let c = c.clone();
                     cx.spawn(|_, _: &mut AsyncApp| async move {
-                        state_handler.update(
-                            &mut cx_async,
-                            |_, cx| {
-                                cx.emit(
-                                    StateEvent::TogglePlayMusic(
-                                        c.clone(),
-                                    ),
-                                )
-                            },
-                        );
+                        state_handler.update(&mut cx_async, |_, cx| {
+                            cx.emit(StateEvent::TogglePlayMusic(c.clone()))
+                        });
                     })
-                        .detach()
+                    .detach()
                 })
             })
     }
 
-    fn vm_list(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement{
+    fn vm_list(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_virtual_list(
             cx.entity().clone(),
             "recommend-music-vm-list",
@@ -120,45 +117,21 @@ impl MusicRecommendPage {
                                     .child(data.author.clone())
                                     .child(data.name.clone()),
                             )
-                            .child(
-                                view.vm_btn_play_music(data, index, cx)
-                            )
+                            .child(view.vm_btn_play_music(data, index, cx))
                     })
                     .collect()
             },
         )
-            .track_scroll(&self.vm_scroll_handle)
+        .track_scroll(&self.vm_scroll_handle)
     }
 }
 
 impl Render for MusicRecommendPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-
         v_flex()
             .size_full()
             .gap_2()
             .p_2()
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(
-                        Input::new(&self.music_search_keyword)
-                    )
-                    .child(
-                        Button::new("music-search-btn").label("search")
-                    )
-            )
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(
-                        Button::new("music-menu-btn-recommend-music").label("推荐")
-
-                    )
-                    .child(
-                        Button::new("music--menu-btn-search-music").label("搜索")
-                    )
-            )
             .child(
                 div()
                     .flex_grow()
@@ -166,36 +139,8 @@ impl Render for MusicRecommendPage {
                     .p_2()
                     .border_color(rgb(0xE2E8F0))
                     .border_1()
-                    .rounded_2xl()
-                    .child(
-
-                        if self.is_loading {
-                            div().child("加载中...").into_any_element()
-                        } else {
-                            h_flex()
-                                .gap_2()
-                                .size_full()
-                                .child(
-                                    self.vm_list(window, cx)
-                                )
-                                .child(
-                                    div()
-                                        .h_full()
-                                        .w(px(15.))
-                                        .child(
-                                            Scrollbar::vertical(&self.vm_scroll_handle)
-                                                .scrollbar_show(ScrollbarShow::Always)
-                                                .axis(ScrollbarAxis::Vertical)
-                                        )
-                                ).into_any_element()
-                        }
-                    )
-
+                    .rounded_2xl(),
             )
-            .child(
-                div().child(
-                    self.music_player_page.clone().into_any_element()
-                )
-            )
+            .child(div().child(self.music_player_page.clone().into_any_element()))
     }
 }

@@ -1,8 +1,7 @@
-
 use anyhow::Result;
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::{VirtualListScrollHandle};
+use gpui_component::{Root, VirtualListScrollHandle};
 use gstreamer as gst;
 use gstreamer::prelude::ElementExt as GstElementExt;
 use gstreamer::prelude::*;
@@ -13,25 +12,24 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use std::time::Duration;
+use crate::com::window_center_options;
+use crate::drive;
+use crate::drive::video_player::{FrameBuffer, VideoPlayer};
+use crate::state::StateEvent::{TogglePlayVideo, UpdateVideoPlayList};
+use crate::state::{GlobalState, StateEvent};
 use gpui_component::input::InputState;
 use reqwest::header;
+use std::time::Duration;
 use uuid::Uuid;
-use crate::drive::video_player::{FrameBuffer, VideoPlayer};
-use crate::entity;
-use crate::state::{GlobalState, StateEvent};
-use crate::state::StateEvent::{TogglePlayVideo, UpdateVideoPlayList};
-
 
 impl VideoPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-
         let headers = header::HeaderMap::new();
 
         let _ = window;
         let _ = gst::init();
         let mut s = Self {
-            current_player: entity::NetworkStatic::default(),
+            current_player: drive::NetworkStatic::default(),
             player_list: Vec::from([]),
             video_request_headers: headers,
             vm_scroll_handle: VirtualListScrollHandle::new(),
@@ -58,10 +56,21 @@ impl VideoPlayer {
             last_error: None,
             bus_watch_started: false,
             pending_drop_images: Vec::new(),
-            input_text:cx.new(|cx| InputState::new(window, cx).placeholder("手动加载链接播放"))
+            input_text: cx.new(|cx| InputState::new(window, cx).placeholder("手动加载链接播放")),
         };
         s.init_subscribe(cx);
         s
+    }
+
+    fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.open_window(
+            window_center_options(window, 1300., 700.),
+            move |window, app| {
+                let view = app.new(|cx| VideoPlayer::new(window, cx));
+                app.new(|cx| Root::new(view, window, cx))
+            },
+        )
+        .expect("open window failed");
     }
 
     fn init_subscribe(&mut self, cx: &mut Context<Self>) {
@@ -69,18 +78,17 @@ impl VideoPlayer {
         cx.subscribe(
             &state_handler,
             move |this: &mut Self, _model, event: &StateEvent, _cx| match event {
-// ############################################################################# 跨组件传递数据
+                // ############################################################################# 跨组件传递数据
                 TogglePlayVideo(data) => {
                     this.current_player = data.clone();
                 }
-                UpdateVideoPlayList(data)=>{
+                UpdateVideoPlayList(data) => {
                     this.player_list = data.clone();
                 }
-                _ => {}
-// ############################################################################# 跨组件传递数据
+                _ => {} // ############################################################################# 跨组件传递数据
             },
         )
-            .detach();
+        .detach();
     }
 
     fn clock_to_duration(&self, clock: gst::ClockTime) -> Duration {
@@ -99,20 +107,29 @@ impl VideoPlayer {
             return Ok(());
         }
 
-
-        let playbin = gst::ElementFactory::make("playbin").name("video-playbin").build()?;
+        let playbin = gst::ElementFactory::make("playbin")
+            .name("video-playbin")
+            .build()?;
         let request_headers = self.video_request_headers.clone();
         playbin.connect("source-setup", false, move |values| {
-            let Some(source) = values.get(1).and_then(|value| value.get::<gst::Element>().ok()) else {
+            let Some(source) = values
+                .get(1)
+                .and_then(|value| value.get::<gst::Element>().ok())
+            else {
                 return None;
             };
 
             if !request_headers.is_empty() && source.find_property("extra-headers").is_some() {
-                source.set_property("extra-headers", VideoPlayer::build_extra_headers(&request_headers));
+                source.set_property(
+                    "extra-headers",
+                    VideoPlayer::build_extra_headers(&request_headers),
+                );
             }
             None
         });
-        let caps = gst::Caps::builder("video/x-raw").field("format", "BGRA").build();
+        let caps = gst::Caps::builder("video/x-raw")
+            .field("format", "BGRA")
+            .build();
         let buffer_clone = self.frame_buffer.clone();
 
         let appsink = gst_app::AppSink::builder()
@@ -170,7 +187,8 @@ impl VideoPlayer {
                             for y in 0..height {
                                 let src_start = y * stride;
                                 let dst_start = y * row_bytes;
-                                out[dst_start..dst_start + row_bytes].copy_from_slice(&data[src_start..src_start + row_bytes]);
+                                out[dst_start..dst_start + row_bytes]
+                                    .copy_from_slice(&data[src_start..src_start + row_bytes]);
                             }
                         }
 
@@ -227,7 +245,7 @@ impl VideoPlayer {
         self.stop_frame_thread();
         self.stop_frames.store(false, Ordering::Relaxed);
     }
-    
+
     fn build_extra_headers(headers: &header::HeaderMap) -> gst::Structure {
         let mut structure = gst::Structure::new_empty("extra-headers");
         for (name, value) in headers {
@@ -246,11 +264,11 @@ impl VideoPlayer {
         self.video_request_headers = headers;
         self.reset_pipeline();
     }
-    
+
     pub(crate) fn stop_frame_thread(&mut self) {
         self.stop_frames.store(true, Ordering::Relaxed);
     }
-    
+
     fn start_event_bus(&mut self, cx: &mut Context<Self>) {
         if self.bus_watch_started {
             return;
@@ -266,14 +284,17 @@ impl VideoPlayer {
         self.bus_watch_task = Some(cx.spawn(async move |this, cx| {
             loop {
                 // 监听总线消息
-                cx.background_executor().timer(Duration::from_millis(1500)).await;
+                cx.background_executor()
+                    .timer(Duration::from_millis(1500))
+                    .await;
 
                 let mut stop_loop = false;
                 while let Some(msg) = bus.timed_pop(gst::ClockTime::from_mseconds(0)) {
                     match msg.view() {
                         gst::MessageView::Error(err) => {
                             let _ = this.update(cx, |this, cx| {
-                                this.last_error = Some(format!("{} ({:?})", err.error(), err.debug()));
+                                this.last_error =
+                                    Some(format!("{} ({:?})", err.error(), err.debug()));
                                 this.is_player = false;
                                 cx.notify();
                             });
@@ -313,8 +334,12 @@ impl VideoPlayer {
         self.progress_task = Some(cx.spawn(async move |this, cx| {
             loop {
                 // 刷新gpui 的进度条 每秒刷新多少次
-                cx.background_executor().timer(Duration::from_millis(30)).await;
-                let should_continue = this.update(cx, |this, cx| this.update_progress(cx)).unwrap_or(false);
+                cx.background_executor()
+                    .timer(Duration::from_millis(30))
+                    .await;
+                let should_continue = this
+                    .update(cx, |this, cx| this.update_progress(cx))
+                    .unwrap_or(false);
                 if !should_continue {
                     break;
                 }
@@ -330,8 +355,12 @@ impl VideoPlayer {
         self.frame_task = Some(cx.spawn(async move |this, cx| {
             loop {
                 //  视频刷新率 每秒刷新多少帧的图片
-                cx.background_executor().timer(Duration::from_millis(30)).await;
-                let should_continue = this.update(cx, |this, cx| this.update_frame(&buffer, cx)).unwrap_or(false);
+                cx.background_executor()
+                    .timer(Duration::from_millis(30))
+                    .await;
+                let should_continue = this
+                    .update(cx, |this, cx| this.update_frame(&buffer, cx))
+                    .unwrap_or(false);
                 if !should_continue {
                     break;
                 }
@@ -345,7 +374,10 @@ impl VideoPlayer {
                 self.video_player_duration = self.clock_to_duration(pos);
                 // println!("[video] pos={}ms", self.video_player_duration.as_millis());
             }
-            let needs_duration = self.video_total_duration.map(|d| d.as_nanos() == 0).unwrap_or(true);
+            let needs_duration = self
+                .video_total_duration
+                .map(|d| d.as_nanos() == 0)
+                .unwrap_or(true);
             if needs_duration {
                 if let Some(total) = playbin.query_duration::<gst::ClockTime>() {
                     let duration = self.clock_to_duration(total);
@@ -394,8 +426,12 @@ impl VideoPlayer {
         }
         should_continue
     }
-    
-    pub(crate) fn get_progress_position(&self, position: Point<Pixels>, bounds: Bounds<Pixels>) -> Option<Duration> {
+
+    pub(crate) fn get_progress_position(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+    ) -> Option<Duration> {
         let total = self.video_total_duration?;
         if total.as_nanos() == 0 {
             return None;
@@ -418,7 +454,11 @@ impl VideoPlayer {
         }
     }
 
-    pub(crate) fn get_volume_position(&self, position: Point<Pixels>, bounds: Bounds<Pixels>) -> f32 {
+    pub(crate) fn get_volume_position(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+    ) -> f32 {
         let left = bounds.origin.x.as_f32();
         let width = bounds.size.width.as_f32().max(1.0);
         ((position.x.as_f32() - left) / width).clamp(0.0, 1.0)
@@ -431,7 +471,7 @@ impl VideoPlayer {
         }
     }
 
-    fn handler_local_file(&self, path: &Path) -> Option<entity::NetworkStatic> {
+    fn handler_local_file(&self, path: &Path) -> Option<drive::NetworkStatic> {
         if !path.is_file() {
             return None;
         }
@@ -442,14 +482,14 @@ impl VideoPlayer {
             .unwrap_or_else(|| path.to_string_lossy().to_string());
         let file_path = path.to_string_lossy().into_owned();
 
-        Some(entity::NetworkStatic {
+        Some(drive::NetworkStatic {
             id: Uuid::new_v4().to_string(),
             name: file_name,
             img: String::from(""),
             author: String::from(""),
             headers: Default::default(),
-            source:file_path,
-            func: Arc::new(entity::LocalStatic),
+            source: file_path,
+            func: Arc::new(drive::LocalStatic),
         })
     }
 
@@ -459,7 +499,11 @@ impl VideoPlayer {
             let Some(track) = self.handler_local_file(path) else {
                 continue;
             };
-            if self.player_list.iter().any(|item| item.source == track.source){
+            if self
+                .player_list
+                .iter()
+                .any(|item| item.source == track.source)
+            {
                 continue;
             }
             added.push(track);
@@ -485,7 +529,7 @@ impl VideoPlayer {
             let _ = window.drop_image(image);
         }
     }
-    
+
     fn switch_to_index(&mut self, index: usize, cx: &mut Context<Self>) {
         if index >= self.player_list.len() {
             return;
@@ -530,7 +574,7 @@ impl VideoPlayer {
         self.switch_to_index(index, cx);
     }
 
-    pub(crate) fn refresh(&mut self, cx: &mut Context<Self>)  {
+    pub(crate) fn refresh(&mut self, cx: &mut Context<Self>) {
         self.reset_pipeline();
         self.play(cx)
     }
@@ -544,11 +588,10 @@ impl VideoPlayer {
     }
 
     pub(crate) fn play(&mut self, cx: &mut Context<Self>) {
-
         if self.current_player.source.is_empty() && self.player_list.is_empty() {
             return;
         }
-        
+
         if self.current_player.source.is_empty() && !self.player_list.is_empty() {
             if let Some(player) = self.player_list.first() {
                 self.current_player = player.clone();
@@ -556,12 +599,13 @@ impl VideoPlayer {
         }
 
         // #############################################################################  播放逻辑
-        
-        self.current_player.source = self.current_player.play(self.current_player.source.as_str());
+
+        self.current_player.source = self
+            .current_player
+            .play(self.current_player.source.as_str());
 
         // #############################################################################  播放逻辑
-        
-        
+
         if let Err(err) = self.set_pipeline() {
             self.last_error = Some(format!("failed to build pipeline: {err}"));
             self.is_player = false;
@@ -583,7 +627,4 @@ impl VideoPlayer {
         }
         self.is_player = false;
     }
-
 }
-
-

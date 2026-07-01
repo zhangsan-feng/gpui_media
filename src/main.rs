@@ -6,20 +6,17 @@ mod music_platform;
 mod state;
 mod video_platform;
 
+use crate::state::{GlobalState, State};
 use gpui::*;
 use gpui_component::*;
-use log::{info, Level};
-use std::borrow::Cow;
-use std::env;
-use std::path::PathBuf;
-use std::sync::Arc;
-use crate::state::{GlobalState, State};
+use log::{Level, info};
 use reqwest_client::ReqwestClient;
 use rust_embed::RustEmbed;
-
+use std::borrow::Cow;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 pub fn logger_init(logger_path: &str) {
-
     let mut dispatch = fern::Dispatch::new();
     dispatch = dispatch
         .format(|out, message, record| {
@@ -103,15 +100,9 @@ impl AssetSource for MergedAssets {
     }
 }
 
-
-
 #[tokio::main]
 async fn main() {
-
     logger_init("./");
-
-
-
 
     let http_client = ReqwestClient::user_agent("gpui").unwrap();
     let assets = MergedAssets {
@@ -124,7 +115,7 @@ async fn main() {
 
     app.run(move |cx| {
         let mut window_options = WindowOptions::default();
-        let window_size = size(px(1200.), px(700.));
+        let window_size = size(px(1300.), px(700.));
         window_options.window_bounds = Some(WindowBounds::centered(window_size, cx));
         window_options.window_min_size = Some(window_size);
         window_options.titlebar = Some(TitlebarOptions {

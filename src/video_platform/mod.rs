@@ -1,8 +1,4 @@
-
-
-
 /*
-
 
 https://suonizy.net/
 https://bfzy5.tv/
@@ -37,16 +33,6 @@ https://haohuazy.com
 https://www.taopianzy.com/index.html
 
 
-
-
-
-
-
-
-
-
-
-
 https://youzisp.tv
 https://www.keke2.app/
 https://www.renren.pro/
@@ -57,16 +43,13 @@ https://dmbus.cc/
 
 
 */
-use crate::entity::NetworkStatic;
+use crate::drive::NetworkStatic;
 
 mod youzisp;
 
-
-
-pub async fn recommend() -> Vec<NetworkStatic>{
-    let mut  call_back = Vec::new();
+pub async fn recommend() -> Vec<NetworkStatic> {
+    let mut call_back = Vec::new();
     call_back.extend(youzisp::recommend::recommend().await);
-    
-    call_back
 
+    call_back
 }

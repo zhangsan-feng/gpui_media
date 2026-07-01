@@ -1,51 +1,86 @@
-use std::env;
+use std::fmt::Debug;
+use std::path::Path;
+use std::sync::Arc;
+use url::Url;
 
+pub mod dependency_check;
 pub mod music_player;
 pub mod video_player;
 
+pub struct MusicStatic {}
 
+pub struct VideoStatic {}
 
-unsafe fn append_to_env_unix(key: &str, value: &str) {
-    let current = env::var(key).unwrap_or_default();
-    let new_value = if current.is_empty() {
-        value.to_string()
-    } else {
-        format!("{}:{}", current, value)
-    };
-    env::set_var(key, new_value);
+#[derive(Clone)]
+pub struct NetworkStatic {
+    pub id: String,
+    pub name: String,
+    pub img: String,
+    pub author: String,
+    pub headers: reqwest::header::HeaderMap,
+    pub source: String,
+    pub func: Arc<dyn NetworkStaticInterface + Send + Sync>,
 }
 
-/// 追加到环境变量（Windows 风格，用分号分隔）
-unsafe fn append_to_env_windows(key: &str, value: &str) {
-    let current = env::var(key).unwrap_or_default();
-    let new_value = if current.is_empty() {
-        value.to_string()
-    } else {
-        format!("{};{}", current, value)
-    };
-    env::set_var(key, new_value);
+impl Default for NetworkStatic {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            img: String::new(),
+            author: String::new(),
+            headers: reqwest::header::HeaderMap::new(),
+            source: String::new(),
+            func: Arc::new(LocalStatic),
+        }
+    }
 }
 
-/// 跨平台追加（自动检测 OS）
-pub unsafe fn append_to_env(key: &str, value: &str) {
-    let separator = if cfg!(windows) { ";" } else { ":" };
-    let current = env::var(key).unwrap_or_default();
-    let new_value = if current.is_empty() {
-        value.to_string()
-    } else {
-        format!("{}{}{}", current, separator, value)
-    };
-
-    env::set_var(key, new_value);
+impl Debug for NetworkStatic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NetworkStatic")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("img", &self.img)
+            .field("author", &self.author)
+            .field("headers", &self.headers)
+            .field("source", &self.source)
+            .finish()
+    }
 }
 
-pub unsafe fn append_sys_path(){
-    let local_programs = env::var("LOCALAPPDATA").unwrap() + "\\Programs";
-    let gst_bin = local_programs + "\\gstreamer\\1.0\\msvc_x86_64\\bin";
-    log::info!("{}", gst_bin);
+impl NetworkStatic {
+    pub fn download(&self) {
+        self.func.download(self);
+    }
+    pub fn play(&self, url: &str) -> String {
+        self.func.play(self)
+    }
+}
 
-    unsafe {
-        let current = env::var("PATH").unwrap_or_default();
-        env::set_var("PATH", format!("{};{}", current, gst_bin));
+pub trait NetworkStaticInterface {
+    fn download(&self, params: &NetworkStatic);
+    fn play(&self, params: &NetworkStatic) -> String;
+    fn detail(&self, params: &NetworkStatic) -> Vec<NetworkStatic>;
+}
+
+pub struct LocalStatic;
+impl NetworkStaticInterface for LocalStatic {
+    fn download(&self, params: &NetworkStatic) {}
+    fn play(&self, params: &NetworkStatic) -> String {
+        let source = params.source.trim();
+        if source.is_empty() {
+            panic!("player source not found");
+        }
+        if source.contains("://") {
+            return source.to_string();
+        }
+
+        Url::from_file_path(Path::new(source))
+            .map(|uri| uri.to_string())
+            .unwrap_or_else(|_| source.to_string())
+    }
+    fn detail(&self, params: &NetworkStatic) -> Vec<NetworkStatic> {
+        Vec::new()
     }
 }

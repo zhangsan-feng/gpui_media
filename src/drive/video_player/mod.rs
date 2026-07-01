@@ -1,19 +1,17 @@
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicBool;
-use std::time::Duration;
+use crate::drive::NetworkStatic;
 use gpui::*;
-use gpui_component::{h_flex, v_flex, VirtualListScrollHandle};
 use gpui_component::input::InputState;
+use gpui_component::{VirtualListScrollHandle, h_flex, v_flex};
 use gstreamer::prelude::ElementExt;
-use gstreamer_app::gst;
 use gstreamer_app as gst_app;
+use gstreamer_app::gst;
 use reqwest::header;
-use crate::entity::NetworkStatic;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 pub mod control;
 mod ui;
-
-
 
 pub struct VideoPlayer {
     current_player: NetworkStatic,
@@ -43,7 +41,7 @@ pub struct VideoPlayer {
     last_error: Option<String>,
     bus_watch_started: bool,
     pending_drop_images: Vec<Arc<RenderImage>>,
-    input_text:Entity<InputState>
+    input_text: Entity<InputState>,
 }
 
 impl Drop for VideoPlayer {
@@ -54,7 +52,6 @@ impl Drop for VideoPlayer {
         self.stop_frame_thread();
     }
 }
-
 
 #[derive(Clone, Copy)]
 struct ProgressDrag;
@@ -69,7 +66,6 @@ struct FrameBuffer {
     data: Vec<u8>,
     seq: u64,
 }
-
 
 impl Render for VideoPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -93,14 +89,13 @@ impl Render for VideoPlayer {
                     .child(self.player_progress_control_ui(window, cx))
                     .child(
                         h_flex()
-                            .w_full()
-                            .gap_4()
+                            .gap_2()
                             .justify_center()
                             .items_center()
                             .child(self.player_list_ui(cx))
                             .child(self.player_control_ui(cx))
                             .child(self.player_volume_control_ui(cx)),
-                    )
+                    ),
             )
     }
 }

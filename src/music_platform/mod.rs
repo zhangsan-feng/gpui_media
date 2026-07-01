@@ -1,8 +1,5 @@
-
+use crate::drive;
 use log::info;
-use crate::entity;
-
-
 
 mod _90svip;
 
@@ -13,11 +10,11 @@ mod _90svip;
 https://flac.life/   有验证
 
 
-https://www.pjmp3.com/
+
 https://music.90svip.cn/
 https://www.yeyulingfeng.com/tools/music/
 https://www.songe.cc/
-https://music.wujiyan.cc/
+
 https://1music.cc/zh-CN
 https://music.gdstudio.xyz/
 
@@ -35,18 +32,13 @@ https://www.gequbao.com/
 
 */
 
-
-
-pub async  fn music_recommend() -> anyhow::Result<Vec<entity::NetworkStatic>>{
+pub async fn music_recommend() -> anyhow::Result<Vec<drive::NetworkStatic>> {
     let mut call_back = Vec::new();
 
-    
     // match bilibili::recommend::call().await {
     //     Ok(val) => call_back.extend(val),
     //     Err(err) => info!("{}", err),
     // }
-
-
 
     match _90svip::recommend::call().await {
         Ok(val) => call_back.extend(val),
@@ -57,21 +49,18 @@ pub async  fn music_recommend() -> anyhow::Result<Vec<entity::NetworkStatic>>{
     //     Ok(val) => call_back.extend(val),
     //     Err(err) => info!("{}", err),
     // }
-    // 
-    // 
+    //
+    //
     // match xmwav_music::recommend::call().await{
     //     Ok(val) => call_back.extend(val),
     //     Err(err) => info!("{}", err),
     // }
-    
 
     Ok(call_back)
-
 }
 
-pub fn music_search(keyword:&str) -> anyhow::Result<Vec<entity::NetworkStatic>>{
+pub fn music_search(keyword: &str) -> anyhow::Result<Vec<drive::NetworkStatic>> {
     let mut call_back = Vec::new();
 
     Ok(call_back)
-
 }
