@@ -596,29 +596,40 @@ impl VideoPlayer {
             if let Some(player) = self.player_list.first() {
                 self.current_player = player.clone();
             }
-        }
+        };
+        let player = self.current_player.clone();
+        self.is_player = false;
+        let global_state = cx.global::<GlobalState>().0.clone().read(cx).clone();
 
-        // #############################################################################  播放逻辑
+        cx.spawn(async move |this, cx| {
+            let res = global_state
+                .tokio_handle
+                .spawn(async move { player.play(player.source.as_str()) });
 
-        self.current_player.source = self
-            .current_player
-            .play(self.current_player.source.as_str());
+            match res.await {
+                Ok(val) => {
+                    let _ = this.update(cx, |this, cx| {
+                        this.current_player.source = val;
+                        if let Err(err) = this.set_pipeline() {
+                            this.last_error = Some(format!("failed to build pipeline: {err}"));
+                            this.is_player = false;
+                            return;
+                        }
 
-        // #############################################################################  播放逻辑
-
-        if let Err(err) = self.set_pipeline() {
-            self.last_error = Some(format!("failed to build pipeline: {err}"));
-            self.is_player = false;
-            return;
-        }
-
-        if let Some(playbin) = &self.video_frame_pipeline {
-            let _ = playbin.set_state(gst::State::Playing);
-            self.is_player = true;
-            self.start_event_bus(cx);
-            self.start_progress_task(cx);
-            self.start_frame_task(cx);
-        }
+                        if let Some(playbin) = &this.video_frame_pipeline {
+                            let _ = playbin.set_state(gst::State::Playing);
+                            this.is_player = true;
+                            this.start_event_bus(cx);
+                            this.start_progress_task(cx);
+                            this.start_frame_task(cx);
+                        }
+                        cx.notify();
+                    });
+                }
+                Err(e) => {}
+            };
+        })
+        .detach();
     }
 
     fn pause(&mut self) {

@@ -39,9 +39,7 @@ impl VideoPlayer {
                                     .on_click({
                                         let c = data.clone();
                                         cx.listener(move |this, _, _, cx| {
-                                            let c = c.clone();
-                                            this.current_player = c;
-
+                                            this.current_player = c.clone();
                                             this.play(cx);
                                         })
                                     })

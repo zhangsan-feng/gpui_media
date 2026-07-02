@@ -3,6 +3,19 @@ name = "gpui_medio"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "gpui_medio"
+path = "src/drive/dependency_check.rs"
+
+[[bin]]
+name = "gpui_medio_gui"
+path = "src/main.rs"
+
+[profile.release]
+debug = false
+strip = "symbols"
+
+
 [dependencies]
 gpui = {git = "https://github.com/zed-industries/zed"}
 gpui-component = {git = "https://github.com/longbridge/gpui-component"}

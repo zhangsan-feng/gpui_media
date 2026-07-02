@@ -3,7 +3,6 @@ use std::path::Path;
 use std::sync::Arc;
 use url::Url;
 
-pub mod dependency_check;
 pub mod music_player;
 pub mod video_player;
 

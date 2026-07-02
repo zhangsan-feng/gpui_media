@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod com;
 mod component;
 mod drive;
@@ -13,6 +15,7 @@ use log::{Level, info};
 use reqwest_client::ReqwestClient;
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
+use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -123,13 +126,16 @@ async fn main() {
             appears_transparent: false,
             traffic_light_position: None,
         });
+
         cx.open_window(window_options, |window, app| {
             gpui_component::init(app);
 
-            let state_entity = app.new(|cx| State::new(cx));
-            app.set_global(GlobalState(state_entity));
-            let view = app.new(|cx| component::home::HomeView::new(window, cx));
-            app.new(|cx| Root::new(view, window, cx))
+            app.new(|cx| {
+                let state_entity = cx.new(|cx| State::new(cx));
+                cx.set_global(GlobalState(state_entity));
+                let main_window = cx.new(|cx| component::home::HomeView::new(window, cx));
+                Root::new(main_window, window, cx)
+            })
         })
         .expect("Failed to create app");
     });

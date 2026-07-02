@@ -1,6 +1,8 @@
 use crate::component::music_page::MusicRecommendPage;
 use crate::component::video_page::VideoRecommendPage;
+use crate::drive;
 use crate::drive::video_player::VideoPlayer;
+use futures_util::sink::drain;
 use gpui::*;
 use gpui_component::{Root, h_flex, v_flex};
 use std::time::Duration;

@@ -22,7 +22,7 @@ impl VideoRecommendPage {
             recommend_video: Vec::new(),
             vm_scroll_handle: VirtualListScrollHandle::new(),
         };
-        // s.init_data(window, cx);
+        s.init_data(window, cx);
         // s.open_video_window(window, cx);
         s
     }
