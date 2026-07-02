@@ -15,6 +15,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
 const GUI_EXE: &str = "gpui_medio_gui.exe";
+// https://gstreamer.freedesktop.org/download
 const WINDOWS_GSTREAMER_URL: &str = "https://gstreamer.freedesktop.org/data/pkg/windows/1.28.4/msvc/gstreamer-1.0-msvc-x86_64-1.28.4.exe";
 const WINDOWS_INSTALLER_FILE: &str = "gstreamer-1.0-msvc-x86_64-1.28.4.exe";
 const WINDOWS_GSTREAMER_LOCAL_BIN: &[&str] =
