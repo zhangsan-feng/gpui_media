@@ -2,7 +2,7 @@ use reqwest::header;
 
 pub mod recommend;
 
-fn headers() -> header::HeaderMap {
+pub(super) fn headers() -> header::HeaderMap {
     let mut headers = header::HeaderMap::new();
     headers.insert("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7".parse().unwrap());
     headers.insert("accept-language", "zh-CN,zh;q=0.9".parse().unwrap());

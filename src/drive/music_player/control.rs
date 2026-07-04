@@ -5,6 +5,7 @@ use crate::drive::video_player::VideoPlayer;
 use crate::state::StateEvent::{TogglePlayMusic, UpdateMusicPlatyList};
 use crate::state::{GlobalState, StateEvent};
 use anyhow::{Result, anyhow};
+use gpui::http_client::Url;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::*;
@@ -15,7 +16,6 @@ use log::error;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use url::Url;
 use uuid::Uuid;
 
 impl MusicPlayer {
@@ -155,6 +155,7 @@ impl MusicPlayer {
             name: file_name.to_string(),
             img: "".to_string(),
             author: "".to_string(),
+            category: String::new(),
             headers: Default::default(),
             source: file_path,
             func: Arc::new(drive::LocalStatic),

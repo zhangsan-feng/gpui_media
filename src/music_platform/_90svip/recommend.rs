@@ -92,6 +92,7 @@ async fn request_web_api(url: &str) -> anyhow::Result<Vec<NetworkStatic>> {
                 id: music_id.to_string(),
                 name: music_name.to_string(),
                 author: music_author.to_string(),
+                category: String::new(),
                 img: music_pic,
                 source: music_source,
                 func: Arc::new(V90VipImpl),

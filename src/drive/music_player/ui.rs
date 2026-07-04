@@ -412,7 +412,7 @@ impl MusicPlayer {
 
     pub(crate) fn player_lyrics_ui(&self) -> impl IntoElement {
         Popover::new("music-player-lyrics-popover")
-            .anchor(Anchor::BottomCenter)
+            .anchor(Anchor::BottomRight)
             .trigger(
                 Button::new("music-player-lyrics-trigger")
                     .label("歌词")

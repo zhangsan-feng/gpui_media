@@ -6,7 +6,9 @@ use gpui::*;
 use gpui_component::button::Button;
 use gpui_component::input::{Input, InputState};
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
-use gpui_component::{StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list};
+use gpui_component::{
+    StyleSized, StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list,
+};
 use log::info;
 use std::rc::Rc;
 
@@ -31,7 +33,7 @@ impl MusicRecommendPage {
             music_search_keyword: cx
                 .new(|cx| InputState::new(window, cx).placeholder("input search music")),
         };
-        s.init_data(cx);
+        // s.init_data(cx);
         s
     }
 
@@ -134,7 +136,7 @@ impl Render for MusicRecommendPage {
             .p_2()
             .child(
                 div()
-                    .flex_grow()
+                    .flex_grow(1.)
                     .gap_2()
                     .p_2()
                     .border_color(rgb(0xE2E8F0))

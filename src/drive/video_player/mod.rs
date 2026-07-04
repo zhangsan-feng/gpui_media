@@ -82,14 +82,15 @@ impl Render for VideoPlayer {
             .child(
                 v_flex()
                     .gap_2()
-                    .p_2()
-                    .rounded_md()
+                    .p_3()
+                    .rounded_lg()
                     .border_1()
                     .border_color(rgb(0xE2E8F0))
+                    .bg(rgb(0xF8FAFC))
                     .child(self.player_progress_control_ui(window, cx))
                     .child(
                         h_flex()
-                            .gap_2()
+                            .gap_3()
                             .justify_center()
                             .items_center()
                             .child(self.player_list_ui(cx))

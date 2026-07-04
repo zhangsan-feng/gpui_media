@@ -1,8 +1,7 @@
+use gpui::http_client::Url;
 use std::fmt::Debug;
 use std::path::Path;
 use std::sync::Arc;
-use url::Url;
-
 pub mod music_player;
 pub mod video_player;
 
@@ -16,6 +15,7 @@ pub struct NetworkStatic {
     pub name: String,
     pub img: String,
     pub author: String,
+    pub category: String,
     pub headers: reqwest::header::HeaderMap,
     pub source: String,
     pub func: Arc<dyn NetworkStaticInterface + Send + Sync>,
@@ -28,6 +28,7 @@ impl Default for NetworkStatic {
             name: String::new(),
             img: String::new(),
             author: String::new(),
+            category: String::new(),
             headers: reqwest::header::HeaderMap::new(),
             source: String::new(),
             func: Arc::new(LocalStatic),
@@ -42,6 +43,7 @@ impl Debug for NetworkStatic {
             .field("name", &self.name)
             .field("img", &self.img)
             .field("author", &self.author)
+            .field("category", &self.category)
             .field("headers", &self.headers)
             .field("source", &self.source)
             .finish()
@@ -81,5 +83,15 @@ impl NetworkStaticInterface for LocalStatic {
     }
     fn detail(&self, params: &NetworkStatic) -> Vec<NetworkStatic> {
         Vec::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NetworkStatic;
+
+    #[test]
+    fn default_network_static_has_no_category() {
+        assert!(NetworkStatic::default().category.is_empty());
     }
 }

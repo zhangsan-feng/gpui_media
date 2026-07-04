@@ -33,6 +33,8 @@ https://haohuazy.com
 https://www.taopianzy.com/index.html
 
 
+
+
 https://youzisp.tv
 https://www.keke2.app/
 https://www.renren.pro/
@@ -44,12 +46,16 @@ https://dmbus.cc/
 
 */
 use crate::drive::NetworkStatic;
+use futures_util::future::{BoxFuture, join_all};
 
+mod renren;
 mod youzisp;
 
 pub async fn recommend() -> Vec<NetworkStatic> {
-    let mut call_back = Vec::new();
-    call_back.extend(youzisp::recommend::recommend().await);
+    let platforms = [
+        Box::pin(youzisp::recommend::recommend()),
+        // Box::pin(renren::recommend::recommend()),
+    ];
 
-    call_back
+    join_all(platforms).await.into_iter().flatten().collect()
 }

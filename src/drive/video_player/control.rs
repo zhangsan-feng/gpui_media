@@ -487,6 +487,7 @@ impl VideoPlayer {
             name: file_name,
             img: String::from(""),
             author: String::from(""),
+            category: String::new(),
             headers: Default::default(),
             source: file_path,
             func: Arc::new(drive::LocalStatic),
@@ -598,6 +599,7 @@ impl VideoPlayer {
             }
         };
         let player = self.current_player.clone();
+        self.last_error = None;
         self.is_player = false;
         let global_state = cx.global::<GlobalState>().0.clone().read(cx).clone();
 

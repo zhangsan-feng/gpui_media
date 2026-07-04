@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
-const GUI_EXE: &str = "gpui_medio_gui.exe";
+const GUI_EXE: &str = "gui.exe";
 // https://gstreamer.freedesktop.org/download
 const WINDOWS_GSTREAMER_URL: &str = "https://gstreamer.freedesktop.org/data/pkg/windows/1.28.4/msvc/gstreamer-1.0-msvc-x86_64-1.28.4.exe";
 const WINDOWS_INSTALLER_FILE: &str = "gstreamer-1.0-msvc-x86_64-1.28.4.exe";
@@ -263,7 +263,7 @@ async fn main() {
         return;
     }
 
-    let app = gpui_platform::application();
+    let mut app = gpui_platform::application();
     app.run(move |cx| {
         let mut window_options = gpui::WindowOptions::default();
         let window_size = size(px(600.), px(280.));

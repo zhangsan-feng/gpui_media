@@ -1,42 +1,12 @@
 use anyhow::Context;
-use deno_core::{JsRuntime, RuntimeOptions, serde_v8, v8};
 use futures_util::StreamExt;
 use gpui::http_client::http::HeaderMap;
 use gpui::*;
 use log::info;
 use reqwest::{Response, multipart};
 use std::path::Path;
+use std::sync::{Arc, OnceLock};
 use tokio::io::AsyncWriteExt;
-
-pub fn call_js(
-    js_code: &str,
-    fn_name: &str,
-    params: Vec<String>,
-) -> anyhow::Result<serde_json::Value> {
-    let mut runtime = JsRuntime::new(RuntimeOptions::default());
-    // println!("{}", js_code);
-    runtime
-        .execute_script("<init>", js_code.to_string())
-        .context("init js runtime failed")?;
-    let args = params
-        .into_iter()
-        .map(|p| serde_json::to_string(&p).unwrap())
-        .collect::<Vec<_>>()
-        .join(",");
-
-    let code = format!("{fn_name}({args})");
-    let result = runtime
-        .execute_script("<call>", code)
-        .context("call js failed")?;
-    let context = runtime.main_context();
-    let isolate = runtime.v8_isolate();
-    v8::scope_with_context!(scope, isolate, &context);
-
-    let local = v8::Local::new(scope, result);
-    let result: serde_json::Value = serde_v8::from_v8(scope, local)?;
-
-    Ok(result)
-}
 
 trait ResponseHandler {
     async fn handle(self) -> Result<serde_json::Value, anyhow::Error>;
@@ -66,13 +36,19 @@ impl ResponseHandler for reqwest::Response {
 }
 
 pub struct HttpClient {
-    client: reqwest::Client,
+    client: Arc<reqwest::Client>,
 }
+
+// static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
 impl HttpClient {
     pub fn new() -> Self {
+        static CLIENT: OnceLock<Arc<reqwest::Client>> = OnceLock::new();
+
         Self {
-            client: reqwest::Client::new(),
+            client: CLIENT
+                .get_or_init(|| Arc::new(reqwest::Client::new()))
+                .clone(),
         }
     }
 
@@ -209,4 +185,18 @@ pub fn window_center_options(window: &mut Window, w: f32, h: f32) -> WindowOptio
         ..Default::default()
     });
     window_options
+}
+
+#[cfg(test)]
+mod tests {
+    use super::HttpClient;
+    use std::sync::Arc;
+
+    #[test]
+    fn new_reuses_shared_reqwest_client() {
+        let first = HttpClient::new();
+        let second = HttpClient::new();
+
+        assert!(Arc::ptr_eq(&first.client, &second.client));
+    }
 }

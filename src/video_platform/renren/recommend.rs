@@ -1,24 +1,17 @@
 use super::headers;
 use crate::com::HttpClient;
 use crate::drive::{NetworkStatic, NetworkStaticInterface};
-use futures_util::future::join_all;
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
 
-const BASE_URL: &str = "https://youzisp.tv";
-const PATHS: [(&str, &str); 4] = [
-    ("/vodshow/dianying-----------.html", "电影"),
-    ("/vodshow/dianshiju-----------.html", "电视剧"),
-    ("/vodshow/zongyi-----------.html", "今日推荐"),
-    ("/vodshow/dongman-----------.html", "动漫"),
-];
+const BASE_URL: &str = "https://www.renren.pro";
 
-pub struct YouziInterface;
+pub struct RenrenInterface;
 
-impl NetworkStaticInterface for YouziInterface {
+impl NetworkStaticInterface for RenrenInterface {
     fn download(&self, _params: &NetworkStatic) {}
 
     fn play(&self, params: &NetworkStatic) -> String {
@@ -31,18 +24,18 @@ impl NetworkStaticInterface for YouziInterface {
                 let response = HttpClient::new()
                     .get_for_html(&abs_url(&params.source), headers())
                     .await
-                    .expect("request youzisp play page error");
+                    .expect("request renren play page error");
                 let html = response
                     .text()
                     .await
-                    .expect("youzisp play page html parse error")
+                    .expect("renren play page html parse error")
                     .replace("\\/", "/");
-                Regex::new(r#"https?://[^\s"'<>]+\.m3u8[^\s"'<>]*"#)
+                Regex::new(r#"url:\s*["']([^"']+\.m3u8[^"']*)["']"#)
                     .unwrap()
                     .captures(&html)
-                    .and_then(|c| c.get(0))
+                    .and_then(|c| c.get(1))
                     .map(|m| m.as_str().to_string())
-                    .expect("youzisp play url not found")
+                    .expect("renren play url not found")
             })
         })
     }
@@ -53,11 +46,11 @@ impl NetworkStaticInterface for YouziInterface {
                 let response = HttpClient::new()
                     .get_for_html(&abs_url(&params.source), headers())
                     .await
-                    .expect("request youzisp detail page error");
+                    .expect("request renren detail page error");
                 let html = response
                     .text()
                     .await
-                    .expect("youzisp detail html parse error");
+                    .expect("renren detail html parse error");
                 parse_detail(&html, params)
             })
         })
@@ -73,43 +66,47 @@ fn abs_url(path: &str) -> String {
 }
 
 fn selector(value: &str) -> Selector {
-    Selector::parse(value).expect("invalid youzisp selector")
+    Selector::parse(value).expect("invalid renren selector")
 }
 
 fn attr<'a>(element: ElementRef<'a>, names: &[&str]) -> Option<&'a str> {
     names.iter().find_map(|name| element.value().attr(name))
 }
 
-fn parse_videos(html: &str, seen: &mut HashSet<String>, category: &str) -> Vec<NetworkStatic> {
+fn text(element: ElementRef<'_>) -> String {
+    element.text().collect::<String>().trim().to_string()
+}
+
+fn parse_videos(html: &str) -> Vec<NetworkStatic> {
     let document = Html::parse_document(html);
-    let item_selector = selector("a.module-item[href]");
+    let item_selector = selector(".module-item");
+    let link_selector = selector(r#"a[href^="/play/"]"#);
     let img_selector = selector(".module-item-pic img");
-    let title_selector = selector(".module-poster-item-title");
+    let title_selector = selector(".module-item-title, .video-name a");
+    let mut seen = HashSet::new();
     let mut videos = Vec::new();
 
     for item in document.select(&item_selector) {
-        let Some(href) = item.value().attr("href") else {
+        let Some(link) = item.select(&link_selector).next() else {
             continue;
         };
-        if !href.contains("/voddetail/") && !href.contains("/vodplay/") {
+        let Some(href) = link.value().attr("href") else {
             continue;
-        }
+        };
 
         let source = abs_url(href);
         if !seen.insert(source.clone()) {
             continue;
         }
 
-        let name = item
-            .value()
-            .attr("title")
+        let name = attr(link, &["title"])
             .map(str::trim)
             .filter(|name| !name.is_empty())
             .map(str::to_string)
             .or_else(|| {
                 item.select(&title_selector)
                     .next()
-                    .map(|title| title.text().collect::<String>().trim().to_string())
+                    .map(text)
                     .filter(|name| !name.is_empty())
             })
             .unwrap_or_else(|| "未命名视频".to_string());
@@ -117,7 +114,7 @@ fn parse_videos(html: &str, seen: &mut HashSet<String>, category: &str) -> Vec<N
         let img = item
             .select(&img_selector)
             .next()
-            .and_then(|img| attr(img, &["data-original", "data-src", "src"]))
+            .and_then(|img| attr(img, &["data-src", "src"]))
             .map(abs_url)
             .unwrap_or_default();
 
@@ -125,11 +122,11 @@ fn parse_videos(html: &str, seen: &mut HashSet<String>, category: &str) -> Vec<N
             id: Uuid::new_v4().to_string(),
             name,
             img,
-            author: "youzisp".to_string(),
-            category: category.to_string(),
+            author: "renren".to_string(),
+            category: String::new(),
             headers: Default::default(),
             source,
-            func: Arc::new(YouziInterface),
+            func: Arc::new(RenrenInterface),
         });
     }
 
@@ -138,12 +135,13 @@ fn parse_videos(html: &str, seen: &mut HashSet<String>, category: &str) -> Vec<N
 
 fn parse_detail(html: &str, params: &NetworkStatic) -> Vec<NetworkStatic> {
     let document = Html::parse_document(html);
-    let selector = selector(".module-play-list-content > a[href]");
+    let selector = selector(".module-blocklist a[href]");
     let mut seen = HashSet::new();
 
-    document
+    let videos: Vec<_> = document
         .select(&selector)
         .filter_map(|element| element.value().attr("href"))
+        .filter(|href| href.contains("/play/"))
         .map(abs_url)
         .filter(|source| seen.insert(source.clone()))
         .map(|source| NetworkStatic {
@@ -156,29 +154,53 @@ fn parse_detail(html: &str, params: &NetworkStatic) -> Vec<NetworkStatic> {
             source,
             func: params.func.clone(),
         })
-        .collect()
+        .collect();
+
+    if videos.is_empty() {
+        vec![params.clone()]
+    } else {
+        videos
+    }
 }
 
 pub async fn recommend() -> Vec<NetworkStatic> {
-    let mut call_back = Vec::new();
-    let mut seen = HashSet::new();
+    let response = match HttpClient::new().get_for_html(BASE_URL, headers()).await {
+        Ok(response) => response,
+        Err(err) => {
+            log::info!("request {} error: {}", BASE_URL, err);
+            return Vec::new();
+        }
+    };
 
-    let responses = join_all(PATHS.map(|(path, category)| async move {
-        let url = abs_url(path);
-        let result = match HttpClient::new().get_for_html(&url, headers()).await {
-            Ok(response) => response.text().await.map_err(anyhow::Error::from),
-            Err(err) => Err(err),
-        };
-        (category, url, result)
-    }))
-    .await;
-
-    for (category, url, result) in responses {
-        match result {
-            Ok(html) => call_back.extend(parse_videos(&html, &mut seen, category)),
-            Err(err) => log::info!("request {} error: {}", url, err),
+    match response.text().await {
+        Ok(html) => parse_videos(&html),
+        Err(err) => {
+            log::info!("read {} html error: {}", BASE_URL, err);
+            Vec::new()
         }
     }
+}
 
-    call_back
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_detail_falls_back_to_current_item_when_playlist_missing() {
+        let current = NetworkStatic {
+            id: "1".to_string(),
+            name: "test".to_string(),
+            img: String::new(),
+            author: "renren".to_string(),
+            category: String::new(),
+            headers: Default::default(),
+            source: "https://www.renren.pro/play/abc".to_string(),
+            func: Arc::new(RenrenInterface),
+        };
+
+        let videos = parse_detail("<html></html>", &current);
+
+        assert_eq!(videos.len(), 1);
+        assert_eq!(videos[0].source, current.source);
+    }
 }

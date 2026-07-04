@@ -1,11 +1,13 @@
 use crate::component::home::rgb_to_u32;
 use crate::drive::video_player::{ProgressDrag, VideoPlayer, VolumeDrag};
 use gpui::*;
+use gpui_component::ElementExt;
 use gpui_component::button::Button;
 use gpui_component::popover::Popover;
 use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
-use gpui_component::{Anchor, ElementExt, h_flex, v_flex, v_virtual_list};
+
+use gpui_component::{h_flex, v_flex, v_virtual_list};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -17,41 +19,137 @@ impl VideoPlayer {
             Rc::new(
                 self.player_list
                     .iter()
-                    .map(|_| size(px(100.), px(40.)))
+                    .map(|_| size(px(100.), px(76.)))
                     .collect(),
             ),
             |view, visible_range, _, cx| {
                 visible_range
                     .map(|index| {
                         let data = view.player_list[index].clone();
-                        div()
-                            .flex()
-                            .justify_between()
-                            .w_full()
-                            .pr_2()
-                            .child(format!("第 {} 集", index))
-                            .child(data.name.clone())
-                            .child(if view.current_player.source == data.source {
-                                div().child("正在播放").into_any_element()
-                            } else {
-                                Button::new(("video-play-btn", index))
-                                    .label("播放")
-                                    .on_click({
-                                        let c = data.clone();
-                                        cx.listener(move |this, _, _, cx| {
-                                            this.current_player = c.clone();
-                                            this.play(cx);
+                        let is_current = view.current_player.source == data.source;
+                        let row_bg = if is_current {
+                            rgb_to_u32(239, 246, 255)
+                        } else {
+                            rgb_to_u32(255, 255, 255)
+                        };
+                        let row_border = if is_current {
+                            rgb_to_u32(96, 165, 250)
+                        } else {
+                            rgb_to_u32(226, 232, 240)
+                        };
+                        let title = if data.name.is_empty() {
+                            "未命名视频".to_string()
+                        } else {
+                            data.name.clone()
+                        };
+
+                        div().w_full().h_full().px_2().py_1().child(
+                            h_flex()
+                                .id(format!("video-player-vm-list-{}", data.id))
+                                .w_full()
+                                .h_full()
+                                .items_center()
+                                .justify_between()
+                                .gap_3()
+                                .p_3()
+                                .rounded_lg()
+                                .border_1()
+                                .border_color(row_border)
+                                .bg(row_bg)
+                                .hover(move |style| {
+                                    style
+                                        .bg(rgb_to_u32(248, 250, 252))
+                                        .border_color(rgb_to_u32(147, 197, 253))
+                                })
+                                .child(
+                                    h_flex()
+                                        .items_center()
+                                        .gap_3()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .child(
+                                            div()
+                                                .size(px(30.))
+                                                .rounded_full()
+                                                .bg(if is_current {
+                                                    rgb_to_u32(219, 234, 254)
+                                                } else {
+                                                    rgb_to_u32(241, 245, 249)
+                                                })
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .text_size(px(12.))
+                                                .text_color(if is_current {
+                                                    rgb_to_u32(37, 99, 235)
+                                                } else {
+                                                    rgb_to_u32(100, 116, 139)
+                                                })
+                                                .child((index + 1).to_string()),
+                                        )
+                                        .child(
+                                            v_flex()
+                                                .gap_1()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .child(
+                                                    div()
+                                                        .w_full()
+                                                        .overflow_hidden()
+                                                        .whitespace_nowrap()
+                                                        .text_ellipsis()
+                                                        .text_size(px(14.))
+                                                        .font_weight(FontWeight::SEMIBOLD)
+                                                        .text_color(rgb_to_u32(15, 23, 42))
+                                                        .child(title),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .w_full()
+                                                        .overflow_hidden()
+                                                        .whitespace_nowrap()
+                                                        .text_ellipsis()
+                                                        .text_size(px(11.))
+                                                        .text_color(rgb_to_u32(148, 163, 184))
+                                                        .child(data.source.clone()),
+                                                ),
+                                        ),
+                                )
+                                .child(if is_current {
+                                    h_flex()
+                                        .gap_1()
+                                        .items_center()
+                                        .px_3()
+                                        .py_1()
+                                        .rounded_full()
+                                        .bg(rgb_to_u32(219, 234, 254))
+                                        .text_size(px(11.))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(rgb_to_u32(37, 99, 235))
+                                        .child("播放中")
+                                        .into_any_element()
+                                } else {
+                                    Button::new(("video-play-btn", index))
+                                        .label("播放")
+                                        .outline()
+                                        .on_click({
+                                            let c = data.clone();
+                                            cx.listener(move |this, _, _, cx| {
+                                                this.current_player = c.clone();
+                                                this.play(cx);
+                                            })
                                         })
-                                    })
-                                    .into_any_element()
-                            })
-                            .child(
-                                Button::new(("video-refresh-btn", index))
-                                    .label("刷新")
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.refresh(cx);
-                                    })),
-                            )
+                                        .into_any_element()
+                                })
+                                .child(
+                                    Button::new(("video-refresh-btn", index))
+                                        .label("刷新")
+                                        .outline()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.refresh(cx);
+                                        })),
+                                ),
+                        )
                     })
                     .collect()
             },
@@ -62,11 +160,12 @@ impl VideoPlayer {
     pub(crate) fn player_list_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
         Popover::new("video-player-open-popover")
             .anchor(Anchor::BottomRight)
-            .trigger(Button::new("show-form").label("菜单").outline())
+            .trigger(Button::new("show-form").label("播放列表").outline())
             .child(
                 div()
-                    .h(px(600.))
-                    .w(px(800.))
+                    .h(px(560.))
+                    .w(px(760.))
+                    .overflow_hidden()
                     .child(
                         v_flex()
                             .gap_2()
@@ -88,13 +187,26 @@ impl VideoPlayer {
                             //         )
                             // )
                             .child(
+                                h_flex().items_center().justify_between().child(
+                                    div()
+                                        .px_3()
+                                        .py_1()
+                                        .rounded_full()
+                                        .bg(rgb_to_u32(241, 245, 249))
+                                        .text_size(px(11.))
+                                        .text_color(rgb_to_u32(71, 85, 105))
+                                        .child(format!("{} 个视频", self.player_list.len())),
+                                ),
+                            )
+                            .child(
                                 h_flex()
+                                    .flex_1()
                                     .border_1()
-                                    .rounded_2xl()
-                                    .border_color(rgb_to_u32(203, 213, 225))
+                                    .rounded_lg()
+                                    .border_color(rgb_to_u32(226, 232, 240))
+                                    .bg(rgb_to_u32(248, 250, 252))
                                     .p_2()
                                     .gap_2()
-                                    .flex_grow()
                                     .child(self.player_list_vm(cx))
                                     .child(
                                         div().w(px(10.)).h_full().child(
@@ -108,7 +220,7 @@ impl VideoPlayer {
                     .with_animation(
                         "video-player-open-popover-animation",
                         Animation::new(Duration::from_millis(550)).with_easing(ease_in_out),
-                        |el, delta| el.opacity(0.2 + 0.8 * delta).h(px(8. + 592. * delta)),
+                        |el, delta| el.opacity(0.2 + 0.8 * delta).h(px(12. + 548. * delta)),
                     ),
             )
     }
@@ -123,7 +235,16 @@ impl VideoPlayer {
                 .gap_2()
                 .items_center()
                 .ml_auto()
-                .child(img("icon/icons8-voice-100.png").size(px(24.)))
+                .child(
+                    div()
+                        .size(px(30.))
+                        .rounded_full()
+                        .bg(rgb_to_u32(241, 245, 249))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(img("icon/icons8-voice-100.png").size(px(18.))),
+                )
                 .child(
                     div()
                         .w(px(35.))
@@ -133,10 +254,10 @@ impl VideoPlayer {
                 )
                 .child(
                     div()
-                        .h(px(8.))
+                        .h(px(6.))
                         .w(px(volume_bar_width))
                         .rounded_full()
-                        .bg(rgb_to_u32(226, 232, 240))
+                        .bg(rgb_to_u32(203, 213, 225))
                         .cursor_pointer()
                         .on_prepaint({
                             let volume_bar_entity = cx.entity();
@@ -168,10 +289,10 @@ impl VideoPlayer {
                         ))
                         .child(
                             div()
-                                .h(px(8.))
+                                .h(px(6.))
                                 .w(px(volume_bar_width * volume_ratio))
                                 .rounded_full()
-                                .bg(rgb_to_u32(148, 163, 184)),
+                                .bg(rgb_to_u32(59, 130, 246)),
                         ),
                 ),
         )
@@ -205,10 +326,10 @@ impl VideoPlayer {
             .gap_2()
             .child(
                 div()
-                    .h(px(8.))
+                    .h(px(6.))
                     .w_full()
                     .rounded_full()
-                    .bg(rgb(0xE2E8F0))
+                    .bg(rgb_to_u32(203, 213, 225))
                     .cursor_pointer()
                     .on_prepaint({
                         let progress_bar_entity = progress_bar_entity.clone();
@@ -268,10 +389,10 @@ impl VideoPlayer {
                     )
                     .child(
                         div()
-                            .h(px(8.))
+                            .h(px(6.))
                             .w(px(progress_bar_width * progress_ratio))
                             .rounded_full()
-                            .bg(rgb(0x3B82F6)),
+                            .bg(rgb_to_u32(59, 130, 246)),
                     ),
             )
             .child(
@@ -296,12 +417,14 @@ impl VideoPlayer {
                                     )
                                 })
                                 .selectable(true)
+                                .whitespace_nowrap()
                                 .text_color(rgb(0x94A3B8))
                                 .cursor_text(),
                             ),
                     )
                     .child(
                         h_flex()
+                            .flex_shrink_0()
                             .gap_2()
                             .child(self.format_time(display_position))
                             .child("/")
@@ -317,17 +440,23 @@ impl VideoPlayer {
         click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> impl IntoElement {
         div()
-            .size(px(28.))
+            .size(px(34.))
             .rounded_full()
-            .bg(rgb_to_u32(241, 245, 249))
+            .bg(rgb_to_u32(248, 250, 252))
             .border_1()
-            .border_color(rgb_to_u32(203, 213, 225))
+            .border_color(rgb_to_u32(226, 232, 240))
             .flex()
             .items_center()
             .justify_center()
-            .text_size(px(12.))
+            .text_size(px(13.))
             .text_color(rgb_to_u32(15, 23, 42))
             .cursor_pointer()
+            .hover(|style| {
+                style
+                    .bg(rgb_to_u32(239, 246, 255))
+                    .border_color(rgb_to_u32(147, 197, 253))
+                    .text_color(rgb_to_u32(37, 99, 235))
+            })
             .id(id)
             .on_click(click)
             .child(label)
@@ -365,15 +494,15 @@ impl VideoPlayer {
 
     pub(crate) fn video_frame_ui(&self) -> impl IntoElement {
         div()
-            .flex_grow()
+            .flex_grow(1.)
             .flex()
             .justify_center()
             .items_center()
             .overflow_hidden()
-            .rounded_md()
+            .rounded_lg()
             .border_1()
-            .border_color(rgb(0xE2E8F0))
-            // .bg(rgb(0x0F172A))
+            .border_color(rgb_to_u32(30, 41, 59))
+            .bg(rgb_to_u32(15, 23, 42))
             .child(if let Some(frame) = self.render_image.clone() {
                 div()
                     .size_full()
@@ -381,25 +510,33 @@ impl VideoPlayer {
                     .overflow_hidden()
                     .justify_center()
                     .items_center()
+                    .bg(rgb_to_u32(2, 6, 23))
                     .child(img(frame).size_full().object_fit(ObjectFit::Contain))
                     .into_any_element()
             } else {
                 v_flex()
-                    .flex_grow()
+                    .flex_grow(1.)
                     .justify_center()
                     .items_center()
                     .size_full()
                     .overflow_hidden()
                     .overflow_scrollbar()
                     .child(
-                        markdown(if let Some(player_err) = self.last_error.clone() {
-                            player_err.to_string()
-                        } else {
-                            "没有加载视频来源".to_string()
-                        })
-                        .selectable(true)
-                        .text_color(rgb(0x94A3B8))
-                        .cursor_text(),
+                        div()
+                            .px_4()
+                            .py_2()
+                            .rounded_full()
+                            .bg(rgb_to_u32(30, 41, 59))
+                            .child(
+                                markdown(if let Some(player_err) = self.last_error.clone() {
+                                    player_err.to_string()
+                                } else {
+                                    "没有加载视频来源".to_string()
+                                })
+                                .selectable(true)
+                                .text_color(rgb(0xCBD5E1))
+                                .cursor_text(),
+                            ),
                     )
                     .into_any_element()
             })
