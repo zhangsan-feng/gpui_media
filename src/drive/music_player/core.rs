@@ -92,22 +92,9 @@ impl MusicPlayer {
         playbin.set_property("volume", &(self.volume as f64));
         let _ = playbin.set_state(gst::State::Paused);
 
-        let mut total_duration = None;
-        for _ in 0..10 {
-            if let Some(total) = playbin.query_duration::<gst::ClockTime>() {
-                if total.nseconds() > 0 {
-                    total_duration = Some(Duration::from_nanos(total.nseconds()));
-                    break;
-                }
-            }
-            std::thread::sleep(Duration::from_millis(30));
-        }
-
-        self.total_duration = total_duration.or_else(|| {
-            playbin
-                .query_duration::<gst::ClockTime>()
-                .map(|d| Duration::from_nanos(d.nseconds()))
-        });
+        self.total_duration = playbin
+            .query_duration::<gst::ClockTime>()
+            .map(|d| Duration::from_nanos(d.nseconds()));
         self.audio_pipeline = Some(playbin);
         Ok(())
     }

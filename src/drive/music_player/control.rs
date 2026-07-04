@@ -2,9 +2,7 @@ use crate::com::window_center_options;
 use crate::drive;
 use crate::drive::music_player::MusicPlayer;
 use crate::drive::video_player::VideoPlayer;
-use crate::state::StateEvent::UpdateMusicPlatyList;
-use crate::state::{GlobalState, StateEvent};
-use anyhow::anyhow;
+use crate::state::GlobalState;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;
@@ -135,16 +133,7 @@ impl MusicPlayer {
             error!("reset_pipeline failed in play_current_music: {}", e);
             return;
         }
-        if let Err(e) = self.set_pipeline(cx) {
-            self.play_err = Some(e.to_string());
-            error!("set_pipeline failed in play_current_music: {}", e);
-            return;
-        }
-        if let Some(playbin) = &self.audio_pipeline {
-            let _ = playbin.set_state(gst::State::Playing);
-            self.is_player = true;
-            self.start_progress_task(cx);
-        }
+        self.play_player(self.current_player.clone(), cx);
     }
 
     pub(crate) fn toggle_play(&mut self, cx: &mut Context<Self>) {
@@ -159,28 +148,71 @@ impl MusicPlayer {
         if self.current_player.source.is_empty() && !self.player_list.is_empty() {
             if let Some(player) = self.player_list.first() {
                 self.current_player = player.clone();
-                self.play_current_music(cx);
-                return;
             }
         }
 
-        self.current_player.source = self
-            .current_player
-            .play(self.current_player.source.as_str());
+        if self.current_player.source.is_empty() {
+            return;
+        }
 
         if self.audio_pipeline.is_none() {
-            if let Err(e) = self.set_pipeline(cx) {
-                self.play_err = Some(e.to_string());
-                error!("set_pipeline failed in play: {}", e);
-                return;
-            }
+            self.play_player(self.current_player.clone(), cx);
+            return;
         }
 
         if let Some(playbin) = &self.audio_pipeline {
             let _ = playbin.set_state(gst::State::Playing);
-            self.is_player = true;
-            self.start_progress_task(cx);
         }
+        self.is_player = true;
+        self.start_progress_task(cx);
+        cx.notify();
+    }
+
+    fn play_player(&mut self, player: drive::NetworkStatic, cx: &mut Context<Self>) {
+        if player.source.is_empty() {
+            return;
+        }
+
+        self.play_err = None;
+        self.is_player = false;
+
+        let global_state = cx.global::<GlobalState>().0.clone().read(cx).clone();
+
+        cx.spawn(async move |this, cx| {
+            let res = global_state
+                .tokio_handle
+                .spawn(async move { player.play(player.source.as_str()) });
+
+            match res.await {
+                Ok(source) => {
+                    let _ = this.update(cx, |this, cx| {
+                        this.current_player.source = source;
+                        if let Err(err) = this.set_pipeline(cx) {
+                            let _ = this.reset_pipeline(cx);
+                            this.play_err = Some(format!("failed to build pipeline: {err}"));
+                            error!("set_pipeline failed in play_player: {}", err);
+                            cx.notify();
+                            return;
+                        }
+
+                        if let Some(playbin) = &this.audio_pipeline {
+                            let _ = playbin.set_state(gst::State::Playing);
+                        }
+                        this.is_player = true;
+                        this.start_progress_task(cx);
+                        cx.notify();
+                    });
+                }
+                Err(err) => {
+                    let _ = this.update(cx, |this, cx| {
+                        let _ = this.reset_pipeline(cx);
+                        this.play_err = Some(format!("failed to resolve music source: {err}"));
+                        cx.notify();
+                    });
+                }
+            }
+        })
+        .detach();
     }
 
     pub(crate) fn pause(&mut self) {
