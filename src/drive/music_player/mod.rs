@@ -6,6 +6,7 @@ use gstreamer as gst;
 use std::time::Duration;
 
 pub mod control;
+mod core;
 mod ui;
 
 #[derive(Clone, Copy)]
@@ -15,9 +16,9 @@ struct ProgressDrag;
 struct VolumeDrag;
 
 pub struct MusicPlayer {
-    pub current_player: drive::NetworkStatic,
-    pub player_list: Vec<drive::NetworkStatic>,
-    pub is_player: bool,
+    current_player: drive::NetworkStatic,
+    player_list: Vec<drive::NetworkStatic>,
+    is_player: bool,
     vm_scroll_handle: VirtualListScrollHandle,
     play_err: Option<String>,
     audio_pipeline: Option<gst::Element>,

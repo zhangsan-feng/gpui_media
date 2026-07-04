@@ -33,7 +33,7 @@ impl MusicRecommendPage {
             music_search_keyword: cx
                 .new(|cx| InputState::new(window, cx).placeholder("input search music")),
         };
-        // s.init_data(cx);
+        s.init_data(cx);
         s
     }
 

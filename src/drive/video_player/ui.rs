@@ -26,7 +26,7 @@ impl VideoPlayer {
                 visible_range
                     .map(|index| {
                         let data = view.player_list[index].clone();
-                        let is_current = view.current_player.source == data.source;
+                        let is_current = view.current_player.id == data.id;
                         let row_bg = if is_current {
                             rgb_to_u32(239, 246, 255)
                         } else {
@@ -307,8 +307,8 @@ impl VideoPlayer {
             .video_total_duration
             .unwrap_or_else(|| Duration::from_secs(0));
         let display_position = self
-            .scrub_position
-            .filter(|_| self.is_scrubbing)
+            .pending_seek_position
+            .filter(|_| self.is_dragging_progress_bar)
             .unwrap_or(self.video_player_duration);
         let progress_ratio = if total.as_secs_f32() > 0.0 {
             (display_position.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
@@ -348,8 +348,8 @@ impl VideoPlayer {
                                     this.get_progress_position(event.position, bounds)
                                 {
                                     this.seek_video_progress(target);
-                                    this.is_scrubbing = false;
-                                    this.scrub_position = None;
+                                    this.is_dragging_progress_bar = false;
+                                    this.pending_seek_position = None;
                                 }
                             }
                         }),
@@ -360,30 +360,30 @@ impl VideoPlayer {
                             if let Some(target) =
                                 this.get_progress_position(event.event.position, event.bounds)
                             {
-                                this.is_scrubbing = true;
-                                this.scrub_position = Some(target);
+                                this.is_dragging_progress_bar = true;
+                                this.pending_seek_position = Some(target);
                             }
                         },
                     ))
                     .on_mouse_up(
                         MouseButton::Left,
                         cx.listener(|this, _, _, _| {
-                            if this.is_scrubbing {
-                                if let Some(target) = this.scrub_position.take() {
+                            if this.is_dragging_progress_bar {
+                                if let Some(target) = this.pending_seek_position.take() {
                                     this.seek_video_progress(target);
                                 }
-                                this.is_scrubbing = false;
+                                this.is_dragging_progress_bar = false;
                             }
                         }),
                     )
                     .on_mouse_up_out(
                         MouseButton::Left,
                         cx.listener(|this, _, _, _| {
-                            if this.is_scrubbing {
-                                if let Some(target) = this.scrub_position.take() {
+                            if this.is_dragging_progress_bar {
+                                if let Some(target) = this.pending_seek_position.take() {
                                     this.seek_video_progress(target);
                                 }
-                                this.is_scrubbing = false;
+                                this.is_dragging_progress_bar = false;
                             }
                         }),
                     )

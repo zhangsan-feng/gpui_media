@@ -11,13 +11,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 pub mod control;
+mod core;
 mod ui;
 
 pub struct VideoPlayer {
     current_player: NetworkStatic,
     player_list: Vec<NetworkStatic>,
     video_request_headers: header::HeaderMap,
-
     vm_scroll_handle: VirtualListScrollHandle,
     video_player_volume: f32,
     video_frame_pipeline: Option<gst::Element>,
@@ -25,23 +25,22 @@ pub struct VideoPlayer {
     is_player: bool,
     video_total_duration: Option<Duration>,
     video_player_duration: Duration,
-    video_aspect: f32,
-    is_scrubbing: bool,
-    scrub_position: Option<Duration>,
+    video_frame_size: f32,
+    is_dragging_progress_bar: bool,
+    pending_seek_position: Option<Duration>,
     progress_bar_bounds: Option<Bounds<Pixels>>,
     volume_bar_bounds: Option<Bounds<Pixels>>,
     progress_task: Option<Task<()>>,
     frame_task: Option<Task<()>>,
     bus_watch_task: Option<Task<()>>,
     frame_buffer: Arc<Mutex<FrameBuffer>>,
-    last_frame_seq: u64,
+    last_rendered_frame_sequence: u64,
     render_image: Option<Arc<RenderImage>>,
     // frame_thread: Option<thread::JoinHandle<()>>,
     stop_frames: Arc<AtomicBool>,
-    last_error: Option<String>,
     bus_watch_started: bool,
     pending_drop_images: Vec<Arc<RenderImage>>,
-    input_text: Entity<InputState>,
+    last_error: Option<String>,
 }
 
 impl Drop for VideoPlayer {
