@@ -1420,6 +1420,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac6b926516df9c60bfa16e107b21086399f8285a44ca9711344b9e553c5146e2"
 
 [[package]]
+name = "dependency_check"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "gpui",
+ "gpui-component",
+ "gpui_platform",
+ "log",
+ "reqwest",
+ "tokio",
+]
+
+[[package]]
 name = "derive_more"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

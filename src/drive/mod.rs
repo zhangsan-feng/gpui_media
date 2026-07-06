@@ -6,7 +6,6 @@ pub mod music_player;
 pub mod video_player;
 
 pub struct MusicStatic {}
-
 pub struct VideoStatic {}
 
 #[derive(Clone)]

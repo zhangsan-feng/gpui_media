@@ -1,0 +1,14 @@
+[package]
+name = "dependency_check"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+futures-util.workspace = true
+gpui.workspace = true
+gpui-component.workspace = true
+gpui_platform.workspace = true
+log.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
