@@ -259,12 +259,14 @@ impl VideoRecommendPage {
     }
 }
 
+fn is_show_search(){}
+
 impl Render for VideoRecommendPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content_width = (window.bounds().size.width.as_f32() - 110.).max(Self::CARD_WIDTH);
         let section_width = (content_width - Self::SECTION_SCROLL_GUTTER).max(Self::CARD_WIDTH);
         let cards_per_row = (section_width / (Self::CARD_WIDTH + 12.)).floor().max(1.) as usize;
-        let show_search = self.active_search_keyword.is_empty() || self.is_searching;
+        let show_search = !self.active_search_keyword.is_empty() || self.is_searching;
         let page_scroll_handle = if show_search {
             &self.search_scroll_handle
         } else {
