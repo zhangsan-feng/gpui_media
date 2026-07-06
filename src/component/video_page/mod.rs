@@ -71,12 +71,11 @@ impl VideoRecommendPage {
         }
 
         let global_state = cx.global::<GlobalState>().0.clone();
-        let tokio_handler = global_state.read(cx).tokio_handle.clone();
         let mut cx_async = cx.to_async().clone();
         let entity = cx.entity().clone();
 
         cx.spawn(|_, _: &mut AsyncApp| async move {
-            let res = tokio_handler.spawn(async move { video_platform::recommend().await });
+            let res = tokio::spawn(async move { video_platform::recommend().await });
             match res.await {
                 Ok(r) => entity.update(&mut cx_async, |this, cx| {
                     log::info!("video recommend loaded: {}", r.len());
@@ -129,13 +128,13 @@ impl VideoRecommendPage {
         cx.notify();
 
         let global_state = cx.global::<GlobalState>().0.clone();
-        let tokio_handler = global_state.read(cx).tokio_handle.clone();
+
         let mut cx_async = cx.to_async().clone();
         let entity = cx.entity().clone();
 
         cx.spawn(|_, _: &mut AsyncApp| async move {
             let search_keyword = keyword.clone();
-            let res = tokio_handler.spawn(async move { video_platform::search(keyword).await });
+            let res = tokio::spawn(async move { video_platform::search(keyword).await });
             match res.await {
                 Ok(result) => entity.update(&mut cx_async, |this, cx| {
                     this.search_cache
@@ -241,11 +240,11 @@ impl VideoRecommendPage {
 
     fn play_video(&self, data: drive::NetworkStatic, window: &mut Window, cx: &mut Context<Self>) {
         let state_handler = cx.global::<GlobalState>().0.clone();
-        let tokio_handler = state_handler.read(cx).tokio_handle.clone();
+
         let mut cx_async = cx.to_async().clone();
         self.open_window(window, cx);
         cx.spawn(|_, _: &mut AsyncApp| async move {
-            let res = tokio_handler.spawn(async move { data.func.detail(&data) });
+            let res = tokio::spawn(async move { data.func.detail(&data) });
             match res.await {
                 Ok(r) => {
                     state_handler.update(&mut cx_async, |_, cx| {

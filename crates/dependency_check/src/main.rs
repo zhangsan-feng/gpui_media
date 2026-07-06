@@ -4,7 +4,7 @@ mod gui;
 mod platform;
 use crate::gui::Gui;
 use crate::platform::Platform;
-use gpui::{AppContext, ParentElement, Render, Styled, px, size};
+use gpui::{AppContext, Render, Styled, px, size};
 use gpui_component::Root;
 
 #[tokio::main]

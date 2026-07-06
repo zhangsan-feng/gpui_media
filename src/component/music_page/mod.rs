@@ -46,9 +46,7 @@ impl MusicRecommendPage {
         self.is_loading = true;
 
         cx.spawn(|_, _: &mut AsyncApp| async move {
-            let res = global_state
-                .tokio_handle
-                .spawn(async move { music_platform::music_recommend().await });
+            let res = tokio::spawn(async move { music_platform::music_recommend().await });
 
             match res.await {
                 Ok(Ok(r)) => {

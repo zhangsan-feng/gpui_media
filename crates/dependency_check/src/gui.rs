@@ -2,9 +2,7 @@ use std::path::PathBuf;
 use crate::platform::Platform;
 use futures_util::StreamExt;
 use gpui::*;
-use gpui_component::*;
 use gpui_component::input::{Input, InputState};
-use gpui_component::scroll::ScrollableElement;
 use gpui_component::v_flex;
 use tokio::io::AsyncWriteExt;
 use tokio::time::Instant;
@@ -84,6 +82,7 @@ impl Gui {
                                     if !this.platform.check_dependencies() {
                                         this.message = "Dependency installation failed".to_string();
                                     } else {
+                                        this.platform.add_evn_path();
                                         this.platform.start_app();
                                         std::process::exit(0);
                                     }
@@ -114,7 +113,7 @@ impl Gui {
 
         let response = reqwest::get(gstreamer_url).await?.error_for_status()?;
         let total_size = response.content_length();
-        let mut stream = response.bytes_stream();
+        let stream = response.bytes_stream();
         let file = tokio::fs::File::create(&save_path).await?;
         let mut writer = tokio::io::BufWriter::new(file);
         let mut download_len = 0u64;

@@ -6,7 +6,7 @@ use reqwest_client::runtime;
 
 #[derive(Clone)]
 pub struct State {
-    pub tokio_handle: tokio::runtime::Handle,
+
 }
 
 pub enum StateEvent {
@@ -28,7 +28,7 @@ impl State {
         });
 
         State {
-            tokio_handle: tokio_runtime_handle,
+            
         }
     }
 }

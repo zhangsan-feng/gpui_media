@@ -146,12 +146,10 @@ impl VideoPlayer {
         self.last_error = None;
         self.is_player = false;
 
-        let global_state = cx.global::<GlobalState>().0.clone().read(cx).clone();
+
 
         cx.spawn(async move |this, cx| {
-            let res = global_state
-                .tokio_handle
-                .spawn(async move { player.play(player.source.as_str()) });
+            let res = tokio::spawn(async move { player.play(player.source.as_str()) });
 
             match res.await {
                 Ok(val) => {
