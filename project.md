@@ -1,4 +1,4 @@
-
+```
 src/component/music_page
     音乐推荐ui
 src/component/video_page
@@ -12,7 +12,10 @@ src/drive/music_player
 src/drive/video_player
     视频播放器核心逻辑
     支持本地拖拽直接播放
+    
 src/music_platform 
     音乐来源
 src/video_platform
     视频来源
+
+```

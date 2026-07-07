@@ -11,9 +11,18 @@ resolver = "3"
 version = "0.1.0"
 edition = "2024"
 
+
+[[bin]]
+name = "gpui-medio"
+path = "crates/dependency_check/src/main.rs"
+
 [[bin]]
 name = "gui"
 path = "src/main.rs"
+
+
+
+
 
 [profile.release]
 debug = false
