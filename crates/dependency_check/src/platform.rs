@@ -12,8 +12,7 @@ impl Platform {
     pub fn new() -> Platform {
         #[cfg(windows)]
         {
-            let mut gstreamer_bin =
-                std::path::PathBuf::from(env::var_os("LOCALAPPDATA").unwrap_or_default());
+            let mut gstreamer_bin = std::path::PathBuf::from(env::var_os("LOCALAPPDATA").unwrap_or_default());
             gstreamer_bin.push("Programs");
             gstreamer_bin.push("gstreamer");
             gstreamer_bin.push("1.0");
@@ -28,14 +27,6 @@ impl Platform {
                 application: "gui.exe".to_string(),
             };
         }
-
-        Platform {
-            gstreamer_url: "".to_string(),
-            gstreamer_file: "".to_string(),
-            gstreamer_bin: "".to_string(),
-            save_path: env::temp_dir().to_string_lossy().to_string(),
-            application: "".to_string(),
-        }
     }
 
     pub fn check_dependencies(&self) -> bool {
@@ -43,8 +34,6 @@ impl Platform {
         {
             return self.check_dependencies_for_windows();
         }
-
-        false
     }
 
     pub fn install_dependencies(&self) {

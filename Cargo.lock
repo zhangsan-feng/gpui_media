@@ -1428,7 +1428,6 @@ dependencies = [
  "gpui",
  "gpui-component",
  "gpui_platform",
- "log",
  "reqwest",
  "tokio",
 ]
