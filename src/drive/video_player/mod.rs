@@ -1,9 +1,11 @@
+use crate::component::home::rgb_to_u32;
 use crate::drive::NetworkStatic;
 use gpui::*;
 use gpui_component::{VirtualListScrollHandle, h_flex, v_flex};
 use gstreamer::prelude::ElementExt;
 use gstreamer_app as gst_app;
 use gstreamer_app::gst;
+use gpui_component::scroll::ScrollableElement;
 use reqwest::header;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -25,6 +27,7 @@ pub struct VideoPlayer {
     video_total_duration: Option<Duration>,
     video_player_duration: Duration,
     video_frame_size: f32,
+    video_frame_bounds: Option<Bounds<Pixels>>,
     is_dragging_progress_bar: bool,
     pending_seek_position: Option<Duration>,
     progress_bar_bounds: Option<Bounds<Pixels>>,
@@ -69,6 +72,15 @@ impl Render for VideoPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.free_video_frame(window);
 
+        let total = self
+            .video_total_duration
+            .unwrap_or_else(|| Duration::from_secs(0));
+        let display_position = self
+            .pending_seek_position
+            .filter(|_| self.is_dragging_progress_bar)
+            .unwrap_or(self.video_player_duration);
+
+
         v_flex()
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
                 this.handle_file_drop(paths, cx);
@@ -76,24 +88,43 @@ impl Render for VideoPlayer {
             .size_full()
             .p_2()
             .gap_2()
-            .child(self.video_frame_ui())
+            .child(self.video_frame_ui(cx))
+            .child(self.player_progress_control_ui(window, cx))
             .child(
-                v_flex()
+                h_flex()
+                    .w_full()
                     .gap_2()
-                    .p_3()
-                    .rounded_lg()
-                    .border_1()
-                    .border_color(rgb(0xE2E8F0))
-                    .bg(rgb(0xF8FAFC))
-                    .child(self.player_progress_control_ui(window, cx))
+                    .p_2()
+                    .justify_between()
+                    .items_center()
+                    .child(
+                        div()
+                            .w(window.bounds().size.width * 0.2)
+                            .overflow_x_scrollbar()
+                            .text_color(rgb_to_u32(15, 23, 42))
+                            .child(if self.current_player.source.is_empty() {
+                                "没有加载视频来源".to_string()
+                            } else {
+                                format!(
+                                    "{} / {}",
+                                    self.current_player.name,
+                                    self.current_player.source.to_string()
+                                )
+                            }),
+                    )
                     .child(
                         h_flex()
-                            .gap_3()
-                            .justify_center()
-                            .items_center()
+
+                            .gap_2()
                             .child(self.player_list_ui(cx))
                             .child(self.player_control_ui(cx))
                             .child(self.player_volume_control_ui(cx)),
+                    )
+                    .child(
+                        h_flex()
+                            .child(self.format_time(display_position))
+                            .child("/")
+                            .child(self.format_time(total)),
                     ),
             )
     }

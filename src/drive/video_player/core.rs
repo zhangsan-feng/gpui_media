@@ -34,6 +34,7 @@ impl VideoPlayer {
             is_player: false,
             video_total_duration: None,
             video_frame_size: 16.0 / 9.0,
+            video_frame_bounds: None,
             is_dragging_progress_bar: false,
             pending_seek_position: None,
             progress_bar_bounds: None,

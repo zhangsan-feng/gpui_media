@@ -15,8 +15,6 @@ use log::info;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-
-
 #[derive(Clone, Copy)]
 enum Page {
     RecommendPage,
@@ -33,10 +31,7 @@ pub struct VideoPage {
     vm_scroll_handler: VirtualListScrollHandle,
 }
 
-
 impl VideoPage {
-
-
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> VideoPage {
         let mut s = VideoPage {
             current_page: Page::RecommendPage,
@@ -47,7 +42,7 @@ impl VideoPage {
             search_result: HashMap::new(),
             vm_scroll_handler: VirtualListScrollHandle::new(),
         };
-        s.init_recommend_videos(window, cx);
+        // s.init_recommend_videos(window, cx);
         s
     }
 
@@ -60,7 +55,6 @@ impl VideoPage {
             let res = tokio::spawn(async move { video_platform::recommend().await });
             match res.await {
                 Ok(r) => {
-
                     entity.update(&mut cx_async, |this, cx| {
                         this.recommend_result = r;
                         this.is_loading = false;
@@ -112,14 +106,15 @@ impl VideoPage {
     }
 
     fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) -> WindowId {
-        let handler = cx.open_window(
-            window_center_options(window, 1300., 700.),
-            move |window, app| {
-                let view = app.new(|cx| VideoPlayer::new(window, cx));
-                app.new(|cx| Root::new(view, window, cx))
-            },
-        )
-        .expect("open window failed");
+        let handler = cx
+            .open_window(
+                window_center_options(window, 1300., 700.),
+                move |window, app| {
+                    let view = app.new(|cx| VideoPlayer::new(window, cx));
+                    app.new(|cx| Root::new(view, window, cx))
+                },
+            )
+            .expect("open window failed");
         handler.window_id()
     }
 
@@ -147,7 +142,6 @@ impl VideoPage {
         .detach();
     }
 
-
     fn search_content(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let items = self
             .search_result
@@ -172,7 +166,9 @@ impl VideoPage {
             return 1;
         }
 
-        ((available_width + gap) / (min_card_width + gap)).floor().max(1.) as usize
+        ((available_width + gap) / (min_card_width + gap))
+            .floor()
+            .max(1.) as usize
     }
 
     fn video_grid_rows(&self, item_count: usize, columns: usize) -> usize {
@@ -206,10 +202,14 @@ impl VideoPage {
                 .into_any_element();
         }
 
-        let available_width = (window.bounds().size.width.as_f32() - 232.).max(VIDEO_CARD_MIN_WIDTH);
-        let columns = self.video_grid_columns(available_width, VIDEO_CARD_MIN_WIDTH, VIDEO_GRID_GAP);
+        let available_width =
+            (window.bounds().size.width.as_f32() - 232.).max(VIDEO_CARD_MIN_WIDTH);
+        let columns =
+            self.video_grid_columns(available_width, VIDEO_CARD_MIN_WIDTH, VIDEO_GRID_GAP);
         let row_count = self.video_grid_rows(items.len(), columns);
-        let card_width = ((available_width - VIDEO_GRID_GAP * (columns.saturating_sub(1) as f32)) / columns as f32).floor();
+        let card_width = ((available_width - VIDEO_GRID_GAP * (columns.saturating_sub(1) as f32))
+            / columns as f32)
+            .floor();
         let items = Rc::new(items);
 
         v_virtual_list(
@@ -226,9 +226,7 @@ impl VideoPage {
                         let start = row_index * columns;
                         let end = (start + columns).min(items.len());
                         let row_items = (start..end)
-                            .map(|index| {
-                                VideoPage::video_card(items[index].clone(), cx)
-                            })
+                            .map(|index| VideoPage::video_card(items[index].clone(), cx))
                             .collect::<Vec<_>>();
 
                         h_flex()
@@ -316,22 +314,19 @@ impl VideoPage {
                                     } else {
                                         data.author.clone()
                                     }),
-                            )
-                            // .child(
-                            //     div()
-                            //         .min_w_0()
-                            //         .text_size(px(11.))
-                            //         .text_color(rgb_to_u32(148, 163, 184))
-                            //         .text_ellipsis()
-                            //         .child(data.source.clone()),
-                            // ),
+                            ), // .child(
+                               //     div()
+                               //         .min_w_0()
+                               //         .text_size(px(11.))
+                               //         .text_color(rgb_to_u32(148, 163, 184))
+                               //         .text_ellipsis()
+                               //         .child(data.source.clone()),
+                               // ),
                     ),
             )
             .into_any_element()
     }
 }
-
-
 
 impl Render for VideoPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

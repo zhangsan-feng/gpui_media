@@ -4,8 +4,8 @@ use crate::music_platform;
 use crate::state::{GlobalState, StateEvent};
 use gpui::*;
 use gpui_component::button::Button;
-use gpui_component::input::{ InputState};
-use gpui_component::scroll::{ScrollbarShow};
+use gpui_component::input::InputState;
+use gpui_component::scroll::ScrollbarShow;
 use gpui_component::{StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list};
 use log::info;
 use std::rc::Rc;
@@ -29,7 +29,7 @@ impl MusicPage {
             music_search_keyword: cx
                 .new(|cx| InputState::new(window, cx).placeholder("input search music")),
         };
-        s.init_data(cx);
+        // s.init_data(cx);
         s
     }
 

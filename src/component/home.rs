@@ -9,22 +9,25 @@ use std::time::Duration;
 pub enum Page {
     MusicPage,
     VideoPage,
+    VideoPlayer,
 }
 
 pub struct HomeView {
     select_id: Page,
     music_recommend_page: Entity<MusicPage>,
     video_recommend_page: Entity<VideoPage>,
-
+    video_player_page: Entity<VideoPlayer>,
 }
 
 impl HomeView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> HomeView {
         let s = HomeView {
-            select_id: Page::MusicPage,
+            select_id: Page::VideoPlayer,
             music_recommend_page: cx.new(|cx| MusicPage::new(window, cx)),
             video_recommend_page: cx.new(|cx| VideoPage::new(window, cx)),
+            video_player_page: cx.new(|cx| VideoPlayer::new(window, cx)),
         };
+
         s
     }
 }
@@ -70,6 +73,7 @@ impl Render for HomeView {
         let content_anim_id = match self.select_id {
             Page::MusicPage => "home-view-recommend",
             Page::VideoPage => "video-player-recommend",
+            Page::VideoPlayer => "video-player",
         };
         v_flex().size_full().child(
             h_flex()
@@ -84,7 +88,8 @@ impl Render for HomeView {
                         .bg(rgb_to_u32(233, 238, 246))
                         // .rounded_2xl()
                         .child(self.render_nav_item("音乐", Page::MusicPage, cx))
-                        .child(self.render_nav_item("视频", Page::VideoPage, cx)),
+                        .child(self.render_nav_item("视频", Page::VideoPage, cx))
+                        .child(self.render_nav_item("播放器", Page::VideoPlayer, cx)),
                 )
                 .child(
                     v_flex().size_full().child(
@@ -96,6 +101,9 @@ impl Render for HomeView {
                                 }
                                 Page::VideoPage => {
                                     self.video_recommend_page.clone().into_any_element()
+                                }
+                                Page::VideoPlayer => {
+                                    self.video_player_page.clone().into_any_element()
                                 }
                             })
                             .with_animations(

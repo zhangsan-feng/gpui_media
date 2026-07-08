@@ -54,7 +54,7 @@ impl Platform {
     pub fn start_app(&self) {
         #[cfg(windows)]
         {
-            self.start_app_for_windows()
+            let _ = std::process::Command::new(&self.application).spawn();
         }
     }
 
@@ -103,10 +103,11 @@ impl Platform {
             }
         }
     }
-    fn start_app_for_windows(&self) {
-        let _ = std::process::Command::new(&self.application).spawn();
-    }
 
     // fn check_dependencies_for_linux(&self) -> Platform{}
+    // install_dependencies_for_linux(){}
+    // add_evn_path_for_linux(){}
     // fn check_dependencies_for_mac(&self) -> Platform{}
+    // install_dependencies_for_mac(){}
+    // add_evn_path_for_mac(){}
 }

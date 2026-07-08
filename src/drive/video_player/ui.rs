@@ -298,11 +298,7 @@ impl VideoPlayer {
         )
     }
 
-    pub(crate) fn player_progress_control_ui(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    pub(crate) fn player_progress_control_ui(&self, _: &mut Window, cx: &mut Context<Self>, ) -> impl IntoElement {
         let total = self
             .video_total_duration
             .unwrap_or_else(|| Duration::from_secs(0));
@@ -322,115 +318,76 @@ impl VideoPlayer {
             .unwrap_or(0.0);
         let progress_bar_entity = cx.entity();
 
-        v_flex()
-            .gap_2()
-            .child(
-                div()
-                    .h(px(6.))
-                    .w_full()
-                    .rounded_full()
-                    .bg(rgb_to_u32(203, 213, 225))
-                    .cursor_pointer()
-                    .on_prepaint({
-                        let progress_bar_entity = progress_bar_entity.clone();
-                        move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
-                            let _ = progress_bar_entity.update(cx, |this, _| {
-                                this.progress_bar_bounds = Some(bounds);
-                            });
-                        }
-                    })
-                    .id("video_progress_bar")
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, event: &MouseDownEvent, _, _| {
-                            if let Some(bounds) = this.progress_bar_bounds {
-                                if let Some(target) =
-                                    this.get_progress_position(event.position, bounds)
-                                {
-                                    this.seek_video_progress(target);
-                                    this.is_dragging_progress_bar = false;
-                                    this.pending_seek_position = None;
-                                }
-                            }
-                        }),
-                    )
-                    .on_drag(ProgressDrag, |_, _, _, cx: &mut App| cx.new(|_| Empty))
-                    .on_drag_move::<ProgressDrag>(cx.listener(
-                        |this, event: &DragMoveEvent<ProgressDrag>, _, _| {
-                            if let Some(target) =
-                                this.get_progress_position(event.event.position, event.bounds)
+        v_flex().gap_2().child(
+            div()
+                .h(px(6.))
+                .w_full()
+                .rounded_full()
+                .bg(rgb_to_u32(203, 213, 225))
+                .cursor_pointer()
+                .on_prepaint({
+                    let progress_bar_entity = progress_bar_entity.clone();
+                    move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
+                        let _ = progress_bar_entity.update(cx, |this, _| {
+                            this.progress_bar_bounds = Some(bounds);
+                        });
+                    }
+                })
+                .id("video_progress_bar")
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, event: &MouseDownEvent, _, _| {
+                        if let Some(bounds) = this.progress_bar_bounds {
+                            if let Some(target) = this.get_progress_position(event.position, bounds)
                             {
-                                this.is_dragging_progress_bar = true;
-                                this.pending_seek_position = Some(target);
-                            }
-                        },
-                    ))
-                    .on_mouse_up(
-                        MouseButton::Left,
-                        cx.listener(|this, _, _, _| {
-                            if this.is_dragging_progress_bar {
-                                if let Some(target) = this.pending_seek_position.take() {
-                                    this.seek_video_progress(target);
-                                }
+                                this.seek_video_progress(target);
                                 this.is_dragging_progress_bar = false;
+                                this.pending_seek_position = None;
                             }
-                        }),
-                    )
-                    .on_mouse_up_out(
-                        MouseButton::Left,
-                        cx.listener(|this, _, _, _| {
-                            if this.is_dragging_progress_bar {
-                                if let Some(target) = this.pending_seek_position.take() {
-                                    this.seek_video_progress(target);
-                                }
-                                this.is_dragging_progress_bar = false;
+                        }
+                    }),
+                )
+                .on_drag(ProgressDrag, |_, _, _, cx: &mut App| cx.new(|_| Empty))
+                .on_drag_move::<ProgressDrag>(cx.listener(
+                    |this, event: &DragMoveEvent<ProgressDrag>, _, _| {
+                        if let Some(target) =
+                            this.get_progress_position(event.event.position, event.bounds)
+                        {
+                            this.is_dragging_progress_bar = true;
+                            this.pending_seek_position = Some(target);
+                        }
+                    },
+                ))
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, _| {
+                        if this.is_dragging_progress_bar {
+                            if let Some(target) = this.pending_seek_position.take() {
+                                this.seek_video_progress(target);
                             }
-                        }),
-                    )
-                    .child(
-                        div()
-                            .h(px(6.))
-                            .w(px(progress_bar_width * progress_ratio))
-                            .rounded_full()
-                            .bg(rgb_to_u32(59, 130, 246)),
-                    ),
-            )
-            .child(
-                h_flex()
-                    .text_size(px(12.))
-                    .justify_between()
-                    .w_full()
-                    .child(
-                        div()
-                            .w(px(window.bounds().size.width.as_f32().clone() * 0.4))
-                            .text_color(rgb_to_u32(15, 23, 42))
-                            .overflow_x_scrollbar()
-                            .mb_3()
-                            .child(
-                                markdown(if self.current_player.source.is_empty() {
-                                    "没有加载视频来源".to_string()
-                                } else {
-                                    format!(
-                                        "{} / {}",
-                                        self.current_player.name,
-                                        self.current_player.source.to_string()
-                                    )
-                                })
-                                .selectable(true)
-                                .whitespace_nowrap()
-                                .text_color(rgb(0x94A3B8))
-                                .cursor_text(),
-                            ),
-                    )
-                    .child(
-                        h_flex()
-                            .flex_shrink_0()
-                            .gap_2()
-                            .child(self.format_time(display_position))
-                            .child("/")
-                            .child(self.format_time(total)),
-                    ),
-            )
+                            this.is_dragging_progress_bar = false;
+                        }
+                    }),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, _| {
+                        if this.is_dragging_progress_bar {
+                            if let Some(target) = this.pending_seek_position.take() {
+                                this.seek_video_progress(target);
+                            }
+                            this.is_dragging_progress_bar = false;
+                        }
+                    }),
+                )
+                .child(
+                    div()
+                        .h(px(6.))
+                        .w(px(progress_bar_width * progress_ratio))
+                        .rounded_full()
+                        .bg(rgb_to_u32(59, 130, 246)),
+                ),
+        )
     }
 
     fn render_control_button(
@@ -492,10 +449,26 @@ impl VideoPlayer {
             ))
     }
 
-    pub(crate) fn video_frame_ui(&self) -> impl IntoElement {
+    pub(crate) fn video_frame_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let frame_aspect = self.video_frame_size.max(0.01);
+        let fitted_frame_size = self.video_frame_bounds.map(|bounds| {
+            let container_width = bounds.size.width.as_f32().max(1.0);
+            let container_height = bounds.size.height.as_f32().max(1.0);
+            let container_aspect = container_width / container_height;
+
+            if container_aspect > frame_aspect {
+                (container_height * frame_aspect, container_height)
+            } else {
+                (container_width, container_width / frame_aspect)
+            }
+        });
+
         div()
-            .flex_grow(1.)
+            .flex_grow_1()
+            .min_w_0()
+            .min_h_0()
             .flex()
+            .relative()
             .justify_center()
             .items_center()
             .overflow_hidden()
@@ -503,15 +476,45 @@ impl VideoPlayer {
             .border_1()
             .border_color(rgb_to_u32(30, 41, 59))
             .bg(rgb_to_u32(15, 23, 42))
+            .on_prepaint({
+                let video_frame_entity = cx.entity();
+                move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
+                    let _ = video_frame_entity.update(cx, |this, cx| {
+                        let changed = this
+                            .video_frame_bounds
+                            .map(|current| {
+                                current.size.width != bounds.size.width
+                                    || current.size.height != bounds.size.height
+                            })
+                            .unwrap_or(true);
+
+                        if changed {
+                            this.video_frame_bounds = Some(bounds);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
             .child(if let Some(frame) = self.render_image.clone() {
                 div()
-                    .size_full()
+                    .absolute()
+                    .inset_0()
                     .flex()
-                    .overflow_hidden()
                     .justify_center()
                     .items_center()
                     .bg(rgb_to_u32(2, 6, 23))
-                    .child(img(frame).size_full().object_fit(ObjectFit::Cover))
+                    .child(if let Some((frame_width, frame_height)) = fitted_frame_size {
+                        img(frame)
+                            .w(px(frame_width))
+                            .h(px(frame_height))
+                            .object_fit(ObjectFit::Cover)
+                            .into_any_element()
+                    } else {
+                        img(frame)
+                            .size_full()
+                            .object_fit(ObjectFit::Cover)
+                            .into_any_element()
+                    })
                     .into_any_element()
             } else {
                 v_flex()
