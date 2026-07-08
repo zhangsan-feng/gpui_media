@@ -12,7 +12,8 @@ impl Platform {
     pub fn new() -> Platform {
         #[cfg(windows)]
         {
-            let mut gstreamer_bin = std::path::PathBuf::from(env::var_os("LOCALAPPDATA").unwrap_or_default());
+            let mut gstreamer_bin =
+                std::path::PathBuf::from(env::var_os("LOCALAPPDATA").unwrap_or_default());
             gstreamer_bin.push("Programs");
             gstreamer_bin.push("gstreamer");
             gstreamer_bin.push("1.0");

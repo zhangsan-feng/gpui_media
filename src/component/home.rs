@@ -1,32 +1,29 @@
-use crate::component::music_page::MusicRecommendPage;
-use crate::component::video_page::VideoRecommendPage;
-use crate::drive;
+use crate::component::music_page::MusicPage;
+use crate::component::video_page::VideoPage;
 use crate::drive::video_player::VideoPlayer;
-use futures_util::sink::drain;
 use gpui::*;
 use gpui_component::{Root, h_flex, v_flex};
 use std::time::Duration;
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum Page {
-    MusicRecommendPage,
-    VideoRecommendPage,
+    MusicPage,
+    VideoPage,
 }
 
 pub struct HomeView {
     select_id: Page,
-    music_recommend_page: Entity<MusicRecommendPage>,
-    video_recommend_page: Entity<VideoRecommendPage>,
-    video_player_page: Entity<VideoPlayer>,
+    music_recommend_page: Entity<MusicPage>,
+    video_recommend_page: Entity<VideoPage>,
+
 }
 
 impl HomeView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> HomeView {
         let s = HomeView {
-            select_id: Page::MusicRecommendPage,
-            music_recommend_page: cx.new(|cx| MusicRecommendPage::new(window, cx)),
-            video_recommend_page: cx.new(|cx| VideoRecommendPage::new(window, cx)),
-            video_player_page: cx.new(|cx| VideoPlayer::new(window, cx)),
+            select_id: Page::MusicPage,
+            music_recommend_page: cx.new(|cx| MusicPage::new(window, cx)),
+            video_recommend_page: cx.new(|cx| VideoPage::new(window, cx)),
         };
         s
     }
@@ -71,8 +68,8 @@ impl HomeView {
 impl Render for HomeView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content_anim_id = match self.select_id {
-            Page::MusicRecommendPage => "home-view-recommend",
-            Page::VideoRecommendPage => "video-player-recommend",
+            Page::MusicPage => "home-view-recommend",
+            Page::VideoPage => "video-player-recommend",
         };
         v_flex().size_full().child(
             h_flex()
@@ -86,18 +83,18 @@ impl Render for HomeView {
                         .w(px(80.))
                         .bg(rgb_to_u32(233, 238, 246))
                         // .rounded_2xl()
-                        .child(self.render_nav_item("音乐", Page::MusicRecommendPage, cx))
-                        .child(self.render_nav_item("视频", Page::VideoRecommendPage, cx)),
+                        .child(self.render_nav_item("音乐", Page::MusicPage, cx))
+                        .child(self.render_nav_item("视频", Page::VideoPage, cx)),
                 )
                 .child(
                     v_flex().size_full().child(
                         div()
                             .size_full()
                             .child(match self.select_id {
-                                Page::MusicRecommendPage => {
+                                Page::MusicPage => {
                                     self.music_recommend_page.clone().into_any_element()
                                 }
-                                Page::VideoRecommendPage => {
+                                Page::VideoPage => {
                                     self.video_recommend_page.clone().into_any_element()
                                 }
                             })

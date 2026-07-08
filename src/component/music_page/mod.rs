@@ -4,29 +4,25 @@ use crate::music_platform;
 use crate::state::{GlobalState, StateEvent};
 use gpui::*;
 use gpui_component::button::Button;
-use gpui_component::input::{Input, InputState};
-use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
-use gpui_component::{
-    StyleSized, StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list,
-};
+use gpui_component::input::{ InputState};
+use gpui_component::scroll::{ScrollbarShow};
+use gpui_component::{StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list};
 use log::info;
 use std::rc::Rc;
 
 #[derive(Clone)]
-pub struct MusicRecommendPage {
+pub struct MusicPage {
     music_data: Vec<drive::NetworkStatic>,
-    hovered_id: Option<String>,
     is_loading: bool,
     vm_scroll_handle: VirtualListScrollHandle,
     music_player_page: Entity<MusicPlayer>,
     music_search_keyword: Entity<InputState>,
 }
 
-impl MusicRecommendPage {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> MusicRecommendPage {
-        let mut s = MusicRecommendPage {
+impl MusicPage {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> MusicPage {
+        let mut s = MusicPage {
             music_data: Vec::new(),
-            hovered_id: None,
             is_loading: false,
             vm_scroll_handle: VirtualListScrollHandle::new(),
             music_player_page: cx.new(|cx| MusicPlayer::new(window, cx)),
@@ -38,7 +34,6 @@ impl MusicRecommendPage {
     }
 
     pub fn init_data(&mut self, cx: &mut Context<Self>) {
-        let global_state = cx.global::<GlobalState>().0.read(cx).clone();
         let entity = cx.entity().clone();
         let mut cx_async = cx.to_async().clone();
         let state_handler = cx.global::<GlobalState>().0.clone();
@@ -126,8 +121,8 @@ impl MusicRecommendPage {
     }
 }
 
-impl Render for MusicRecommendPage {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl Render for MusicPage {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
             .gap_2()

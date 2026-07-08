@@ -3,11 +3,9 @@ use crate::drive::video_player::{FrameBuffer, VideoPlayer};
 use crate::state::StateEvent::{TogglePlayVideo, UpdateVideoPlayList};
 use crate::state::{GlobalState, StateEvent};
 use gpui::http_client::http::header;
-use gpui::prelude::*;
 use gpui::*;
 use gpui::{Context, RenderImage};
 use gpui_component::VirtualListScrollHandle;
-use gpui_component::input::InputState;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer::prelude::{ElementExt, ElementExtManual};
@@ -22,7 +20,7 @@ impl VideoPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let headers = header::HeaderMap::new();
 
-        let _ = window;
+        let window_id = window.window_handle().window_id();
         let _ = gst::init();
         let mut s = Self {
             current_player: drive::NetworkStatic::default(),
@@ -52,23 +50,28 @@ impl VideoPlayer {
             bus_watch_started: false,
             pending_drop_images: Vec::new(),
         };
-        s.init_subscribe(cx);
+        s.init_subscribe(window_id, cx);
         s
     }
 
-    fn init_subscribe(&mut self, cx: &mut Context<Self>) {
+    fn init_subscribe(&mut self, window_id:WindowId, cx: &mut Context<Self>) {
         let state_handler = cx.global::<GlobalState>().0.clone();
         cx.subscribe(
             &state_handler,
             move |this: &mut Self, _model, event: &StateEvent, _cx| match event {
                 // ############################################################################# 跨组件传递数据
-                TogglePlayVideo(data) => {
-                    this.current_player = data.clone();
+                TogglePlayVideo(event_window_id, data) => {
+                    if event_window_id.as_u64() == window_id.as_u64() {
+                        this.current_player = data.clone();
+                    }
                 }
-                UpdateVideoPlayList(data) => {
-                    this.player_list = data.clone();
+                UpdateVideoPlayList(event_window_id, data) => {
+                    if event_window_id.as_u64() == window_id.as_u64() {
+                        this.player_list = data.clone();
+                    }
                 }
-                _ => {} // ############################################################################# 跨组件传递数据
+                _ => {}
+                // ############################################################################# 跨组件传递数据
             },
         )
         .detach();

@@ -1,6 +1,5 @@
 use crate::drive::NetworkStatic;
 use gpui::*;
-use gpui_component::input::InputState;
 use gpui_component::{VirtualListScrollHandle, h_flex, v_flex};
 use gstreamer::prelude::ElementExt;
 use gstreamer_app as gst_app;

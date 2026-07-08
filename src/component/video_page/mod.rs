@@ -1,88 +1,72 @@
-mod recommend;
-mod search;
-
 use crate::com::window_center_options;
 use crate::component::home::rgb_to_u32;
+use crate::drive::NetworkStatic;
 use crate::drive::video_player::VideoPlayer;
 use crate::state::{GlobalState, StateEvent};
-use crate::{drive, video_platform};
+use crate::video_platform;
 use gpui::*;
-use gpui_component::Root;
-use gpui_component::VirtualListScrollHandle;
 use gpui_component::button::Button;
 use gpui_component::input::Input;
-use gpui_component::input::{InputEvent, InputState};
+use gpui_component::input::InputState;
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
-use gpui_component::{h_flex, v_flex};
+use gpui_component::{Root, VirtualListScrollHandle};
+use gpui_component::{h_flex, v_flex, v_virtual_list};
 use log::info;
-use recommend::{VideoSection, VideoSectionData};
 use std::collections::HashMap;
+use std::rc::Rc;
 
-pub struct VideoRecommendPage {
-    pub recommend_result: Vec<drive::NetworkStatic>,
-    pub search_result: HashMap<String, Vec<drive::NetworkStatic>>,
-    search_cache: HashMap<String, HashMap<String, Vec<drive::NetworkStatic>>>,
-    active_search_keyword: String,
-    search_keyword: Entity<InputState>,
-    is_loading: bool,
-    is_searching: bool,
-    layout_scroll_handle: VirtualListScrollHandle,
-    search_scroll_handle: VirtualListScrollHandle,
-    recommend_scroll_handle: VirtualListScrollHandle,
-    movie_scroll_handle: VirtualListScrollHandle,
-    tv_scroll_handle: VirtualListScrollHandle,
-    anime_scroll_handle: VirtualListScrollHandle,
+
+
+#[derive(Clone, Copy)]
+enum Page {
+    RecommendPage,
+    SearchPage,
 }
 
-impl VideoRecommendPage {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> VideoRecommendPage {
-        let search_keyword =
-            cx.new(|cx| InputState::new(window, cx).placeholder("搜索电影、电视剧、动漫"));
-        cx.subscribe(&search_keyword, |_, _, event, cx| {
-            if matches!(event, InputEvent::Change) {
-                cx.notify();
-            }
-        })
-        .detach();
+pub struct VideoPage {
+    current_page: Page,
+    is_loading: bool,
+    is_searching: bool,
+    search_keyword: Entity<InputState>,
+    recommend_result: Vec<NetworkStatic>,
+    search_result: HashMap<String, Vec<NetworkStatic>>,
+    vm_scroll_handler: VirtualListScrollHandle,
+}
 
-        let s = VideoRecommendPage {
+
+impl VideoPage {
+
+
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> VideoPage {
+        let mut s = VideoPage {
+            current_page: Page::RecommendPage,
+            is_loading: false,
+            is_searching: false,
+            search_keyword: cx.new(|cx| InputState::new(window, cx)),
             recommend_result: Vec::new(),
             search_result: HashMap::new(),
-            search_cache: HashMap::new(),
-            active_search_keyword: String::new(),
-            search_keyword,
-            is_loading: true,
-            is_searching: false,
-            layout_scroll_handle: VirtualListScrollHandle::new(),
-            search_scroll_handle: VirtualListScrollHandle::new(),
-            recommend_scroll_handle: VirtualListScrollHandle::new(),
-            movie_scroll_handle: VirtualListScrollHandle::new(),
-            tv_scroll_handle: VirtualListScrollHandle::new(),
-            anime_scroll_handle: VirtualListScrollHandle::new(),
+            vm_scroll_handler: VirtualListScrollHandle::new(),
         };
-        s.init_data(window, cx);
-        // s.open_video_window(window, cx);
+        s.init_recommend_videos(window, cx);
         s
     }
 
-    pub fn init_data(&self, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.recommend_result.is_empty() {
-            return;
-        }
-
-        let global_state = cx.global::<GlobalState>().0.clone();
+    pub fn init_recommend_videos(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         let mut cx_async = cx.to_async().clone();
         let entity = cx.entity().clone();
+        self.is_loading = true;
 
         cx.spawn(|_, _: &mut AsyncApp| async move {
             let res = tokio::spawn(async move { video_platform::recommend().await });
             match res.await {
-                Ok(r) => entity.update(&mut cx_async, |this, cx| {
-                    log::info!("video recommend loaded: {}", r.len());
-                    this.recommend_result = r;
-                    this.is_loading = false;
-                    cx.notify()
-                }),
+                Ok(r) => {
+
+                    entity.update(&mut cx_async, |this, cx| {
+                        this.recommend_result = r;
+                        this.is_loading = false;
+                        cx.notify()
+                    });
+                }
                 Err(e) => {
                     let _ = entity.update(&mut cx_async, |this, cx| {
                         this.is_loading = false;
@@ -95,140 +79,40 @@ impl VideoRecommendPage {
         .detach();
     }
 
-    fn search_text(&self, cx: &mut Context<Self>) -> String {
-        self.search_keyword
-            .read(cx)
-            .text()
-            .to_string()
-            .trim()
-            .to_string()
-    }
-
-    fn search_video(&mut self, cx: &mut Context<Self>) {
-        let keyword = self.search_text(cx);
-        if keyword.is_empty() {
-            self.active_search_keyword.clear();
-            self.search_result.clear();
-            self.is_searching = false;
-            cx.notify();
-            return;
-        }
-
-        if let Some(cached) = self.search_cache.get(&keyword).cloned() {
-            self.active_search_keyword = keyword;
-            self.search_result = cached;
-            self.is_searching = false;
-            cx.notify();
-            return;
-        }
-
-        self.active_search_keyword = keyword.clone();
-        self.search_result.clear();
-        self.is_searching = true;
-        cx.notify();
-
-        let global_state = cx.global::<GlobalState>().0.clone();
-
+    pub fn search_video(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         let mut cx_async = cx.to_async().clone();
         let entity = cx.entity().clone();
-
+        self.is_loading = true;
+        self.is_searching = true;
+        self.current_page = Page::SearchPage;
+        let search_keyword = self.search_keyword.read(cx).text().to_string();
         cx.spawn(|_, _: &mut AsyncApp| async move {
-            let search_keyword = keyword.clone();
-            let res = tokio::spawn(async move { video_platform::search(keyword).await });
+            let res = tokio::spawn(async move { video_platform::search(search_keyword).await });
             match res.await {
-                Ok(result) => entity.update(&mut cx_async, |this, cx| {
-                    this.search_cache
-                        .insert(search_keyword.clone(), result.clone());
-                    this.active_search_keyword = search_keyword;
-                    this.search_result = result;
-                    this.is_searching = false;
-                    cx.notify();
-                }),
-                Err(err) => {
+                Ok(r) => {
+                    // log::info!("video recommend loaded: {}", r.len());
+                    entity.update(&mut cx_async, |this, cx| {
+                        this.search_result = r;
+                        this.is_loading = false;
+                        this.is_searching = false;
+                        cx.notify()
+                    });
+                }
+                Err(e) => {
                     let _ = entity.update(&mut cx_async, |this, cx| {
+                        this.is_loading = false;
                         this.is_searching = false;
                         cx.notify();
                     });
-                    log::error!("video search error: {}", err);
+                    log::error!("{}", e)
                 }
             }
         })
         .detach();
     }
 
-    fn return_to_recommend(&mut self, cx: &mut Context<Self>) {
-        self.active_search_keyword.clear();
-        self.search_result.clear();
-        self.is_searching = false;
-        cx.notify();
-    }
-
-    fn category_videos(
-        videos: &[drive::NetworkStatic],
-        category: &str,
-    ) -> Vec<drive::NetworkStatic> {
-        videos
-            .iter()
-            .filter(|video| video.category == category)
-            .cloned()
-            .collect()
-    }
-
-    fn recommend_sections(&self) -> Vec<VideoSectionData> {
-        let videos = self.recommend_result.clone();
-        let has_categories = videos.iter().any(|video| !video.category.is_empty());
-        let (recommend, movie, tv, anime) = if has_categories {
-            (
-                Self::category_videos(&videos, "今日推荐"),
-                Self::category_videos(&videos, "电影"),
-                Self::category_videos(&videos, "电视剧"),
-                Self::category_videos(&videos, "动漫"),
-            )
-        } else {
-            let recommend_end = videos.len().min(12);
-            let rest = &videos[recommend_end..];
-            let chunk = rest.len().div_ceil(3).max(1);
-            let movie_end = chunk.min(rest.len());
-            let tv_end = (chunk * 2).min(rest.len());
-
-            (
-                videos[..recommend_end].to_vec(),
-                rest[..movie_end].to_vec(),
-                rest[movie_end..tv_end].to_vec(),
-                rest[tv_end..].to_vec(),
-            )
-        };
-
-        vec![
-            VideoSectionData {
-                title: "今日推荐".to_string(),
-                videos: recommend.clone(),
-                offset: 0,
-                section: VideoSection::Recommend,
-            },
-            VideoSectionData {
-                title: "电影".to_string(),
-                videos: movie.clone(),
-                offset: recommend.len(),
-                section: VideoSection::Movie,
-            },
-            VideoSectionData {
-                title: "电视剧".to_string(),
-                videos: tv.clone(),
-                offset: recommend.len() + movie.len(),
-                section: VideoSection::Tv,
-            },
-            VideoSectionData {
-                title: "动漫".to_string(),
-                videos: anime,
-                offset: recommend.len() + movie.len() + tv.len(),
-                section: VideoSection::Anime,
-            },
-        ]
-    }
-
-    fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) {
-        cx.open_window(
+    fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) -> WindowId {
+        let handler = cx.open_window(
             window_center_options(window, 1300., 700.),
             move |window, app| {
                 let view = app.new(|cx| VideoPlayer::new(window, cx));
@@ -236,19 +120,25 @@ impl VideoRecommendPage {
             },
         )
         .expect("open window failed");
+        handler.window_id()
     }
 
-    fn play_video(&self, data: drive::NetworkStatic, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn play_video(
+        &self,
+        data: NetworkStatic,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let state_handler = cx.global::<GlobalState>().0.clone();
-
         let mut cx_async = cx.to_async().clone();
-        self.open_window(window, cx);
-        cx.spawn(|_, _: &mut AsyncApp| async move {
+        let window_id = self.open_window(window, cx);
+
+        cx.spawn(move |_, _: &mut AsyncApp| async move {
             let res = tokio::spawn(async move { data.func.detail(&data) });
             match res.await {
                 Ok(r) => {
                     state_handler.update(&mut cx_async, |_, cx| {
-                        cx.emit(StateEvent::UpdateVideoPlayList(r.clone()))
+                        cx.emit(StateEvent::UpdateVideoPlayList(window_id, r.clone()))
                     });
                 }
                 Err(e) => info!("tokio run error:{}", e),
@@ -256,28 +146,195 @@ impl VideoRecommendPage {
         })
         .detach();
     }
+
+
+    fn search_content(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let items = self
+            .search_result
+            .values()
+            .flat_map(|videos| videos.iter().cloned())
+            .collect();
+
+        self.video_grid_content(items, "video-search-grid", window, cx)
+    }
+
+    fn recommend_content(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        self.video_grid_content(
+            self.recommend_result.clone(),
+            "video-recommend-grid",
+            window,
+            cx,
+        )
+    }
+
+    fn video_grid_columns(&self, available_width: f32, min_card_width: f32, gap: f32) -> usize {
+        if available_width <= min_card_width {
+            return 1;
+        }
+
+        ((available_width + gap) / (min_card_width + gap)).floor().max(1.) as usize
+    }
+
+    fn video_grid_rows(&self, item_count: usize, columns: usize) -> usize {
+        if item_count == 0 {
+            return 0;
+        }
+
+        let columns = columns.max(1);
+        item_count.div_ceil(columns)
+    }
+
+    fn video_grid_content(
+        &self,
+        items: Vec<NetworkStatic>,
+        list_id: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        const VIDEO_CARD_MIN_WIDTH: f32 = 200.;
+        const VIDEO_GRID_GAP: f32 = 12.;
+        const VIDEO_GRID_ROW_HEIGHT: f32 = 280.;
+
+        if items.is_empty() {
+            return div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_color(rgb_to_u32(100, 116, 139))
+                .child(self.placeholder_text())
+                .into_any_element();
+        }
+
+        let available_width = (window.bounds().size.width.as_f32() - 232.).max(VIDEO_CARD_MIN_WIDTH);
+        let columns = self.video_grid_columns(available_width, VIDEO_CARD_MIN_WIDTH, VIDEO_GRID_GAP);
+        let row_count = self.video_grid_rows(items.len(), columns);
+        let card_width = ((available_width - VIDEO_GRID_GAP * (columns.saturating_sub(1) as f32)) / columns as f32).floor();
+        let items = Rc::new(items);
+
+        v_virtual_list(
+            cx.entity().clone(),
+            list_id,
+            Rc::new(
+                (0..row_count)
+                    .map(|_| size(px(available_width), px(VIDEO_GRID_ROW_HEIGHT)))
+                    .collect(),
+            ),
+            move |_view, visible_range, _, cx| {
+                visible_range
+                    .map(|row_index| {
+                        let start = row_index * columns;
+                        let end = (start + columns).min(items.len());
+                        let row_items = (start..end)
+                            .map(|index| {
+                                VideoPage::video_card(items[index].clone(), cx)
+                            })
+                            .collect::<Vec<_>>();
+
+                        h_flex()
+                            .w_full()
+                            .h(px(VIDEO_GRID_ROW_HEIGHT))
+                            .gap_3()
+                            .items_start()
+                            .children(row_items)
+                    })
+                    .collect()
+            },
+        )
+        .track_scroll(&self.vm_scroll_handler)
+        .into_any_element()
+    }
+
+    fn placeholder_text(&self) -> &'static str {
+        match self.current_page {
+            Page::RecommendPage if self.is_loading => "加载中",
+            Page::SearchPage if self.is_searching => "搜索中",
+            Page::SearchPage => "暂无搜索结果",
+            Page::RecommendPage => "暂无推荐内容",
+        }
+    }
+
+    fn video_card(data: NetworkStatic, cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .id(format!("video-card-{}", data.id))
+            .w(px(200.))
+            .h(px(260.))
+            .rounded_lg()
+            .border_1()
+            .border_color(rgb_to_u32(226, 232, 240))
+            .bg(rgb_to_u32(255, 255, 255))
+            .overflow_hidden()
+            .cursor_pointer()
+            .hover(|style| {
+                style
+                    .bg(rgb_to_u32(248, 250, 252))
+                    .border_color(rgb_to_u32(148, 163, 184))
+            })
+            .on_click({
+                let data = data.clone();
+                cx.listener(move |this, _, window, cx| {
+                    this.play_video(data.clone(), window, cx);
+                })
+            })
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(
+                        div()
+                            .flex_grow(8.)
+                            .w_full()
+                            .h(px(150.))
+                            .flex_shrink_0()
+                            .overflow_hidden()
+                            .bg(rgb_to_u32(241, 245, 249))
+                            .child(
+                                img(data.img.clone())
+                                    .size_full()
+                                    .object_fit(ObjectFit::Cover),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .p_1()
+                            .gap_1()
+                            .flex_grow(2.)
+                            .text_center()
+                            .child(
+                                div()
+                                    .text_size(px(14.))
+                                    .text_color(rgb_to_u32(15, 23, 42))
+                                    .text_ellipsis()
+                                    .child(data.name.clone()),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(rgb_to_u32(100, 116, 139))
+                                    .text_ellipsis()
+                                    .child(if data.author.is_empty() {
+                                        data.category.clone()
+                                    } else {
+                                        data.author.clone()
+                                    }),
+                            )
+                            // .child(
+                            //     div()
+                            //         .min_w_0()
+                            //         .text_size(px(11.))
+                            //         .text_color(rgb_to_u32(148, 163, 184))
+                            //         .text_ellipsis()
+                            //         .child(data.source.clone()),
+                            // ),
+                    ),
+            )
+            .into_any_element()
+    }
 }
 
-fn is_show_search(){}
 
-impl Render for VideoRecommendPage {
+
+impl Render for VideoPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let content_width = (window.bounds().size.width.as_f32() - 110.).max(Self::CARD_WIDTH);
-        let section_width = (content_width - Self::SECTION_SCROLL_GUTTER).max(Self::CARD_WIDTH);
-        let cards_per_row = (section_width / (Self::CARD_WIDTH + 12.)).floor().max(1.) as usize;
-        let show_search = !self.active_search_keyword.is_empty() || self.is_searching;
-        let page_scroll_handle = if show_search {
-            &self.search_scroll_handle
-        } else {
-            &self.layout_scroll_handle
-        };
-        let return_button = show_search.then(|| {
-            Button::new("video-page-return-recommend-btn")
-                .label("返回")
-                .on_click(cx.listener(|this, _, _, cx| this.return_to_recommend(cx)))
-                .into_any_element()
-        });
-
         v_flex()
             .size_full()
             .gap_2()
@@ -287,14 +344,13 @@ impl Render for VideoRecommendPage {
                 h_flex()
                     .items_center()
                     .h(px(80.))
-                    .w(px(content_width))
+                    .w_full()
                     .gap_2()
                     .p_2()
                     .rounded_lg()
                     .border_1()
                     .border_color(rgb_to_u32(226, 232, 240))
                     .bg(rgb_to_u32(255, 255, 255))
-                    .children(return_button)
                     .child(
                         div()
                             .flex_grow_1()
@@ -308,7 +364,9 @@ impl Render for VideoRecommendPage {
                                 } else {
                                     "搜索"
                                 })
-                                .on_click(cx.listener(|this, _, _, cx| this.search_video(cx))),
+                                .on_click({
+                                    cx.listener(|this, _, window, cx| this.search_video(window, cx))
+                                }),
                         ),
                     )
                     .child(
@@ -317,10 +375,9 @@ impl Render for VideoRecommendPage {
                             .bg(rgb_to_u32(239, 246, 255))
                             .text_size(px(12.))
                             .text_color(rgb_to_u32(37, 99, 235))
-                            .child(if show_search {
-                                format!("{} 部", self.search_result.len())
-                            } else {
-                                format!("{} 部", self.recommend_result.len())
+                            .child(match self.current_page {
+                                Page::RecommendPage => self.recommend_result.len().to_string(),
+                                Page::SearchPage => self.search_result.len().to_string(),
                             }),
                     ),
             )
@@ -330,22 +387,23 @@ impl Render for VideoRecommendPage {
                     .flex_1()
                     .overflow_hidden()
                     .gap_2()
-                    .child(div().flex_1().h_full().w_full().child(if show_search {
-                        self.search_ui(cards_per_row, content_width, section_width, cx)
-                            .into_any_element()
-                    } else {
-                        self.recommend_ui(
-                            self.recommend_sections(),
-                            cards_per_row,
-                            content_width,
-                            section_width,
-                            cx,
-                        )
-                        .into_any_element()
-                    }))
+                    .child(
+                        div()
+                            .flex_1()
+                            .h_full()
+                            .w(px(window.bounds().size.width.as_f32() - 200.))
+                            .child(match self.current_page {
+                                Page::RecommendPage => {
+                                    self.recommend_content(window, cx).into_any_element()
+                                }
+                                Page::SearchPage => {
+                                    self.search_content(window, cx).into_any_element()
+                                }
+                            }),
+                    )
                     .child(
                         div().w(px(8.)).h_full().child(
-                            Scrollbar::vertical(page_scroll_handle)
+                            Scrollbar::vertical(&self.vm_scroll_handler)
                                 .scrollbar_show(ScrollbarShow::Always)
                                 .axis(ScrollbarAxis::Vertical),
                         ),

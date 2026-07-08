@@ -1,14 +1,12 @@
-use crate::com::window_center_options;
+
 use crate::drive;
 use crate::drive::music_player::MusicPlayer;
-use crate::drive::video_player::VideoPlayer;
 use crate::state::StateEvent::{TogglePlayMusic, UpdateMusicPlatyList};
 use crate::state::{GlobalState, StateEvent};
 use anyhow::anyhow;
 use gpui::http_client::Url;
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::input::InputState;
 use gpui_component::*;
 use gstreamer as gst;
 use gstreamer::prelude::ElementExt as GstElementExt;

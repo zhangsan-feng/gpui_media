@@ -1,9 +1,9 @@
-use std::path::PathBuf;
 use crate::platform::Platform;
 use futures_util::StreamExt;
 use gpui::*;
 use gpui_component::input::{Input, InputState};
 use gpui_component::v_flex;
+use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tokio::time::Instant;
 
@@ -39,9 +39,12 @@ impl Gui {
     }
 
     pub fn check_dependencies(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-
         self.save_path.update(cx, |this, cx| {
-            this.set_value(format!("download path :{}", &self.platform.save_path), window, cx);
+            this.set_value(
+                format!("download path :{}", &self.platform.save_path),
+                window,
+                cx,
+            );
         });
 
         let gstreamer_url = self.platform.gstreamer_url.clone();
@@ -108,7 +111,6 @@ impl Gui {
         gstreamer_file: String,
         progress_tx: tokio::sync::mpsc::UnboundedSender<(f32, f64)>,
     ) -> anyhow::Result<()> {
-
         let save_path = PathBuf::from(save_path).join(gstreamer_file);
 
         let response = reqwest::get(gstreamer_url).await?.error_for_status()?;
@@ -126,7 +128,6 @@ impl Gui {
             let chunk_len = chunk.len() as u64;
             writer.write_all(&chunk).await?;
 
-
             download_len += chunk_len;
             let elapsed = last_update_time.elapsed();
 
@@ -135,7 +136,9 @@ impl Gui {
                 let bytes_per_second = bytes_since_update as f64 / elapsed.as_secs_f64();
 
                 let progress = match total_size {
-                    Some(total) if total > 0 => (download_len as f32 / total as f32).clamp(0.0, 1.0),
+                    Some(total) if total > 0 => {
+                        (download_len as f32 / total as f32).clamp(0.0, 1.0)
+                    }
                     _ => 0.0,
                 };
 
@@ -176,15 +179,13 @@ impl Render for Gui {
                         .child(self.message.clone()),
                 )
                 .child(
-                    div()
-                        .w_full()
-                        .child(
-                            Input::new(&self.save_path)
-                                .appearance(false)
-                                .disabled(true)
-                                .cursor_text()
-                                .text_align(TextAlign::Center)
-                                .text_color(rgb(0x94A3B8)),
+                    div().w_full().child(
+                        Input::new(&self.save_path)
+                            .appearance(false)
+                            .disabled(true)
+                            .cursor_text()
+                            .text_align(TextAlign::Center)
+                            .text_color(rgb(0x94A3B8)),
                     ),
                 )
                 .child(

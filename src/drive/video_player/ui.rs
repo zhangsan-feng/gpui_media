@@ -493,7 +493,6 @@ impl VideoPlayer {
     }
 
     pub(crate) fn video_frame_ui(&self) -> impl IntoElement {
-        let transparent_tint = gpui::rgba(0xffffff80);
         div()
             .flex_grow(1.)
             .flex()
@@ -512,11 +511,7 @@ impl VideoPlayer {
                     .justify_center()
                     .items_center()
                     .bg(rgb_to_u32(2, 6, 23))
-                    .child(
-                        img(frame)
-                            .size_full()
-                            .object_fit(ObjectFit::Contain)
-                    )
+                    .child(img(frame).size_full().object_fit(ObjectFit::Cover))
                     .into_any_element()
             } else {
                 v_flex()

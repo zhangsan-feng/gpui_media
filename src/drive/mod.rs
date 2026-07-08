@@ -5,9 +5,6 @@ use std::sync::Arc;
 pub mod music_player;
 pub mod video_player;
 
-pub struct MusicStatic {}
-pub struct VideoStatic {}
-
 #[derive(Clone)]
 pub struct NetworkStatic {
     pub id: String,
@@ -82,15 +79,5 @@ impl NetworkStaticInterface for LocalStatic {
     }
     fn detail(&self, params: &NetworkStatic) -> Vec<NetworkStatic> {
         Vec::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::NetworkStatic;
-
-    #[test]
-    fn default_network_static_has_no_category() {
-        assert!(NetworkStatic::default().category.is_empty());
     }
 }

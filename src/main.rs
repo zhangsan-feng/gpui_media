@@ -15,7 +15,6 @@ use log::{Level, info};
 use reqwest_client::ReqwestClient;
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
-use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 

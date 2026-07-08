@@ -1,11 +1,7 @@
-use crate::com::window_center_options;
 use crate::drive;
 use crate::drive::music_player::MusicPlayer;
-use crate::drive::video_player::VideoPlayer;
-use crate::state::GlobalState;
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::Root;
 use gstreamer as gst;
 use gstreamer::prelude::ElementExt as GstElementExt;
 use gstreamer::prelude::*;
@@ -16,16 +12,16 @@ use std::time::Duration;
 use uuid::Uuid;
 
 impl MusicPlayer {
-    fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) {
-        cx.open_window(
-            window_center_options(window, 1300., 700.),
-            move |window, app| {
-                let view = app.new(|cx| VideoPlayer::new(window, cx));
-                app.new(|cx| Root::new(view, window, cx))
-            },
-        )
-        .expect("open window failed");
-    }
+    // fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) {
+    //     cx.open_window(
+    //         window_center_options(window, 1300., 700.),
+    //         move |window, app| {
+    //             let view = app.new(|cx| VideoPlayer::new(window, cx));
+    //             app.new(|cx| Root::new(view, window, cx))
+    //         },
+    //     )
+    //     .expect("open window failed");
+    // }
 
     fn handler_local_file(&self, path: &Path) -> Option<drive::NetworkStatic> {
         if !path.is_file() {
@@ -175,8 +171,6 @@ impl MusicPlayer {
 
         self.play_err = None;
         self.is_player = false;
-
-
 
         cx.spawn(async move |this, cx| {
             let res = tokio::spawn(async move { player.play(player.source.as_str()) });

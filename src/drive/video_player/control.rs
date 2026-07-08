@@ -1,13 +1,11 @@
 use crate::com::window_center_options;
 use crate::drive;
 use crate::drive::video_player::VideoPlayer;
-use crate::state::GlobalState;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;
 use gstreamer as gst;
 use gstreamer::prelude::ElementExt as GstElementExt;
-use gstreamer::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -145,8 +143,6 @@ impl VideoPlayer {
         let player = self.current_player.clone();
         self.last_error = None;
         self.is_player = false;
-
-
 
         cx.spawn(async move |this, cx| {
             let res = tokio::spawn(async move { player.play(player.source.as_str()) });
