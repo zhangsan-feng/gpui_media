@@ -27,7 +27,6 @@ impl HomeView {
             video_recommend_page: cx.new(|cx| VideoPage::new(window, cx)),
             video_player_page: cx.new(|cx| VideoPlayer::new(window, cx)),
         };
-
         s
     }
 }
@@ -57,8 +56,26 @@ impl HomeView {
                 }
                 style
             })
-            .on_click(cx.listener(move |this, _, _, _| {
+            .on_click(cx.listener(move |this, _, _, cx| {
                 this.select_id = page;
+                match page {
+                    Page::MusicPage => {
+                        // this.music_recommend_page.update(cx, |this, cx|{
+                        //     this.init_data(cx)
+                        // })
+                    }
+                    Page::VideoPage => {
+                        // this.video_recommend_page.update(cx, |this, cx|{
+                        //     this.init_data(cx);
+                        // })
+                    }
+
+                    Page::VideoPlayer => {
+                        // this.video_player_page.update(cx, |this, cx|{
+                        //
+                        // })
+                    }
+                }
             }))
             .bg(if is_selected {
                 rgb_to_u32(211, 227, 253)

@@ -1,4 +1,3 @@
-
 use futures_util::StreamExt;
 use gpui::http_client::http::HeaderMap;
 use gpui::*;

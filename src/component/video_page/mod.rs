@@ -42,11 +42,11 @@ impl VideoPage {
             search_result: HashMap::new(),
             vm_scroll_handler: VirtualListScrollHandle::new(),
         };
-        // s.init_recommend_videos(window, cx);
+        // s.init_data( cx);
         s
     }
 
-    pub fn init_recommend_videos(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn init_data(&mut self, cx: &mut Context<Self>) {
         let mut cx_async = cx.to_async().clone();
         let entity = cx.entity().clone();
         self.is_loading = true;
@@ -203,7 +203,7 @@ impl VideoPage {
         }
 
         let available_width =
-            (window.bounds().size.width.as_f32() - 232.).max(VIDEO_CARD_MIN_WIDTH);
+            (window.bounds().size.width.as_f32() - 100.).max(VIDEO_CARD_MIN_WIDTH);
         let columns =
             self.video_grid_columns(available_width, VIDEO_CARD_MIN_WIDTH, VIDEO_GRID_GAP);
         let row_count = self.video_grid_rows(items.len(), columns);
@@ -386,7 +386,7 @@ impl Render for VideoPage {
                         div()
                             .flex_1()
                             .h_full()
-                            .w(px(window.bounds().size.width.as_f32() - 200.))
+                            .w(px(window.bounds().size.width.as_f32() - 100.))
                             .child(match self.current_page {
                                 Page::RecommendPage => {
                                     self.recommend_content(window, cx).into_any_element()

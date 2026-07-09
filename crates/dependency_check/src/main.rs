@@ -1,5 +1,3 @@
-#![windows_subsystem = "windows"]
-
 mod gui;
 mod platform;
 use crate::gui::Gui;

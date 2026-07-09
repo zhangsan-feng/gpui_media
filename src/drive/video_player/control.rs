@@ -1,6 +1,6 @@
 use crate::com::window_center_options;
 use crate::drive;
-use crate::drive::video_player::VideoPlayer;
+use crate::drive::video_player::{PlatState, VideoPlayer};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;
@@ -82,13 +82,13 @@ impl VideoPlayer {
             return;
         }
         self.current_player = next;
-        self.refresh(cx);
+        self.play(cx);
     }
 
     fn current_playlist_index(&self) -> Option<usize> {
         self.player_list
             .iter()
-            .position(|item| item.source == self.current_player.source)
+            .position(|item| item.id == self.current_player.id)
     }
 
     pub(crate) fn prev_video(&mut self, cx: &mut Context<Self>) {
@@ -117,16 +117,15 @@ impl VideoPlayer {
         self.switch_to_index(index, cx);
     }
 
-    pub(crate) fn refresh(&mut self, cx: &mut Context<Self>) {
-        self.reset_pipeline();
-        self.play(cx)
-    }
-
     pub(crate) fn toggle_play(&mut self, cx: &mut Context<Self>) {
-        if self.is_player {
-            self.pause();
-        } else {
-            self.play(cx);
+        match &self.play_state {
+            PlatState::Playing => {
+                self.pause();
+            }
+            PlatState::Paused | PlatState::UnLoading | PlatState::Error(_) => {
+                self.play(cx);
+            }
+            _ => {}
         }
     }
 
@@ -140,10 +139,11 @@ impl VideoPlayer {
                 self.current_player = player.clone();
             }
         };
-        let player = self.current_player.clone();
-        self.last_error = None;
-        self.is_player = false;
 
+        self.reset_pipeline();
+        let player = self.current_player.clone();
+        self.play_state = PlatState::Loading;
+        cx.notify();
         cx.spawn(async move |this, cx| {
             let res = tokio::spawn(async move { player.play(player.source.as_str()) });
 
@@ -153,15 +153,17 @@ impl VideoPlayer {
                         this.current_player.source = val;
                         if let Err(err) = this.set_pipeline() {
                             this.reset_pipeline();
-                            this.last_error = Some(format!("failed to build pipeline: {err}"));
+                            this.play_state = PlatState::Error("播放失败".to_string());
+                            log::debug!("{}", err.backtrace());
                             cx.notify();
                             return;
                         }
 
                         if let Some(playbin) = &this.video_frame_pipeline {
                             let _ = playbin.set_state(gst::State::Playing);
-                            this.is_player = true;
+                            // this.play_state = PlatState::Playing;
                             this.start_event_bus(cx);
+                            this.start_loading_timeout_task(cx);
                             this.start_progress_task(cx);
                             this.start_frame_task(cx);
                         }
@@ -171,7 +173,8 @@ impl VideoPlayer {
                 Err(err) => {
                     let _ = this.update(cx, |this, cx| {
                         this.reset_pipeline();
-                        this.last_error = Some(format!("failed to resolve video source: {err}"));
+                        this.play_state = PlatState::Error("播放失败".to_string());
+                        log::debug!("{}", err.to_string());
                         cx.notify();
                     });
                 }
@@ -184,6 +187,6 @@ impl VideoPlayer {
         if let Some(playbin) = &self.video_frame_pipeline {
             let _ = playbin.set_state(gst::State::Paused);
         }
-        self.is_player = false;
+        self.play_state = PlatState::Paused;
     }
 }

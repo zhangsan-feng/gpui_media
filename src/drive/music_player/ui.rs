@@ -353,14 +353,17 @@ impl MusicPlayer {
         .track_scroll(&self.vm_scroll_handle)
     }
 
-    pub(crate) fn player_list_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn player_list_ui(&self,window:&mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let menu_h = window.bounds().size.height * 0.6;
+        let menu_w = window.bounds().size.width * 0.6;
+
         Popover::new("music-player-open-popover")
             .anchor(Anchor::BottomCenter)
             .trigger(Button::new("show-form").label("播放列表").outline())
             .child(
                 div()
-                    .w(px(760.))
-                    .h(px(560.))
+                    .h(menu_h)
+                    .w(menu_w)
                     .overflow_hidden()
                     .child(
                         v_flex()
@@ -405,7 +408,7 @@ impl MusicPlayer {
                     .with_animation(
                         "music-player-open-popover-animation",
                         Animation::new(Duration::from_millis(550)).with_easing(ease_in_out),
-                        |el, delta| el.opacity(0.2 + 0.8 * delta).h(px(12. + 548. * delta)),
+                        move |el, delta| el.opacity(0.2 + 0.8 * delta).h(menu_h * delta.max(0.02)),
                     ),
             )
     }
@@ -460,7 +463,7 @@ impl MusicPlayer {
                     .with_animation(
                         "music-player-lyrics-popover-animation",
                         Animation::new(Duration::from_millis(360)).with_easing(ease_in_out),
-                        |el, delta| el.opacity(0.15 + 0.85 * delta).h(px(20. + 340. * delta)),
+                        |el, delta| el.opacity(0.2 + 0.8 * delta).h(px(20. + 340. * delta)),
                     ),
             )
     }

@@ -1,7 +1,6 @@
-use gpui::{Context, Entity, EventEmitter, Global, WindowId};
 use crate::drive;
 use crate::drive::NetworkStatic;
-
+use gpui::{Context, Entity, EventEmitter, Global, WindowId};
 
 #[derive(Clone)]
 pub struct State {}

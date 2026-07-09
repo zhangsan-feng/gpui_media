@@ -1,5 +1,3 @@
-#![windows_subsystem = "windows"]
-
 mod com;
 mod component;
 mod drive;
@@ -15,12 +13,16 @@ use log::{Level, info};
 use reqwest_client::ReqwestClient;
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub fn logger_init(logger_path: &str) {
-    let mut dispatch = fern::Dispatch::new();
-    dispatch = dispatch
+pub fn logger_init(log_dir: impl AsRef<Path>, date_format: &str) {
+    let log_dir = log_dir.as_ref();
+    std::fs::create_dir_all(log_dir).expect("create log directory failed");
+
+    let log_file = log_dir.join(format!("{}.log", chrono::Local::now().format(date_format)));
+
+    fern::Dispatch::new()
         .format(|out, message, record| {
             let file = record.file().unwrap_or("<unknown>");
             let line = record.line().unwrap_or(0);
@@ -37,16 +39,12 @@ pub fn logger_init(logger_path: &str) {
             metadata.level() == Level::Info && !metadata.target().starts_with("symphonia")
         })
         .level(log::LevelFilter::Info)
-        .level(log::LevelFilter::Error)
-        .level(log::LevelFilter::Trace)
-        .level(log::LevelFilter::Warn)
-        .level(log::LevelFilter::Debug)
-        .chain(std::io::stdout());
-    dispatch.apply().unwrap();
+        .chain(std::io::stdout())
+        .chain(fern::log_file(&log_file).expect("open log file failed"))
+        .apply()
+        .expect("init logger failed");
 
-    info!("init logger success");
-
-    let _ = logger_path;
+    info!("init logger success: {}", log_file.display());
 }
 
 #[derive(RustEmbed)]
@@ -104,7 +102,7 @@ impl AssetSource for MergedAssets {
 
 #[tokio::main]
 async fn main() {
-    logger_init("./");
+    logger_init("./logs", "%Y-%m-%d");
 
     let http_client = ReqwestClient::user_agent("gpui").unwrap();
     let assets = MergedAssets {
@@ -117,7 +115,7 @@ async fn main() {
 
     app.run(move |cx| {
         let mut window_options = WindowOptions::default();
-        let window_size = size(px(900.), px(600.));
+        let window_size = size(px(1200.), px(600.));
         window_options.window_bounds = Some(WindowBounds::centered(window_size, cx));
         window_options.window_min_size = Some(window_size);
         window_options.titlebar = Some(TitlebarOptions {

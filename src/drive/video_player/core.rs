@@ -1,11 +1,12 @@
 use crate::drive;
-use crate::drive::video_player::{FrameBuffer, VideoPlayer};
+use crate::drive::video_player::{FrameBuffer, PlatState, VideoPlayer};
 use crate::state::StateEvent::{TogglePlayVideo, UpdateVideoPlayList};
 use crate::state::{GlobalState, StateEvent};
 use gpui::http_client::http::header;
 use gpui::*;
 use gpui::{Context, RenderImage};
 use gpui_component::VirtualListScrollHandle;
+use gpui_component::input::InputState;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer::prelude::{ElementExt, ElementExtManual};
@@ -25,13 +26,14 @@ impl VideoPlayer {
         let mut s = Self {
             current_player: drive::NetworkStatic::default(),
             player_list: Vec::from([]),
+            play_state: PlatState::UnLoading,
             video_request_headers: headers,
             vm_scroll_handle: VirtualListScrollHandle::new(),
             video_player_volume: 0.6,
             video_frame_pipeline: None,
             video_frame_data: None,
             video_player_duration: Duration::from_secs(0),
-            is_player: false,
+
             video_total_duration: None,
             video_frame_size: 16.0 / 9.0,
             video_frame_bounds: None,
@@ -42,20 +44,20 @@ impl VideoPlayer {
             progress_task: None,
             frame_task: None,
             bus_watch_task: None,
+            loading_timeout_task: None,
             frame_buffer: Arc::new(Mutex::new(FrameBuffer::default())),
             last_rendered_frame_sequence: 0,
             render_image: None,
-            // frame_thread: None,
             stop_frames: Arc::new(AtomicBool::new(false)),
-            last_error: None,
             bus_watch_started: false,
             pending_drop_images: Vec::new(),
+            input_text: cx.new(|cx| InputState::new(window, cx)),
         };
         s.init_subscribe(window_id, cx);
         s
     }
 
-    fn init_subscribe(&mut self, window_id:WindowId, cx: &mut Context<Self>) {
+    fn init_subscribe(&mut self, window_id: WindowId, cx: &mut Context<Self>) {
         let state_handler = cx.global::<GlobalState>().0.clone();
         cx.subscribe(
             &state_handler,
@@ -71,8 +73,7 @@ impl VideoPlayer {
                         this.player_list = data.clone();
                     }
                 }
-                _ => {}
-                // ############################################################################# 跨组件传递数据
+                _ => {} // ############################################################################# 跨组件传递数据
             },
         )
         .detach();
@@ -122,7 +123,7 @@ impl VideoPlayer {
         let appsink = gst_app::AppSink::builder()
             .caps(&caps)
             .sync(true)
-            .max_buffers(3)
+            .max_buffers(8)
             .drop(true)
             .callbacks(
                 gst_app::AppSinkCallbacks::builder()
@@ -208,16 +209,17 @@ impl VideoPlayer {
         }
         self.video_frame_pipeline = None;
         self.video_frame_data = None;
-        self.is_player = false;
+        self.play_state = PlatState::UnLoading;
         self.video_total_duration = None;
         self.video_player_duration = Duration::from_secs(0);
         self.is_dragging_progress_bar = false;
         self.pending_seek_position = None;
-        self.last_error = None;
+
         self.bus_watch_started = false;
         self.progress_task = None;
         self.frame_task = None;
         self.bus_watch_task = None;
+        self.loading_timeout_task = None;
         self.last_rendered_frame_sequence = 0;
         if let Some(old) = self.render_image.take() {
             self.pending_drop_images.push(old);
@@ -256,6 +258,35 @@ impl VideoPlayer {
         self.stop_frames.store(true, Ordering::Relaxed);
     }
 
+    // 监听首帧加载超时
+    pub(crate) fn start_loading_timeout_task(&mut self, cx: &mut Context<Self>) {
+        if self.loading_timeout_task.is_some() {
+            return;
+        }
+
+        let source = self.current_player.source.clone();
+        self.loading_timeout_task = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_secs(30))
+                .await;
+
+            let _ = this.update(cx, |this, cx| {
+                let still_loading_same_source = this.current_player.source == source
+                    && this.video_frame_pipeline.is_some()
+                    && this.render_image.is_none();
+
+                this.loading_timeout_task = None;
+                if still_loading_same_source {
+                    log::info!("[video:loading-timeout] source={source}");
+                    this.reset_pipeline();
+                    this.play_state = PlatState::Error("加载视频源超时".to_string());
+                    cx.notify();
+                }
+            });
+        }));
+    }
+
+    // 监听总线消息
     pub(crate) fn start_event_bus(&mut self, cx: &mut Context<Self>) {
         if self.bus_watch_started {
             return;
@@ -270,25 +301,103 @@ impl VideoPlayer {
         self.bus_watch_started = true;
         self.bus_watch_task = Some(cx.spawn(async move |this, cx| {
             loop {
-                // 监听总线消息
                 cx.background_executor()
-                    .timer(Duration::from_millis(1500))
+                    .timer(Duration::from_millis(100))
                     .await;
 
                 let mut stop_loop = false;
                 while let Some(msg) = bus.timed_pop(gst::ClockTime::from_mseconds(0)) {
                     match msg.view() {
+                        // 播放异常
                         gst::MessageView::Error(err) => {
+                            log::info!(
+                                "[gst:error] source={} error={} debug={:?}",
+                                msg.src()
+                                    .map(|src| src.path_string())
+                                    .unwrap_or_else(|| "unknown".into()),
+                                err.error(),
+                                err.debug()
+                            );
                             let _ = this.update(cx, |this, cx| {
-                                this.last_error =
-                                    Some(format!("{} ({:?})", err.error(), err.debug()));
-                                this.is_player = false;
+                                this.play_state = PlatState::Error("播放失败".to_string());
+                                log::info!("{}", format!("{} ({:?})", err.error(), err.debug()));
                                 cx.notify();
                             });
                             stop_loop = true;
                             break;
                         }
+
+                        // 警告信息
+                        gst::MessageView::Warning(warn) => {
+                            log::info!(
+                                "[gst:warning] source={} warning={} debug={:?}",
+                                msg.src()
+                                    .map(|src| src.path_string())
+                                    .unwrap_or_else(|| "unknown".into()),
+                                warn.error(),
+                                warn.debug()
+                            );
+                        }
+
+                        // 播放的缓冲
+                        gst::MessageView::Buffering(buffering) => {
+                            let percent = buffering.percent();
+                            log::info!("[gst:buffering] {percent}%");
+
+                            if percent < 100 {
+                                let _ = playbin.set_state(gst::State::Paused);
+                                let _ = this.update(cx, |this, cx| {
+                                    this.play_state =
+                                        PlatState::Cache(format!("缓冲中 {percent}%"));
+                                    cx.notify();
+                                });
+                            } else {
+                                let _ = playbin.set_state(gst::State::Playing);
+                                let _ = this.update(cx, |this, cx| {
+                                    this.play_state = PlatState::Loading;
+                                    cx.notify();
+                                });
+                            }
+                        }
+
+                        // 监听播放状态
+                        gst::MessageView::StateChanged(state) => {
+                            if msg
+                                .src()
+                                .map(|src| src.name() == "video-playbin")
+                                .unwrap_or(false)
+                            {
+                                log::info!(
+                                    "[gst:state] {:?} -> {:?} pending={:?}",
+                                    state.old(),
+                                    state.current(),
+                                    state.pending()
+                                );
+                            }
+                        }
+
+                        // 同步视频和音频轨道
+                        gst::MessageView::Latency(_) => {
+                            log::info!("recalculating latency");
+                            if let Ok(bin) = playbin.clone().dynamic_cast::<gst::Bin>() {
+                                let _ = bin.recalculate_latency();
+                            }
+                        }
+
+                        //  组件内部的消息
+                        gst::MessageView::Element(element) => {
+                            if let Some(structure) = element.structure() {
+                                let source = msg
+                                    .src()
+                                    .map(|src| src.name().to_string())
+                                    .unwrap_or_else(|| "unknown".into());
+                                log::info!("[gst:element] {} from {}", structure.name(), source);
+                            }
+                        }
+
+                        // 播放结束 读取不到 视频流的数据
                         gst::MessageView::Eos(_) => {
+                            log::info!("[gst:eos]");
                             let _ = this.update(cx, |this, cx| {
                                 this.next_video(cx);
                                 cx.notify();
@@ -314,15 +423,15 @@ impl VideoPlayer {
         }));
     }
 
+    // 刷新gpui 的进度条
     pub(crate) fn start_progress_task(&mut self, cx: &mut Context<Self>) {
         if self.progress_task.is_some() {
             return;
         }
         self.progress_task = Some(cx.spawn(async move |this, cx| {
             loop {
-                // 刷新gpui 的进度条 每秒刷新多少次
                 cx.background_executor()
-                    .timer(Duration::from_millis(30))
+                    .timer(Duration::from_millis(200))
                     .await;
                 let should_continue = this
                     .update(cx, |this, cx| this.update_progress(cx))
@@ -334,6 +443,7 @@ impl VideoPlayer {
         }));
     }
 
+    //  刷新视频的帧
     pub(crate) fn start_frame_task(&mut self, cx: &mut Context<Self>) {
         if self.frame_task.is_some() {
             return;
@@ -341,7 +451,6 @@ impl VideoPlayer {
         let buffer = self.frame_buffer.clone();
         self.frame_task = Some(cx.spawn(async move |this, cx| {
             loop {
-                //  视频刷新率 每秒刷新多少帧的图片
                 cx.background_executor()
                     .timer(Duration::from_millis(30))
                     .await;
@@ -376,7 +485,8 @@ impl VideoPlayer {
             }
         }
 
-        let should_continue = self.is_player || self.is_dragging_progress_bar;
+        let should_continue =
+            self.play_state == PlatState::Playing || self.is_dragging_progress_bar;
         if !should_continue {
             self.progress_task = None;
         }
@@ -404,6 +514,7 @@ impl VideoPlayer {
             }
             self.last_rendered_frame_sequence = seq;
             self.video_frame_size = (width as f32 / height as f32).max(0.01);
+            self.play_state = PlatState::Playing;
             cx.notify();
         }
 

@@ -1,14 +1,16 @@
 use crate::component::home::rgb_to_u32;
-use crate::drive::video_player::{ProgressDrag, VideoPlayer, VolumeDrag};
+use crate::drive::video_player::{PlatState, ProgressDrag, VideoPlayer, VolumeDrag};
+use crate::drive::{LocalStatic, NetworkStatic};
 use gpui::*;
 use gpui_component::ElementExt;
 use gpui_component::button::Button;
+use gpui_component::input::Input;
 use gpui_component::popover::Popover;
-use gpui_component::scroll::{ScrollableElement, Scrollbar, ScrollbarAxis, ScrollbarShow};
+use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
 use gpui_component::text::markdown;
-
 use gpui_component::{h_flex, v_flex, v_virtual_list};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 impl VideoPlayer {
@@ -36,11 +38,6 @@ impl VideoPlayer {
                             rgb_to_u32(96, 165, 250)
                         } else {
                             rgb_to_u32(226, 232, 240)
-                        };
-                        let title = if data.name.is_empty() {
-                            "未命名视频".to_string()
-                        } else {
-                            data.name.clone()
                         };
 
                         div().w_full().h_full().px_2().py_1().child(
@@ -101,7 +98,7 @@ impl VideoPlayer {
                                                         .text_size(px(14.))
                                                         .font_weight(FontWeight::SEMIBOLD)
                                                         .text_color(rgb_to_u32(15, 23, 42))
-                                                        .child(title),
+                                                        .child(data.name.clone()),
                                                 )
                                                 .child(
                                                     div()
@@ -145,9 +142,13 @@ impl VideoPlayer {
                                     Button::new(("video-refresh-btn", index))
                                         .label("刷新")
                                         .outline()
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.refresh(cx);
-                                        })),
+                                        .on_click({
+                                            let c = data.clone();
+                                            cx.listener(move |this, _, _, cx| {
+                                                this.current_player = c.clone();
+                                                this.play(cx);
+                                            })
+                                        }),
                                 ),
                         )
                     })
@@ -157,45 +158,83 @@ impl VideoPlayer {
         .track_scroll(&self.vm_scroll_handle)
     }
 
-    pub(crate) fn player_list_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn player_menu_ui(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let menu_h = window.bounds().size.height * 0.6;
+        let menu_w = window.bounds().size.width * 0.6;
+
         Popover::new("video-player-open-popover")
             .anchor(Anchor::BottomRight)
-            .trigger(Button::new("show-form").label("播放列表").outline())
+            .trigger(Button::new("show-form").label("菜单").outline())
             .child(
                 div()
-                    .h(px(560.))
-                    .w(px(760.))
+                    .h(menu_h)
+                    .w(menu_w)
                     .overflow_hidden()
                     .child(
                         v_flex()
-                            .gap_2()
-                            .p_2()
+                            .gap_3()
+                            .p_3()
                             .size_full()
-                            // .child(
-                            //     h_flex()
-                            //         .gap_2()
-                            //         .child(
-                            //             Input::new(&self.input_text)
-                            //         )
-                            //         .child(
-                            //             Button::new("load-video-url-btn")
-                            //                 .label("加载")
-                            //                 .on_click(cx.listener(|this, _, _, cx|{
-                            //                     // this.player_list.push(this.input_text.read(cx).text().to_string()) ;
-                            //                     // this.refresh(cx);
-                            //                 }))
-                            //         )
-                            // )
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .rounded_lg()
+                                    .bg(rgb_to_u32(248, 250, 252))
+                                    .border_1()
+                                    .border_color(rgb_to_u32(148, 163, 184))
+                                    .p_2()
+                                    .gap_3()
+                                    .child(Input::new(&self.input_text))
+                                    .child(
+                                        Button::new("load-video-url-btn").label("加载").on_click(
+                                            cx.listener(|this, _, _, cx| {
+                                                let source =
+                                                    this.input_text.read(cx).text().to_string();
+                                                let id = format!(
+                                                    "{:x}",
+                                                    md5::compute(source.as_bytes())
+                                                );
+                                                let player = NetworkStatic {
+                                                    id: id.clone(),
+                                                    name: "".to_string(),
+                                                    img: "".to_string(),
+                                                    author: "".to_string(),
+                                                    category: "".to_string(),
+                                                    headers: Default::default(),
+                                                    source: source.clone(),
+                                                    func: Arc::new(LocalStatic),
+                                                };
+
+                                                this.current_player = player.clone();
+
+                                                if !this
+                                                    .player_list
+                                                    .iter()
+                                                    .any(|data| data.id == id)
+                                                {
+                                                    this.player_list.push(player);
+                                                }
+                                                this.play(cx);
+                                            }),
+                                        ),
+                                    ),
+                            )
                             .child(
                                 h_flex().items_center().justify_between().child(
                                     div()
-                                        .px_3()
-                                        .py_1()
-                                        .rounded_full()
-                                        .bg(rgb_to_u32(241, 245, 249))
+                                        .rounded_md()
+                                        .p_2()
+                                        .bg(rgb_to_u32(37, 99, 235))
                                         .text_size(px(11.))
-                                        .text_color(rgb_to_u32(71, 85, 105))
-                                        .child(format!("{} 个视频", self.player_list.len())),
+                                        .text_color(rgb_to_u32(255, 255, 255))
+                                        .child(format!(
+                                            "当前播放列表 总共有 {} 个视频",
+                                            self.player_list.len()
+                                        )),
                                 ),
                             )
                             .child(
@@ -203,9 +242,9 @@ impl VideoPlayer {
                                     .flex_1()
                                     .border_1()
                                     .rounded_lg()
-                                    .border_color(rgb_to_u32(226, 232, 240))
+                                    .border_color(rgb_to_u32(148, 163, 184))
                                     .bg(rgb_to_u32(248, 250, 252))
-                                    .p_2()
+                                    .p_3()
                                     .gap_2()
                                     .child(self.player_list_vm(cx))
                                     .child(
@@ -220,7 +259,7 @@ impl VideoPlayer {
                     .with_animation(
                         "video-player-open-popover-animation",
                         Animation::new(Duration::from_millis(550)).with_easing(ease_in_out),
-                        |el, delta| el.opacity(0.2 + 0.8 * delta).h(px(12. + 548. * delta)),
+                        move |el, delta| el.opacity(0.2 + 0.8 * delta).h(menu_h * delta.max(0.02)),
                     ),
             )
     }
@@ -298,7 +337,11 @@ impl VideoPlayer {
         )
     }
 
-    pub(crate) fn player_progress_control_ui(&self, _: &mut Window, cx: &mut Context<Self>, ) -> impl IntoElement {
+    pub(crate) fn player_progress_control_ui(
+        &self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let total = self
             .video_total_duration
             .unwrap_or_else(|| Duration::from_secs(0));
@@ -431,7 +474,7 @@ impl VideoPlayer {
             ))
             .child(self.render_control_button(
                 "video_play_button",
-                if self.is_player {
+                if self.play_state == PlatState::Playing {
                     div().child("◼")
                 } else {
                     div().child("▶")
@@ -474,8 +517,7 @@ impl VideoPlayer {
             .overflow_hidden()
             .rounded_lg()
             .border_1()
-            .border_color(rgb_to_u32(30, 41, 59))
-            .bg(rgb_to_u32(15, 23, 42))
+            .border_color(rgb_to_u32(228, 231, 235))
             .on_prepaint({
                 let video_frame_entity = cx.entity();
                 move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
@@ -502,44 +544,42 @@ impl VideoPlayer {
                     .flex()
                     .justify_center()
                     .items_center()
-                    .bg(rgb_to_u32(2, 6, 23))
-                    .child(if let Some((frame_width, frame_height)) = fitted_frame_size {
-                        img(frame)
-                            .w(px(frame_width))
-                            .h(px(frame_height))
-                            .object_fit(ObjectFit::Cover)
-                            .into_any_element()
-                    } else {
-                        img(frame)
-                            .size_full()
-                            .object_fit(ObjectFit::Cover)
-                            .into_any_element()
-                    })
+                    .child(
+                        if let Some((frame_width, frame_height)) = fitted_frame_size {
+                            img(frame)
+                                .w(px(frame_width))
+                                .h(px(frame_height))
+                                .object_fit(ObjectFit::Cover)
+                                .into_any_element()
+                        } else {
+                            img(frame)
+                                .size_full()
+                                .object_fit(ObjectFit::Cover)
+                                .into_any_element()
+                        },
+                    )
                     .into_any_element()
             } else {
                 v_flex()
-                    .flex_grow(1.)
+                    .absolute()
+                    .inset_0()
+                    .flex()
                     .justify_center()
                     .items_center()
-                    .size_full()
-                    .overflow_hidden()
-                    .overflow_scrollbar()
                     .child(
-                        div()
-                            .px_4()
-                            .py_2()
-                            .rounded_full()
-                            .bg(rgb_to_u32(30, 41, 59))
-                            .child(
-                                markdown(if let Some(player_err) = self.last_error.clone() {
-                                    player_err.to_string()
-                                } else {
-                                    "没有加载视频来源".to_string()
-                                })
-                                .selectable(true)
-                                .text_color(rgb(0xCBD5E1))
-                                .cursor_text(),
-                            ),
+                        div().px_4().child(
+                            markdown(match &self.play_state {
+                                PlatState::Playing => "".to_string(),
+                                PlatState::Paused => "".to_string(),
+                                PlatState::Loading => "加载中".to_string(),
+                                PlatState::UnLoading => "没有加载播放来源".to_string(),
+                                PlatState::Error(err) => err.to_string(),
+                                PlatState::Cache(val) => val.clone(),
+                            })
+                            .selectable(true)
+                            .text_color(rgb(0xCBD5E1))
+                            .cursor_text(),
+                        ),
                     )
                     .into_any_element()
             })

@@ -16,8 +16,8 @@ struct ProgressDrag;
 struct VolumeDrag;
 
 pub struct MusicPlayer {
-    current_player: drive::NetworkStatic,
-    player_list: Vec<drive::NetworkStatic>,
+    pub current_player: drive::NetworkStatic,
+    pub player_list: Vec<drive::NetworkStatic>,
     is_player: bool,
     vm_scroll_handle: VirtualListScrollHandle,
     play_err: Option<String>,
@@ -53,7 +53,7 @@ impl Render for MusicPlayer {
                         h_flex()
                             .gap_2()
                             .justify_center()
-                            .child(self.player_list_ui(cx))
+                            .child(self.player_list_ui(window, cx))
                             .child(self.player_control_ui(cx))
                             .child(self.player_volume_control_ui(cx))
                             .child(self.player_lyrics_ui()),
