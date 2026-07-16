@@ -115,7 +115,7 @@ async fn main() {
 
     app.run(move |cx| {
         let mut window_options = WindowOptions::default();
-        let window_size = size(px(1200.), px(600.));
+        let window_size = size(px(1200.), px(700.));
         window_options.window_bounds = Some(WindowBounds::centered(window_size, cx));
         window_options.window_min_size = Some(window_size);
         window_options.titlebar = Some(TitlebarOptions {
