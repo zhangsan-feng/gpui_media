@@ -5,7 +5,7 @@ use crate::state::{GlobalState, StateEvent};
 use gpui::http_client::http::header;
 use gpui::*;
 use gpui::{Context, RenderImage};
-use gpui_component::VirtualListScrollHandle;
+use gpui_component::{Root, VirtualListScrollHandle};
 use gpui_component::input::InputState;
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -15,6 +15,7 @@ use gstreamer_video as gst_video;
 use image::{Frame, RgbaImage};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use crate::com::window_center_options;
 use std::time::Duration;
 
 impl VideoPlayer {
@@ -24,6 +25,8 @@ impl VideoPlayer {
         let window_id = window.window_handle().window_id();
         let _ = gst::init();
         let mut s = Self {
+            window_id,
+            entity_id: cx.entity_id(),
             current_player: drive::NetworkStatic::default(),
             player_list: Vec::from([]),
             play_state: PlatState::UnLoading,
@@ -59,24 +62,63 @@ impl VideoPlayer {
 
     fn init_subscribe(&mut self, window_id: WindowId, cx: &mut Context<Self>) {
         let state_handler = cx.global::<GlobalState>().0.clone();
+        let self_entity_id = cx.entity_id().clone();
         cx.subscribe(
             &state_handler,
-            move |this: &mut Self, _model, event: &StateEvent, _cx| match event {
+            move |this: &mut Self, _model, event: &StateEvent, cx| match event {
                 // ############################################################################# 跨组件传递数据
-                TogglePlayVideo(event_window_id, data) => {
-                    if event_window_id.as_u64() == window_id.as_u64() {
+                TogglePlayVideo(event_window_id, event_entity_id, data) => {
+                    if event_window_id.as_u64() == window_id.as_u64()
+                        && self_entity_id == *event_entity_id
+                    {
                         this.current_player = data.clone();
+                        cx.notify();
                     }
                 }
-                UpdateVideoPlayList(event_window_id, data) => {
-                    if event_window_id.as_u64() == window_id.as_u64() {
+                UpdateVideoPlayList(event_window_id, event_entity_id, data) => {
+                    if event_window_id.as_u64() == window_id.as_u64()
+                        && self_entity_id == *event_entity_id
+                    {
                         this.player_list = data.clone();
+                        cx.notify();
                     }
                 }
                 _ => {} // ############################################################################# 跨组件传递数据
             },
         )
         .detach();
+    }
+
+
+    pub(crate) fn open_window(
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (WindowId, EntityId) {
+        let player_entity_id = Arc::new(Mutex::new(None));
+        let player_entity_id_for_window = player_entity_id.clone();
+        let handler = cx
+            .open_window(
+                window_center_options(window, 1300., 700.),
+                move |window, app| {
+                    let view = app.new(|cx| VideoPlayer::new(window, cx));
+                    *player_entity_id_for_window.lock().unwrap() = Some(view.entity_id());
+                    app.new(|cx| Root::new(view, window, cx))
+                },
+            )
+            .expect("open window failed");
+        let player_entity_id = player_entity_id
+            .lock()
+            .unwrap()
+            .expect("video player entity was not created");
+        (handler.window_id(), player_entity_id)
+    }
+
+    pub fn get_entity_id(&self) -> EntityId {
+        self.entity_id
+    }
+
+    pub fn get_window_id(&self) -> WindowId {
+        self.window_id
     }
 
     fn clock_to_duration(&self, clock: gst::ClockTime) -> Duration {

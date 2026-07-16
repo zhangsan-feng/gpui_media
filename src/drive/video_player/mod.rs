@@ -28,6 +28,8 @@ pub enum PlatState {
 }
 
 pub struct VideoPlayer {
+    window_id: WindowId,
+    entity_id: EntityId,
     pub current_player: NetworkStatic,
     pub player_list: Vec<NetworkStatic>,
     play_state: PlatState,
@@ -98,16 +100,18 @@ impl Render for VideoPlayer {
                 this.handle_file_drop(paths, cx);
             }))
             .size_full()
-            .p_2()
-            .gap_2()
+            .p_3()
+            .gap_3()
+            .bg(rgb_to_u32(255, 255, 255))
             .child(self.video_frame_ui(cx))
             .child(
                 v_flex()
                     .p_2()
                     .gap_2()
-                    .rounded_lg()
+                    .rounded_xl()
                     .border_1()
-                    .border_color(rgb_to_u32(228, 231, 235))
+                    .border_color(rgb_to_u32(238, 232, 244))
+                    .bg(rgb_to_u32(252, 249, 254))
                     .child(self.player_progress_control_ui(window, cx))
                     .child(
                         h_flex()

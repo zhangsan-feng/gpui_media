@@ -1,3 +1,4 @@
+use crate::component::home::rgb_to_u32;
 use crate::drive;
 use crate::drive::music_player::MusicPlayer;
 use crate::music_platform;
@@ -125,16 +126,18 @@ impl Render for MusicPage {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
-            .gap_2()
-            .p_2()
+            .gap_3()
+            .p_3()
+            .bg(rgb_to_u32(255, 255, 255))
             .child(
                 div()
                     .flex_grow(1.)
-                    .gap_2()
-                    .p_2()
-                    .border_color(rgb(0xE2E8F0))
+                    .gap_3()
+                    .p_3()
+                    .border_color(rgb(0xEEE8F4))
                     .border_1()
-                    .rounded_2xl(),
+                    .rounded_xl()
+                    .bg(rgb_to_u32(252, 249, 254)),
             )
             .child(div().child(self.music_player_page.clone().into_any_element()))
     }

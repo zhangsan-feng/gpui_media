@@ -1,7 +1,7 @@
 use anyhow::Context;
 use std::sync::Arc;
 
-use crate::com::HttpClient;
+use crate::com::request::HttpClient;
 use crate::drive::{MusicConvertLayer, PlatformInterface};
 use crate::music_platform::xmwav_music::headers;
 use log::info;

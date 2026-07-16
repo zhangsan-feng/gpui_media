@@ -1,4 +1,3 @@
-use crate::com::window_center_options;
 use crate::component::home::rgb_to_u32;
 use crate::drive::NetworkStatic;
 use crate::drive::video_player::VideoPlayer;
@@ -9,7 +8,7 @@ use gpui_component::button::Button;
 use gpui_component::input::Input;
 use gpui_component::input::InputState;
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
-use gpui_component::{Root, VirtualListScrollHandle};
+use gpui_component::VirtualListScrollHandle;
 use gpui_component::{h_flex, v_flex, v_virtual_list};
 use log::info;
 use std::collections::HashMap;
@@ -105,19 +104,6 @@ impl VideoPage {
         .detach();
     }
 
-    fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) -> WindowId {
-        let handler = cx
-            .open_window(
-                window_center_options(window, 1300., 700.),
-                move |window, app| {
-                    let view = app.new(|cx| VideoPlayer::new(window, cx));
-                    app.new(|cx| Root::new(view, window, cx))
-                },
-            )
-            .expect("open window failed");
-        handler.window_id()
-    }
-
     pub(crate) fn play_video(
         &self,
         data: NetworkStatic,
@@ -126,14 +112,18 @@ impl VideoPage {
     ) {
         let state_handler = cx.global::<GlobalState>().0.clone();
         let mut cx_async = cx.to_async().clone();
-        let window_id = self.open_window(window, cx);
+        let (window_id, player_entity_id) = VideoPlayer::open_window(window, cx);
 
         cx.spawn(move |_, _: &mut AsyncApp| async move {
             let res = tokio::spawn(async move { data.func.detail(&data) });
             match res.await {
                 Ok(r) => {
                     state_handler.update(&mut cx_async, |_, cx| {
-                        cx.emit(StateEvent::UpdateVideoPlayList(window_id, r.clone()))
+                        cx.emit(StateEvent::UpdateVideoPlayList(
+                            window_id,
+                            player_entity_id,
+                            r.clone(),
+                        ))
                     });
                 }
                 Err(e) => info!("tokio run error:{}", e),
@@ -331,20 +321,20 @@ impl Render for VideoPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
-            .gap_2()
-            .p_2()
-            .bg(rgb_to_u32(248, 250, 252))
+            .gap_3()
+            .p_3()
+            .bg(rgb_to_u32(255, 255, 255))
             .child(
                 h_flex()
                     .items_center()
-                    .h(px(80.))
+                    .h(px(64.))
                     .w_full()
-                    .gap_2()
-                    .p_2()
-                    .rounded_lg()
+                    .gap_3()
+                    .px_3()
+                    .rounded_xl()
                     .border_1()
-                    .border_color(rgb_to_u32(226, 232, 240))
-                    .bg(rgb_to_u32(255, 255, 255))
+                    .border_color(rgb_to_u32(238, 232, 244))
+                    .bg(rgb_to_u32(252, 249, 254))
                     .child(
                         div()
                             .flex_grow_1()

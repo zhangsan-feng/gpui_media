@@ -1,4 +1,4 @@
-use crate::com::HttpClient;
+use crate::com::request::HttpClient;
 use crate::drive::{MusicConvertLayer, PlatformInterface};
 use anyhow::Context;
 

@@ -1,6 +1,6 @@
 use crate::drive;
 use crate::drive::NetworkStatic;
-use gpui::{Context, Entity, EventEmitter, Global, WindowId};
+use gpui::{Context, Entity, EntityId, EventEmitter, Global, WindowId};
 
 #[derive(Clone)]
 pub struct State {}
@@ -8,8 +8,8 @@ pub struct State {}
 pub enum StateEvent {
     TogglePlayMusic(drive::NetworkStatic),
     UpdateMusicPlatyList(Vec<drive::NetworkStatic>),
-    TogglePlayVideo(WindowId, NetworkStatic),
-    UpdateVideoPlayList(WindowId, Vec<NetworkStatic>),
+    TogglePlayVideo(WindowId, EntityId, NetworkStatic),
+    UpdateVideoPlayList(WindowId, EntityId, Vec<NetworkStatic>),
 }
 
 impl EventEmitter<StateEvent> for State {}

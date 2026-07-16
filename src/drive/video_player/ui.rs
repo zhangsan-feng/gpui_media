@@ -3,7 +3,7 @@ use crate::drive::video_player::{PlatState, ProgressDrag, VideoPlayer, VolumeDra
 use crate::drive::{LocalStatic, NetworkStatic};
 use gpui::*;
 use gpui_component::ElementExt;
-use gpui_component::button::Button;
+use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::popover::Popover;
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
@@ -32,7 +32,7 @@ impl VideoPlayer {
                         let row_bg = if is_current {
                             rgb_to_u32(239, 246, 255)
                         } else {
-                            rgb_to_u32(255, 255, 255)
+                            rgb_to_u32(248, 250, 252)
                         };
                         let row_border = if is_current {
                             rgb_to_u32(96, 165, 250)
@@ -48,14 +48,14 @@ impl VideoPlayer {
                                 .items_center()
                                 .justify_between()
                                 .gap_3()
-                                .p_3()
+                                .p_2()
                                 .rounded_lg()
                                 .border_1()
                                 .border_color(row_border)
                                 .bg(row_bg)
                                 .hover(move |style| {
                                     style
-                                        .bg(rgb_to_u32(248, 250, 252))
+                                        .bg(rgb_to_u32(239, 246, 255))
                                         .border_color(rgb_to_u32(147, 197, 253))
                                 })
                                 .child(
@@ -66,7 +66,7 @@ impl VideoPlayer {
                                         .min_w_0()
                                         .child(
                                             div()
-                                                .size(px(30.))
+                                                .size(px(32.))
                                                 .rounded_full()
                                                 .bg(if is_current {
                                                     rgb_to_u32(219, 234, 254)
@@ -76,7 +76,8 @@ impl VideoPlayer {
                                                 .flex()
                                                 .items_center()
                                                 .justify_center()
-                                                .text_size(px(12.))
+                                                .text_size(px(11.))
+                                                .font_weight(FontWeight::BOLD)
                                                 .text_color(if is_current {
                                                     rgb_to_u32(37, 99, 235)
                                                 } else {
@@ -128,7 +129,7 @@ impl VideoPlayer {
                                 } else {
                                     Button::new(("video-play-btn", index))
                                         .label("播放")
-                                        .outline()
+                                        .primary()
                                         .on_click({
                                             let c = data.clone();
                                             cx.listener(move |this, _, _, cx| {
@@ -141,7 +142,7 @@ impl VideoPlayer {
                                 .child(
                                     Button::new(("video-refresh-btn", index))
                                         .label("刷新")
-                                        .outline()
+                                        .ghost()
                                         .on_click({
                                             let c = data.clone();
                                             cx.listener(move |this, _, _, cx| {
@@ -168,7 +169,7 @@ impl VideoPlayer {
 
         Popover::new("video-player-open-popover")
             .anchor(Anchor::BottomRight)
-            .trigger(Button::new("show-form").label("菜单").outline())
+            .trigger(Button::new("show-form").label("播放列表").outline())
             .child(
                 div()
                     .h(menu_h)
@@ -177,21 +178,23 @@ impl VideoPlayer {
                     .child(
                         v_flex()
                             .gap_3()
-                            .p_3()
+                            .p_4()
                             .size_full()
                             .child(
                                 h_flex()
                                     .items_center()
-                                    .rounded_lg()
-                                    .bg(rgb_to_u32(248, 250, 252))
+                                    .rounded_xl()
+                                    .bg(rgb_to_u32(241, 245, 249))
                                     .border_1()
-                                    .border_color(rgb_to_u32(148, 163, 184))
-                                    .p_2()
+                                    .border_color(rgb_to_u32(226, 232, 240))
+                                    .p_3()
                                     .gap_3()
                                     .child(Input::new(&self.input_text))
                                     .child(
-                                        Button::new("load-video-url-btn").label("加载").on_click(
-                                            cx.listener(|this, _, _, cx| {
+                                        Button::new("load-video-url-btn")
+                                            .label("加载视频")
+                                            .primary()
+                                            .on_click(cx.listener(|this, _, _, cx| {
                                                 let source =
                                                     this.input_text.read(cx).text().to_string();
                                                 let id = format!(
@@ -219,22 +222,20 @@ impl VideoPlayer {
                                                     this.player_list.push(player);
                                                 }
                                                 this.play(cx);
-                                            }),
-                                        ),
+                                            })),
                                     ),
                             )
                             .child(
                                 h_flex().items_center().justify_between().child(
                                     div()
-                                        .rounded_md()
-                                        .p_2()
-                                        .bg(rgb_to_u32(37, 99, 235))
+                                        .rounded_full()
+                                        .px_3()
+                                        .py_1()
+                                        .bg(rgb_to_u32(219, 234, 254))
                                         .text_size(px(11.))
-                                        .text_color(rgb_to_u32(255, 255, 255))
-                                        .child(format!(
-                                            "当前播放列表 总共有 {} 个视频",
-                                            self.player_list.len()
-                                        )),
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(rgb_to_u32(37, 99, 235))
+                                        .child(format!("{} 个视频", self.player_list.len())),
                                 ),
                             )
                             .child(
@@ -242,9 +243,9 @@ impl VideoPlayer {
                                     .flex_1()
                                     .border_1()
                                     .rounded_lg()
-                                    .border_color(rgb_to_u32(148, 163, 184))
-                                    .bg(rgb_to_u32(248, 250, 252))
-                                    .p_3()
+                                    .border_color(rgb_to_u32(226, 232, 240))
+                                    .bg(rgb_to_u32(241, 245, 249))
+                                    .p_2()
                                     .gap_2()
                                     .child(self.player_list_vm(cx))
                                     .child(
@@ -276,9 +277,9 @@ impl VideoPlayer {
                 .ml_auto()
                 .child(
                     div()
-                        .size(px(30.))
+                        .size(px(32.))
                         .rounded_full()
-                        .bg(rgb_to_u32(241, 245, 249))
+                        .bg(rgb_to_u32(239, 246, 255))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -293,10 +294,10 @@ impl VideoPlayer {
                 )
                 .child(
                     div()
-                        .h(px(6.))
+                        .h(px(7.))
                         .w(px(volume_bar_width))
                         .rounded_full()
-                        .bg(rgb_to_u32(203, 213, 225))
+                        .bg(rgb_to_u32(226, 232, 240))
                         .cursor_pointer()
                         .on_prepaint({
                             let volume_bar_entity = cx.entity();
@@ -328,7 +329,7 @@ impl VideoPlayer {
                         ))
                         .child(
                             div()
-                                .h(px(6.))
+                                .h(px(7.))
                                 .w(px(volume_bar_width * volume_ratio))
                                 .rounded_full()
                                 .bg(rgb_to_u32(59, 130, 246)),
@@ -363,10 +364,10 @@ impl VideoPlayer {
 
         v_flex().gap_2().child(
             div()
-                .h(px(6.))
+                .h(px(7.))
                 .w_full()
                 .rounded_full()
-                .bg(rgb_to_u32(203, 213, 225))
+                .bg(rgb_to_u32(226, 232, 240))
                 .cursor_pointer()
                 .on_prepaint({
                     let progress_bar_entity = progress_bar_entity.clone();
@@ -425,7 +426,7 @@ impl VideoPlayer {
                 )
                 .child(
                     div()
-                        .h(px(6.))
+                        .h(px(7.))
                         .w(px(progress_bar_width * progress_ratio))
                         .rounded_full()
                         .bg(rgb_to_u32(59, 130, 246)),
@@ -440,7 +441,7 @@ impl VideoPlayer {
         click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> impl IntoElement {
         div()
-            .size(px(34.))
+            .size(px(36.))
             .rounded_full()
             .bg(rgb_to_u32(248, 250, 252))
             .border_1()
@@ -465,6 +466,9 @@ impl VideoPlayer {
     pub(crate) fn player_control_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
         h_flex()
             .gap_2()
+            .p_1()
+            .rounded_full()
+            .bg(rgb_to_u32(241, 245, 249))
             .child(self.render_control_button(
                 "video_prev_button",
                 "<",
@@ -515,9 +519,10 @@ impl VideoPlayer {
             .justify_center()
             .items_center()
             .overflow_hidden()
-            .rounded_lg()
+            .rounded_xl()
+            .bg(rgb_to_u32(15, 23, 42))
             .border_1()
-            .border_color(rgb_to_u32(228, 231, 235))
+            .border_color(rgb_to_u32(30, 41, 59))
             .on_prepaint({
                 let video_frame_entity = cx.entity();
                 move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {

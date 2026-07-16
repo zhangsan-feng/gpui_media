@@ -1,9 +1,7 @@
-use crate::com::window_center_options;
 use crate::drive;
 use crate::drive::video_player::{PlatState, VideoPlayer};
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::Root;
 use gstreamer as gst;
 use gstreamer::prelude::ElementExt as GstElementExt;
 use std::path::Path;
@@ -11,16 +9,6 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 impl VideoPlayer {
-    fn open_window(&self, window: &mut Window, cx: &mut Context<Self>) {
-        cx.open_window(
-            window_center_options(window, 1300., 700.),
-            move |window, app| {
-                let view = app.new(|cx| VideoPlayer::new(window, cx));
-                app.new(|cx| Root::new(view, window, cx))
-            },
-        )
-        .expect("open window failed");
-    }
 
     fn handler_local_file(&self, path: &Path) -> Option<drive::NetworkStatic> {
         if !path.is_file() {

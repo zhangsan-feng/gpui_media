@@ -1,5 +1,5 @@
 use super::headers;
-use crate::com::HttpClient;
+use crate::com::request::HttpClient;
 use crate::drive::{NetworkStatic, NetworkStaticInterface};
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};

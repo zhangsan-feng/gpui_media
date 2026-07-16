@@ -1,5 +1,5 @@
 use super::headers;
-use crate::com::HttpClient;
+use crate::com::request::HttpClient;
 use crate::drive::{NetworkStatic, NetworkStaticInterface};
 use futures_util::future::join_all;
 use regex::Regex;
