@@ -258,13 +258,18 @@ impl VideoPlayer {
         self.stop_frames.store(true, Ordering::Relaxed);
     }
 
-    // 监听首帧加载超时
+
     pub(crate) fn start_loading_timeout_task(&mut self, cx: &mut Context<Self>) {
         if self.loading_timeout_task.is_some() {
             return;
         }
 
         let source = self.current_player.source.clone();
+
+        if source.starts_with("file://") {
+            return;
+        }
+
         self.loading_timeout_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor()
                 .timer(Duration::from_secs(30))
@@ -297,6 +302,9 @@ impl VideoPlayer {
         let Some(bus) = playbin.bus() else {
             return;
         };
+
+
+        let is_local_file = self.current_player.source.starts_with("file://");
 
         self.bus_watch_started = true;
         self.bus_watch_task = Some(cx.spawn(async move |this, cx| {
@@ -340,7 +348,7 @@ impl VideoPlayer {
                         }
 
                         // 播放的缓冲
-                        gst::MessageView::Buffering(buffering) => {
+                        gst::MessageView::Buffering(buffering) if !is_local_file => {
                             let percent = buffering.percent();
                             log::info!("[gst:buffering] {percent}%");
 
@@ -485,8 +493,11 @@ impl VideoPlayer {
             }
         }
 
-        let should_continue =
-            self.play_state == PlatState::Playing || self.is_dragging_progress_bar;
+        // Loading/Cache 阶段也要查询 duration，否则任务会在首帧到达前退出。
+        let should_continue = matches!(
+            self.play_state,
+            PlatState::Loading | PlatState::Playing | PlatState::Cache(_)
+        ) || self.is_dragging_progress_bar;
         if !should_continue {
             self.progress_task = None;
         }
@@ -514,7 +525,11 @@ impl VideoPlayer {
             }
             self.last_rendered_frame_sequence = seq;
             self.video_frame_size = (width as f32 / height as f32).max(0.01);
-            self.play_state = PlatState::Playing;
+            // 仅在首次加载阶段切换到 Playing。暂停后仍会继续收到已排队的帧，
+            // 不能让这些帧把用户刚刚选择的 Paused 状态覆盖掉。
+            if matches!(self.play_state, PlatState::Loading | PlatState::Cache(_)) {
+                self.play_state = PlatState::Playing;
+            }
             cx.notify();
         }
 

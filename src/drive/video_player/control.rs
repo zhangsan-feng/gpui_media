@@ -120,12 +120,30 @@ impl VideoPlayer {
     pub(crate) fn toggle_play(&mut self, cx: &mut Context<Self>) {
         match &self.play_state {
             PlatState::Playing => {
-                self.pause();
+                self.pause(cx);
             }
-            PlatState::Paused | PlatState::UnLoading | PlatState::Error(_) => {
+            PlatState::Paused => {
+                if let Some(playbin) = &self.video_frame_pipeline {
+                    let _ = playbin.set_state(gst::State::Playing);
+                    self.play_state = PlatState::Playing;
+                    self.start_progress_task(cx);
+                    cx.notify();
+                } else {
+                    self.play(cx);
+                }
+            }
+            PlatState::Loading | PlatState::Cache(_) => {
+                // 已经有 pipeline 时允许用户在加载状态下手动开始播放，
+                // 避免状态机短暂处于 Loading/Cache 时按钮无响应。
+                if let Some(playbin) = &self.video_frame_pipeline {
+                    let _ = playbin.set_state(gst::State::Playing);
+                    self.play_state = PlatState::Playing;
+                    cx.notify();
+                }
+            }
+            PlatState::UnLoading | PlatState::Error(_) => {
                 self.play(cx);
             }
-            _ => {}
         }
     }
 
@@ -161,7 +179,7 @@ impl VideoPlayer {
 
                         if let Some(playbin) = &this.video_frame_pipeline {
                             let _ = playbin.set_state(gst::State::Playing);
-                            // this.play_state = PlatState::Playing;
+                            this.play_state = PlatState::Playing;
                             this.start_event_bus(cx);
                             this.start_loading_timeout_task(cx);
                             this.start_progress_task(cx);
@@ -183,10 +201,11 @@ impl VideoPlayer {
         .detach();
     }
 
-    fn pause(&mut self) {
+    fn pause(&mut self, cx: &mut Context<Self>) {
         if let Some(playbin) = &self.video_frame_pipeline {
             let _ = playbin.set_state(gst::State::Paused);
         }
         self.play_state = PlatState::Paused;
+        cx.notify();
     }
 }

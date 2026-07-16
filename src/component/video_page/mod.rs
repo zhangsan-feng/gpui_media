@@ -204,12 +204,11 @@ impl VideoPage {
 
         let available_width =
             (window.bounds().size.width.as_f32() - 100.).max(VIDEO_CARD_MIN_WIDTH);
-        let columns =
-            self.video_grid_columns(available_width, VIDEO_CARD_MIN_WIDTH, VIDEO_GRID_GAP);
+        let columns = self.video_grid_columns(available_width, VIDEO_CARD_MIN_WIDTH, VIDEO_GRID_GAP);
         let row_count = self.video_grid_rows(items.len(), columns);
-        let card_width = ((available_width - VIDEO_GRID_GAP * (columns.saturating_sub(1) as f32))
-            / columns as f32)
-            .floor();
+        // let card_width = ((available_width - VIDEO_GRID_GAP * (columns.saturating_sub(1) as f32))
+        //     / columns as f32)
+        //     .floor();
         let items = Rc::new(items);
 
         v_virtual_list(
@@ -218,7 +217,7 @@ impl VideoPage {
             Rc::new(
                 (0..row_count)
                     .map(|_| size(px(available_width), px(VIDEO_GRID_ROW_HEIGHT)))
-                    .collect(),
+                    .collect()
             ),
             move |_view, visible_range, _, cx| {
                 visible_range

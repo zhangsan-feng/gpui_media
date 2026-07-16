@@ -4,3 +4,4 @@
 /sandbox_env
 /docs
 logs
+Cargo.lock

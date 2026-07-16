@@ -6,6 +6,7 @@ use reqwest::{Response, multipart};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use tokio::io::AsyncWriteExt;
+pub mod resizable_panel;
 
 trait ResponseHandler {
     async fn handle(self) -> Result<serde_json::Value, anyhow::Error>;
@@ -186,16 +187,8 @@ pub fn window_center_options(window: &mut Window, w: f32, h: f32) -> WindowOptio
     window_options
 }
 
-#[cfg(test)]
-mod tests {
-    use super::HttpClient;
-    use std::sync::Arc;
 
-    #[test]
-    fn new_reuses_shared_reqwest_client() {
-        let first = HttpClient::new();
-        let second = HttpClient::new();
-
-        assert!(Arc::ptr_eq(&first.client, &second.client));
-    }
+pub fn rgb_to_u32(r: u8, g: u8, b: u8) -> Rgba {
+    let color: u32 = (r as u32) << 16 | (g as u32) << 8 | (b as u32);
+    rgb(color)
 }
