@@ -1,5 +1,5 @@
-use crate::component::home::rgb_to_u32;
-use crate::drive::video_player::{PlatState, ProgressDrag, VideoPlayer, VolumeDrag};
+use crate::component::color::rgb_to_u32;
+use crate::drive::video_player::{PlatState,  VideoPlayer};
 use crate::drive::{LocalStatic, NetworkStatic};
 use gpui::*;
 use gpui_component::ElementExt;
@@ -12,6 +12,7 @@ use gpui_component::{h_flex, v_flex, v_virtual_list};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
+use crate::drive::video_player::core::{ProgressDrag, VolumeDrag};
 
 impl VideoPlayer {
     fn player_list_vm(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -164,8 +165,8 @@ impl VideoPlayer {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let menu_h = window.bounds().size.height * 0.6;
-        let menu_w = window.bounds().size.width * 0.6;
+        let menu_h = window.bounds().size.height * 0.7;
+        let menu_w = window.bounds().size.width * 0.5;
 
         Popover::new("video-player-open-popover")
             .anchor(Anchor::BottomRight)

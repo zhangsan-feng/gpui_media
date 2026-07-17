@@ -1,4 +1,4 @@
-use crate::component::home::rgb_to_u32;
+use crate::component::color::rgb_to_u32;
 use crate::drive;
 use gpui::*;
 use gpui_component::*;

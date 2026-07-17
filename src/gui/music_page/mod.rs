@@ -1,4 +1,4 @@
-use crate::component::home::rgb_to_u32;
+use crate::component::color::rgb_to_u32;
 use crate::drive;
 use crate::drive::music_player::MusicPlayer;
 use crate::music_platform;

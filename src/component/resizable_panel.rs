@@ -3,7 +3,7 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::{h_flex, v_flex};
 use uuid::Uuid;
-use crate::component::home::rgb_to_u32;
+use crate::component::color::rgb_to_u32;
 
 #[derive(Clone)]
 struct PanelResizeHandle {

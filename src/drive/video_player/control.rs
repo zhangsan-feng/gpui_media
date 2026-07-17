@@ -167,7 +167,6 @@ impl VideoPlayer {
 
                         if let Some(playbin) = &this.video_frame_pipeline {
                             let _ = playbin.set_state(gst::State::Playing);
-                            this.play_state = PlatState::Playing;
                             this.start_event_bus(cx);
                             this.start_loading_timeout_task(cx);
                             this.start_progress_task(cx);

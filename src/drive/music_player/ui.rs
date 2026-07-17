@@ -1,4 +1,4 @@
-use crate::component::home::rgb_to_u32;
+use crate::component::color::rgb_to_u32;
 use crate::drive::music_player::{MusicPlayer, ProgressDrag, VolumeDrag};
 use gpui::*;
 use gpui_component::button::Button;
@@ -354,8 +354,8 @@ impl MusicPlayer {
     }
 
     pub(crate) fn player_list_ui(&self,window:&mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let menu_h = window.bounds().size.height * 0.6;
-        let menu_w = window.bounds().size.width * 0.6;
+        let menu_h = window.bounds().size.height * 0.7;
+        let menu_w = window.bounds().size.width * 0.5;
 
         Popover::new("music-player-open-popover")
             .anchor(Anchor::BottomCenter)

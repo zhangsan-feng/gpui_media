@@ -1,5 +1,5 @@
 use crate::drive;
-use crate::drive::video_player::{FrameBuffer, PlatState, VideoPlayer};
+use crate::drive::video_player::{VideoPlayer};
 use crate::state::StateEvent::{TogglePlayVideo, UpdateVideoPlayList};
 use crate::state::{GlobalState, StateEvent};
 use gpui::http_client::http::header;
@@ -15,8 +15,44 @@ use gstreamer_video as gst_video;
 use image::{Frame, RgbaImage};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use crate::com::window_center_options;
+use crate::component::window::window_center_settings;
 use std::time::Duration;
+
+
+#[derive(Clone, Copy)]
+pub struct ProgressDrag;
+
+#[derive(Clone, Copy)]
+pub struct VolumeDrag;
+
+#[derive(Default)]
+pub struct FrameBuffer {
+    width: u32,
+    height: u32,
+    data: Vec<u8>,
+    seq: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlatState {
+    UnLoading,
+    Loading,
+    Playing,
+    Paused,
+    Cache(String),
+    Error(String),
+}
+
+
+impl Drop for VideoPlayer {
+    fn drop(&mut self) {
+        if let Some(playbin) = &self.video_frame_pipeline {
+            let _ = playbin.set_state(gst::State::Null);
+        }
+        self.stop_frame_thread();
+    }
+}
+
 
 impl VideoPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -25,8 +61,6 @@ impl VideoPlayer {
         let window_id = window.window_handle().window_id();
         let _ = gst::init();
         let mut s = Self {
-            window_id,
-            entity_id: cx.entity_id(),
             current_player: drive::NetworkStatic::default(),
             player_list: Vec::from([]),
             play_state: PlatState::UnLoading,
@@ -48,6 +82,7 @@ impl VideoPlayer {
             frame_task: None,
             bus_watch_task: None,
             loading_timeout_task: None,
+            controls_visible: true,
             frame_buffer: Arc::new(Mutex::new(FrameBuffer::default())),
             last_rendered_frame_sequence: 0,
             render_image: None,
@@ -98,7 +133,7 @@ impl VideoPlayer {
         let player_entity_id_for_window = player_entity_id.clone();
         let handler = cx
             .open_window(
-                window_center_options(window, 1300., 700.),
+                window_center_settings(window, 1300., 700.),
                 move |window, app| {
                     let view = app.new(|cx| VideoPlayer::new(window, cx));
                     *player_entity_id_for_window.lock().unwrap() = Some(view.entity_id());
@@ -111,14 +146,6 @@ impl VideoPlayer {
             .unwrap()
             .expect("video player entity was not created");
         (handler.window_id(), player_entity_id)
-    }
-
-    pub fn get_entity_id(&self) -> EntityId {
-        self.entity_id
-    }
-
-    pub fn get_window_id(&self) -> WindowId {
-        self.window_id
     }
 
     fn clock_to_duration(&self, clock: gst::ClockTime) -> Duration {

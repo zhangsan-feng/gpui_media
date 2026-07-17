@@ -51,10 +51,10 @@ scraper.workspace = true
 
 [workspace.dependencies]
 # https://github.com/longbridge/gpui-component/blob/main/Cargo.toml
-gpui = {git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe"}
-gpui_platform = {git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe"}
-reqwest_client = {git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe", package = "reqwest_client"}
-gpui-component = {git = "https://github.com/longbridge/gpui-component"}
+gpui = {git = "https://github.com/zed-industries/zed", rev = "6d66d5749deea76b756ececa3602d3c13f411e4f"}
+gpui_platform = {git = "https://github.com/zed-industries/zed", rev = "6d66d5749deea76b756ececa3602d3c13f411e4f"}
+reqwest_client = {git = "https://github.com/zed-industries/zed", rev = "6d66d5749deea76b756ececa3602d3c13f411e4f", package = "reqwest_client"}
+gpui-component = {git = "https://github.com/longbridge/gpui-component", rev = "031555662e99a1b5a549990b47f246d475b8288a"}
 
 log = {version = "0.4.29"}
 chrono = {version = "0.4.43", features = ["default"]}

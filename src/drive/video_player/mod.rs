@@ -1,11 +1,11 @@
-use crate::component::home::rgb_to_u32;
+use crate::component::color::rgb_to_u32;
 use crate::drive::NetworkStatic;
+use crate::drive::video_player::core::{FrameBuffer, PlatState};
 use gpui::*;
 use gpui_component::input::InputState;
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::text::markdown;
 use gpui_component::{VirtualListScrollHandle, h_flex, v_flex};
-use gstreamer::prelude::ElementExt;
 use gstreamer_app as gst_app;
 use gstreamer_app::gst;
 use reqwest::header;
@@ -17,19 +17,7 @@ pub mod control;
 mod core;
 mod ui;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PlatState {
-    UnLoading,
-    Loading,
-    Playing,
-    Paused,
-    Cache(String),
-    Error(String),
-}
-
 pub struct VideoPlayer {
-    window_id: WindowId,
-    entity_id: EntityId,
     pub current_player: NetworkStatic,
     pub player_list: Vec<NetworkStatic>,
     play_state: PlatState,
@@ -52,35 +40,13 @@ pub struct VideoPlayer {
     frame_task: Option<Task<()>>,
     bus_watch_task: Option<Task<()>>,
     loading_timeout_task: Option<Task<()>>,
+    controls_visible: bool,
     frame_buffer: Arc<Mutex<FrameBuffer>>,
     last_rendered_frame_sequence: u64,
     render_image: Option<Arc<RenderImage>>,
     stop_frames: Arc<AtomicBool>,
     bus_watch_started: bool,
     pending_drop_images: Vec<Arc<RenderImage>>,
-}
-
-impl Drop for VideoPlayer {
-    fn drop(&mut self) {
-        if let Some(playbin) = &self.video_frame_pipeline {
-            let _ = playbin.set_state(gst::State::Null);
-        }
-        self.stop_frame_thread();
-    }
-}
-
-#[derive(Clone, Copy)]
-struct ProgressDrag;
-
-#[derive(Clone, Copy)]
-struct VolumeDrag;
-
-#[derive(Default)]
-struct FrameBuffer {
-    width: u32,
-    height: u32,
-    data: Vec<u8>,
-    seq: u64,
 }
 
 impl Render for VideoPlayer {
@@ -94,65 +60,92 @@ impl Render for VideoPlayer {
             .pending_seek_position
             .filter(|_| self.is_dragging_progress_bar)
             .unwrap_or(self.video_player_duration);
+        let controls_visible = self.controls_visible;
+        let controls_animation_id = format!("video-player-controls-{}", controls_visible);
 
         v_flex()
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
                 this.handle_file_drop(paths, cx);
             }))
             .size_full()
-            .p_3()
-            .gap_3()
+            // .p_3()
+            // .gap_3()
             .bg(rgb_to_u32(255, 255, 255))
-            .child(self.video_frame_ui(cx))
             .child(
                 v_flex()
-                    .p_2()
-                    .gap_2()
-                    .rounded_xl()
-                    .border_1()
-                    .border_color(rgb_to_u32(238, 232, 244))
-                    .bg(rgb_to_u32(252, 249, 254))
-                    .child(self.player_progress_control_ui(window, cx))
+                    .flex_grow_1()
+                    .min_w_0()
+                    .min_h_0()
+                    .relative()
+                    .child(self.video_frame_ui(cx))
                     .child(
-                        h_flex()
+                        v_flex()
                             .w_full()
+                            .p_3()
                             .gap_2()
-                            .p_2()
-                            .justify_between()
-                            .items_center()
+                            .rounded_xl()
+                            .border_1()
+                            .border_color(rgb_to_u32(203, 213, 225))
+                            .bg(rgb_to_u32(248, 250, 252))
+                            .shadow_lg()
+                            .child(self.player_progress_control_ui(window, cx))
                             .child(
-                                div()
-                                    .w(window.bounds().size.width * 0.2)
-                                    .overflow_x_scrollbar()
-                                    .text_color(rgb_to_u32(15, 23, 42))
+                                h_flex()
+                                    .w_full()
+                                    .gap_2()
+                                    .p_2()
+                                    .justify_between()
+                                    .items_center()
                                     .child(
-                                        markdown(if self.current_player.source.is_empty() {
-                                            "没有加载视频来源".to_string()
-                                        } else {
-                                            format!(
-                                                "{} / {}",
-                                                self.current_player.name,
-                                                self.current_player.source
-                                            )
-                                        })
-                                        .selectable(true)
-                                        .scrollable(false)
-                                        .whitespace_nowrap()
-                                        .cursor_text(),
+                                        div()
+                                            .w(window.bounds().size.width * 0.2)
+                                            .overflow_x_scrollbar()
+                                            .text_color(rgb_to_u32(15, 23, 42))
+                                            .child(
+                                                markdown(
+                                                    if self.current_player.source.is_empty() {
+                                                        "没有加载视频来源".to_string()
+                                                    } else {
+                                                        format!(
+                                                            "{} / {}",
+                                                            self.current_player.name,
+                                                            self.current_player.source
+                                                        )
+                                                    },
+                                                )
+                                                .selectable(true)
+                                                .scrollable(false)
+                                                .whitespace_nowrap()
+                                                .cursor_text(),
+                                            ),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .gap_2()
+                                            .child(self.player_menu_ui(window, cx))
+                                            .child(self.player_control_ui(cx))
+                                            .child(self.player_volume_control_ui(cx)),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .child(self.format_time(display_position))
+                                            .child("/")
+                                            .child(self.format_time(total)),
                                     ),
                             )
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .child(self.player_menu_ui(window, cx))
-                                    .child(self.player_control_ui(cx))
-                                    .child(self.player_volume_control_ui(cx)),
-                            )
-                            .child(
-                                h_flex()
-                                    .child(self.format_time(display_position))
-                                    .child("/")
-                                    .child(self.format_time(total)),
+                            .with_animations(
+                                controls_animation_id,
+                                vec![
+                                    Animation::new(Duration::from_millis(500))
+                                        .with_easing(ease_in_out),
+                                ],
+                                move |el, _, delta| {
+                                    let progress =
+                                        if controls_visible { delta } else { 1.0 - delta };
+                                    el.h(px(106.) * progress)
+                                        .top(px(50.) * (1.0 - progress))
+                                        .opacity(progress)
+                                },
                             ),
                     ),
             )

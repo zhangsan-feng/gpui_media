@@ -5,6 +5,7 @@ mod entity;
 mod music_platform;
 mod state;
 mod video_platform;
+mod gui;
 
 use crate::state::{GlobalState, State};
 use gpui::*;
@@ -134,7 +135,7 @@ async fn main() {
             app.new(|cx| {
                 let state_entity = cx.new(|cx| State::new(cx));
                 cx.set_global(GlobalState(state_entity));
-                let main_window = cx.new(|cx| component::home::HomeView::new(window, cx));
+                let main_window = cx.new(|cx| gui::home::HomeView::new(window, cx));
                 Root::new(main_window, window, cx)
             })
         })

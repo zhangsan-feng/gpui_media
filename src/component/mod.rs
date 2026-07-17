@@ -1,3 +1,5 @@
-pub mod home;
-mod music_page;
-mod video_page;
+pub mod draggable_list;
+pub mod resizable_panel;
+pub mod window;
+pub mod color;
+

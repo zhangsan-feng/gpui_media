@@ -1,10 +1,11 @@
-use crate::component::music_page::MusicPage;
-use crate::component::video_page::VideoPage;
+use crate::gui::music_page::MusicPage;
+use crate::gui::video_page::VideoPage;
 use crate::drive::video_player::VideoPlayer;
 use gpui::*;
 use gpui::prelude::FluentBuilder;
 use gpui_component::{h_flex, v_flex, Root};
 use std::time::Duration;
+use crate::component::color::rgb_to_u32;
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum Page {
@@ -20,9 +21,6 @@ pub struct HomeView {
     video_player_page: Entity<VideoPlayer>,
 }
 
-pub fn rgb_to_u32(r: u8, g: u8, b: u8) -> Rgba {
-    rgb((r as u32) << 16 | (g as u32) << 8 | b as u32)
-}
 
 impl HomeView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> HomeView {

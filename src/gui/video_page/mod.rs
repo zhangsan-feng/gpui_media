@@ -1,4 +1,4 @@
-use crate::component::home::rgb_to_u32;
+use crate::component::color::rgb_to_u32;
 use crate::drive::NetworkStatic;
 use crate::drive::video_player::VideoPlayer;
 use crate::state::{GlobalState, StateEvent};
