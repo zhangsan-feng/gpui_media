@@ -536,25 +536,31 @@ pub fn discover_vc_runtime() -> Result<PathBuf> {
             return Ok(candidate);
         }
     }
-    let program_files = std::env::var_os("ProgramFiles(x86)")
-        .map(PathBuf::from)
-        .ok_or_else(|| anyhow::anyhow!("ProgramFiles(x86) is not set"))?;
-    let visual_studio = program_files.join("Microsoft Visual Studio");
     let mut candidates = Vec::new();
-    for year in std::fs::read_dir(&visual_studio)? {
-        let year = year?.path();
-        if !year.is_dir() {
+    for program_files in ["ProgramFiles", "ProgramFiles(x86)"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .map(PathBuf::from)
+    {
+        let visual_studio = program_files.join("Microsoft Visual Studio");
+        if !visual_studio.is_dir() {
             continue;
         }
-        for edition in std::fs::read_dir(year)? {
-            let versions = edition?.path().join("VC").join("Redist").join("MSVC");
-            if !versions.is_dir() {
+        for release in std::fs::read_dir(visual_studio)? {
+            let release = release?.path();
+            if !release.is_dir() {
                 continue;
             }
-            for version in std::fs::read_dir(versions)? {
-                let x64 = version?.path().join("x64");
-                if let Some(candidate) = latest_vc_runtime(x64)? {
-                    candidates.push(candidate);
+            for edition in std::fs::read_dir(release)? {
+                let versions = edition?.path().join("VC").join("Redist").join("MSVC");
+                if !versions.is_dir() {
+                    continue;
+                }
+                for version in std::fs::read_dir(versions)? {
+                    let x64 = version?.path().join("x64");
+                    if let Some(candidate) = latest_vc_runtime(x64)? {
+                        candidates.push(candidate);
+                    }
                 }
             }
         }
