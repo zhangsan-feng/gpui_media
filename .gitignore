@@ -5,3 +5,4 @@
 /docs
 logs
 Cargo.lock
+/.agents

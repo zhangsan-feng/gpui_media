@@ -1,11 +1,16 @@
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
+
 mod com;
 mod component;
 mod drive;
-mod entity;
+mod gui;
 mod music_platform;
 mod state;
 mod video_platform;
-mod gui;
 
 use crate::state::{GlobalState, State};
 use gpui::*;
@@ -103,42 +108,58 @@ impl AssetSource for MergedAssets {
 
 #[tokio::main]
 async fn main() {
+    let runtime_mode = match gst_runtime::prepare_current_process() {
+        Ok(mode) => mode,
+        Err(error) => {
+            eprintln!("GStreamer runtime validation failed: {error:#}");
+            return;
+        }
+    };
+    if let Err(error) = gstreamer::init() {
+        eprintln!("GStreamer initialization failed: {error}");
+        return;
+    }
+
     logger_init("./logs", "%Y-%m-%d");
+    info!(
+        "GStreamer {} initialized in {:?} mode",
+        gstreamer::version_string(),
+        runtime_mode
+    );
 
     let http_client = ReqwestClient::user_agent("gpui").unwrap();
     let assets = MergedAssets {
         local_directories: vec![PathBuf::from("/"), PathBuf::from("./src/icon")],
     };
 
-    let app = gpui_platform::application()
+    gpui_platform::application()
         .with_http_client(Arc::new(http_client))
-        .with_assets(assets);
+        .with_assets(assets)
+        .run(move |cx| {
+            let mut window_options = WindowOptions::default();
+            let window_size = size(px(1200.), px(700.));
+            window_options.window_bounds = Some(WindowBounds::centered(window_size, cx));
+            window_options.window_min_size = Some(window_size);
+            window_options.titlebar = Some(TitlebarOptions {
+                title: None,
+                // Hide the platform titlebar; HomeView renders the compatible custom one.
+                appears_transparent: true,
+                traffic_light_position: None,
+            });
+            // Client decorations keep native resize/maximize hit testing available while
+            // allowing the titlebar content to be drawn by GPUI.
+            window_options.window_decorations = Some(WindowDecorations::Client);
 
-    app.run(move |cx| {
-        let mut window_options = WindowOptions::default();
-        let window_size = size(px(1200.), px(700.));
-        window_options.window_bounds = Some(WindowBounds::centered(window_size, cx));
-        window_options.window_min_size = Some(window_size);
-        window_options.titlebar = Some(TitlebarOptions {
-            title: None,
-            // Hide the platform titlebar; HomeView renders the compatible custom one.
-            appears_transparent: true,
-            traffic_light_position: None,
-        });
-        // Client decorations keep native resize/maximize hit testing available while
-        // allowing the titlebar content to be drawn by GPUI.
-        window_options.window_decorations = Some(WindowDecorations::Client);
+            cx.open_window(window_options, |window, app| {
+                gpui_component::init(app);
 
-        cx.open_window(window_options, |window, app| {
-            gpui_component::init(app);
-
-            app.new(|cx| {
-                let state_entity = cx.new(|cx| State::new(cx));
-                cx.set_global(GlobalState(state_entity));
-                let main_window = cx.new(|cx| gui::home::HomeView::new(window, cx));
-                Root::new(main_window, window, cx)
+                app.new(|cx| {
+                    let state_entity = cx.new(|cx| State::new(cx));
+                    cx.set_global(GlobalState(state_entity));
+                    let main_window = cx.new(|cx| gui::home::HomeView::new(window, cx));
+                    Root::new(main_window, window, cx)
+                })
             })
-        })
-        .expect("Failed to create app");
-    });
+            .expect("Failed to create app");
+        });
 }

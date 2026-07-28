@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["crates/dependency_check"]
+members = ["crates/dependency_check", "crates/gst_packager", "crates/gst_runtime"]
 resolver = "3"
 
 [workspace.package]
@@ -46,15 +46,16 @@ md5.workspace = true
 gstreamer.workspace = true
 gstreamer-app.workspace = true
 gstreamer-video.workspace = true
+gst_runtime = { path = "crates/gst_runtime" }
 image.workspace = true
 scraper.workspace = true
 
 [workspace.dependencies]
 # https://github.com/longbridge/gpui-component/blob/main/Cargo.toml
-gpui = {git = "https://github.com/zed-industries/zed", rev = "6d66d5749deea76b756ececa3602d3c13f411e4f"}
-gpui_platform = {git = "https://github.com/zed-industries/zed", rev = "6d66d5749deea76b756ececa3602d3c13f411e4f"}
-reqwest_client = {git = "https://github.com/zed-industries/zed", rev = "6d66d5749deea76b756ececa3602d3c13f411e4f", package = "reqwest_client"}
-gpui-component = {git = "https://github.com/longbridge/gpui-component", rev = "031555662e99a1b5a549990b47f246d475b8288a"}
+gpui = {git = "https://github.com/zed-industries/zed", }
+gpui_platform = {git = "https://github.com/zed-industries/zed", }
+reqwest_client = {git = "https://github.com/zed-industries/zed",  package = "reqwest_client"}
+gpui-component = {git = "https://github.com/longbridge/gpui-component", }
 
 log = {version = "0.4.29"}
 chrono = {version = "0.4.43", features = ["default"]}

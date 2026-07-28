@@ -67,7 +67,6 @@ impl MusicPlayer {
     }
 
     pub(crate) fn set_pipeline(&mut self, _cx: &mut Context<Self>) -> anyhow::Result<()> {
-        let _ = gst::init();
         if let Some(playbin) = &self.audio_pipeline {
             let _ = playbin.set_state(gst::State::Null);
         }

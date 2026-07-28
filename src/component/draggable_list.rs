@@ -1,21 +1,38 @@
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 use gpui::*;
+use gpui_component::scroll::*;
 use gpui_component::{
     menu::{ContextMenuExt, PopupMenu},
     *,
 };
-use gpui_component::scroll::*;
 
 #[derive(Clone, Copy, Debug)]
 struct ListTransition {
+    from_index: usize,
     to_index: usize,
+    epoch: u64,
+}
+
+impl ListTransition {
+    fn displacement_direction(self, index: usize) -> Option<f32> {
+        if self.from_index < self.to_index && (self.from_index..self.to_index).contains(&index) {
+            Some(1.)
+        } else if self.from_index > self.to_index
+            && (self.to_index + 1..=self.from_index).contains(&index)
+        {
+            Some(-1.)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
 struct DraggableListState {
     dragging_index: Option<usize>,
     transition: Option<ListTransition>,
+    transition_epoch: u64,
 }
 
 struct DraggableListItem {
@@ -52,7 +69,7 @@ impl Render for DraggableListDragPreview {
     }
 }
 
-type DoubleClickHandler = Rc<dyn Fn(ElementId, &mut Context<DraggableList>)>;
+type MouseDownHandler = Rc<dyn Fn(ElementId, &MouseDownEvent, &mut Context<DraggableList>)>;
 type ActionIdChangeHandler = Rc<dyn Fn(Option<ElementId>, &mut Context<DraggableList>)>;
 type ContextMenuHandler = Rc<dyn Fn(ElementId, PopupMenu, &mut Context<PopupMenu>) -> PopupMenu>;
 
@@ -68,8 +85,10 @@ pub struct DraggableList {
     item_sizes: Rc<Vec<gpui::Size<Pixels>>>,
     scroll_handle: VirtualListScrollHandle,
     item_bg: Rgba,
+    item_selected_bg: Rgba,
     stem_hover_bg: Rgba,
-    on_double_click: Option<DoubleClickHandler>,
+    transition_duration: Duration,
+    on_mouse_down: Option<MouseDownHandler>,
     on_action_id_change: Option<ActionIdChangeHandler>,
     on_context_menu: Option<ContextMenuHandler>,
 }
@@ -81,11 +100,9 @@ impl Render for DraggableList {
         // the same virtual-list/drag state while either one is being scrolled.
         let instance_id = cx.entity_id();
         let state =
-            window.use_keyed_state(
-                format!("draggable-list-state-{instance_id}"),
-                cx,
-                |_, _| DraggableListState::default(),
-            );
+            window.use_keyed_state(format!("draggable-list-state-{instance_id}"), cx, |_, _| {
+                DraggableListState::default()
+            });
         self.state = Some(state.clone());
 
         self.view_state = state.read(cx).clone();
@@ -108,8 +125,10 @@ impl DraggableList {
             item_sizes: Rc::new(Vec::new()),
             scroll_handle: VirtualListScrollHandle::new(),
             item_bg: rgb(0xffffff),
+            item_selected_bg: rgb(0xdbeafe),
             stem_hover_bg: rgb(0xf3f4f6),
-            on_double_click: None,
+            transition_duration: Duration::from_millis(180),
+            on_mouse_down: None,
             on_action_id_change: None,
             on_context_menu: None,
         }
@@ -127,6 +146,18 @@ impl DraggableList {
             render: Rc::new(move || render().into_any_element()),
         });
         self.rebuild_item_sizes();
+        self
+    }
+
+    pub fn clear(&mut self, cx: &mut Context<Self>) -> &mut Self {
+        self.items.clear();
+        self.rebuild_item_sizes();
+        self.selected_id = None;
+        self.context_menu_id = None;
+        if let Some(state) = self.state.clone() {
+            state.update(cx, |state, _| state.clear_drag());
+        }
+        cx.notify();
         self
     }
 
@@ -156,6 +187,10 @@ impl DraggableList {
         self
     }
 
+    pub fn selected_id(&self) -> Option<&ElementId> {
+        self.selected_id.as_ref()
+    }
+
     pub fn on_action_id_change<F>(&mut self, handler: F) -> &mut Self
     where
         F: Fn(Option<ElementId>, &mut Context<DraggableList>) + 'static,
@@ -176,11 +211,11 @@ impl DraggableList {
         cx.notify();
     }
 
-    pub fn on_double_click<F>(&mut self, handler: F) -> &mut Self
+    pub fn on_mouse_down<F>(&mut self, handler: F) -> &mut Self
     where
-        F: Fn(ElementId, &mut Context<DraggableList>) + 'static,
+        F: Fn(ElementId, &MouseDownEvent, &mut Context<DraggableList>) + 'static,
     {
-        self.on_double_click = Some(Rc::new(handler));
+        self.on_mouse_down = Some(Rc::new(handler));
         self
     }
 
@@ -214,8 +249,19 @@ impl DraggableList {
         self
     }
 
+    pub fn set_item_selected_bg(&mut self, color: Rgba) -> &mut Self {
+        self.item_selected_bg = color;
+        self
+    }
+
     pub fn set_item_hover_bg(&mut self, color: Rgba) -> &mut Self {
         self.stem_hover_bg = color;
+        self
+    }
+
+    /// Sets how long neighbouring items take to settle into their new slots.
+    pub fn set_transition_duration(&mut self, duration: Duration) -> &mut Self {
+        self.transition_duration = duration;
         self
     }
 
@@ -233,70 +279,70 @@ impl DraggableList {
         let item_sizes = self.item_sizes.clone();
 
         let list = match self.axis {
-            Axis::Horizontal => {
-                v_flex()
-                    .size_full()
-                    .child(
-                        h_virtual_list(
-                            view.clone(),
-                            virtual_list_id.clone(),
-                            item_sizes.clone(),
-                            move |this, range, _, cx| {
-                                range
-                                    .filter_map(|index| {
-                                        let item = this.items.get(index)?;
-                                        Some(this.render_virtual_item(
-                                            index,
-                                            item.id.clone(),
-                                            item.render.clone(),
-                                            cx,
-                                        ))
-                                    })
-                                    .collect::<Vec<_>>()
-                            },
-                        ).track_scroll(&self.scroll_handle).into_any_element()
+            Axis::Horizontal => v_flex()
+                .size_full()
+                .child(
+                    h_virtual_list(
+                        view.clone(),
+                        virtual_list_id.clone(),
+                        item_sizes.clone(),
+                        move |this, range, _, cx| {
+                            range
+                                .filter_map(|index| {
+                                    let item = this.items.get(index)?;
+                                    Some(this.render_virtual_item(
+                                        index,
+                                        item.id.clone(),
+                                        item.render.clone(),
+                                        cx,
+                                    ))
+                                })
+                                .collect::<Vec<_>>()
+                        },
                     )
-                    .child(
-                        div().w_full().h(px(10.)).child(
-                            Scrollbar::vertical(&self.scroll_handle)
-                                .scrollbar_show(ScrollbarShow::Always)
-                                .axis(ScrollbarAxis::Horizontal),
-                        ),
+                    .track_scroll(&self.scroll_handle)
+                    .into_any_element(),
+                )
+                .child(
+                    div().w_full().h(px(10.)).child(
+                        Scrollbar::vertical(&self.scroll_handle)
+                            .scrollbar_show(ScrollbarShow::Always)
+                            .axis(ScrollbarAxis::Horizontal),
+                    ),
+                )
+                .into_any_element(),
+            Axis::Vertical => h_flex()
+                .size_full()
+                .child(
+                    v_virtual_list(
+                        view.clone(),
+                        virtual_list_id,
+                        item_sizes,
+                        move |this, range, _, cx| {
+                            range
+                                .filter_map(|index| {
+                                    let item = this.items.get(index)?;
+                                    Some(this.render_virtual_item(
+                                        index,
+                                        item.id.clone(),
+                                        item.render.clone(),
+                                        cx,
+                                    ))
+                                })
+                                .collect::<Vec<_>>()
+                        },
                     )
-                    .into_any_element()
-            }
-            Axis::Vertical => {
-                h_flex()
-                    .size_full()
-                    .child(
-                        v_virtual_list(
-                            view.clone(),
-                            virtual_list_id,
-                            item_sizes,
-                            move |this, range, _, cx| {
-                                range
-                                    .filter_map(|index| {
-                                        let item = this.items.get(index)?;
-                                        Some(this.render_virtual_item(
-                                            index,
-                                            item.id.clone(),
-                                            item.render.clone(),
-                                            cx,
-                                        ))
-                                    })
-                                    .collect::<Vec<_>>()
-                            },
-                        ).track_scroll(&self.scroll_handle).into_any_element()
-                    )
-                    .child(
-                        div().w(px(10.)).h_full().child(
-                            Scrollbar::vertical(&self.scroll_handle)
-                                .scrollbar_show(ScrollbarShow::Always)
-                                .axis(ScrollbarAxis::Vertical),
-                        ),
-                    )
-                    .into_any_element()
-            }
+                    .track_scroll(&self.scroll_handle)
+                    .into_any_element(),
+                )
+                .child(
+                    div().w(px(10.)).h_full().child(
+                        Scrollbar::vertical(&self.scroll_handle)
+                            .scrollbar_show(ScrollbarShow::Always)
+                            .axis(ScrollbarAxis::Vertical),
+                    ),
+                )
+                .into_any_element(),
         };
 
         let mut container = div()
@@ -348,7 +394,13 @@ impl DraggableList {
     ) -> AnyElement {
         let selected = self.selected_id.as_ref() == Some(&id);
         let is_dragging = self.view_state.dragging_index == Some(visible_index);
+        let transition = self.view_state.transition.and_then(|transition| {
+            transition
+                .displacement_direction(visible_index)
+                .map(|direction| (transition, direction))
+        });
         let hover_bg = self.stem_hover_bg;
+        let selected_bg = self.item_selected_bg;
 
         let click_id = id.clone();
         let context_menu_id = id.clone();
@@ -378,7 +430,7 @@ impl DraggableList {
             .bg(if is_dragging {
                 rgb(0xe5e7eb)
             } else if selected {
-                rgb(0xdbeafe)
+                selected_bg
             } else {
                 self.item_bg
             })
@@ -387,10 +439,8 @@ impl DraggableList {
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
                     this.set_selected_id_value(Some(click_id.clone()), cx);
-                    if event.click_count >= 2 {
-                        if let Some(handler) = this.on_double_click.clone() {
-                            handler(click_id.clone(), cx);
-                        }
+                    if let Some(handler) = this.on_mouse_down.clone() {
+                        handler(click_id.clone(), event, cx);
                     }
                     cx.notify();
                 }),
@@ -511,8 +561,11 @@ impl DraggableList {
                         this.items.insert(to_index, item);
                     }
                     state.update(cx, |state, _| {
+                        state.transition_epoch = state.transition_epoch.wrapping_add(1);
                         state.transition = Some(ListTransition {
+                            from_index,
                             to_index,
+                            epoch: state.transition_epoch,
                         });
                         state.dragging_index = Some(to_index);
                     });
@@ -533,13 +586,38 @@ impl DraggableList {
             // .h(self.item_height)
             .child(child);
 
+        let root = if let Some((transition, direction)) = transition {
+            let axis = self.axis;
+            let distance = match axis {
+                Axis::Horizontal => self.item_width,
+                Axis::Vertical => self.item_height,
+            };
+            let start_offset = distance * direction;
+
+            root.with_animation(
+                format!("draggable-list-transition-{id}-{}", transition.epoch),
+                Animation::new(self.transition_duration).with_easing(ease_in_out),
+                move |element, delta| {
+                    let offset = px(start_offset.as_f32() * (1. - delta));
+                    match axis {
+                        Axis::Horizontal => element.left(offset),
+                        Axis::Vertical => element.top(offset),
+                    }
+                },
+            )
+            .into_any_element()
+        } else {
+            root.into_any_element()
+        };
+
         match self.axis {
-            Axis::Vertical => root.w_full().into_any_element(),
-            Axis::Horizontal if item_width.as_f32() != 0.0 => root.w(item_width).into_any_element(),
-            Axis::Horizontal => root.into_any_element(),
+            Axis::Vertical => div().w_full().child(root).into_any_element(),
+            Axis::Horizontal if item_width.as_f32() != 0.0 => {
+                div().w(item_width).child(root).into_any_element()
+            }
+            Axis::Horizontal => root,
         }
     }
-
 }
 
 impl DraggableListState {

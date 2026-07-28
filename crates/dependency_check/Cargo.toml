@@ -11,3 +11,4 @@ gpui-component.workspace = true
 gpui_platform.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
+gst_runtime = { path = "../gst_runtime" }

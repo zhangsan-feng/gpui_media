@@ -40,7 +40,6 @@ pub struct VideoPlayer {
     frame_task: Option<Task<()>>,
     bus_watch_task: Option<Task<()>>,
     loading_timeout_task: Option<Task<()>>,
-    controls_visible: bool,
     frame_buffer: Arc<Mutex<FrameBuffer>>,
     last_rendered_frame_sequence: u64,
     render_image: Option<Arc<RenderImage>>,
@@ -60,8 +59,6 @@ impl Render for VideoPlayer {
             .pending_seek_position
             .filter(|_| self.is_dragging_progress_bar)
             .unwrap_or(self.video_player_duration);
-        let controls_visible = self.controls_visible;
-        let controls_animation_id = format!("video-player-controls-{}", controls_visible);
 
         v_flex()
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
@@ -81,19 +78,17 @@ impl Render for VideoPlayer {
                     .child(
                         v_flex()
                             .w_full()
-                            .p_3()
+                            .p_2()
                             .gap_2()
                             .rounded_xl()
                             .border_1()
                             .border_color(rgb_to_u32(203, 213, 225))
                             .bg(rgb_to_u32(248, 250, 252))
-                            .shadow_lg()
+                            // .shadow_lg()
                             .child(self.player_progress_control_ui(window, cx))
                             .child(
                                 h_flex()
                                     .w_full()
-                                    .gap_2()
-                                    .p_2()
                                     .justify_between()
                                     .items_center()
                                     .child(
@@ -134,17 +129,13 @@ impl Render for VideoPlayer {
                                     ),
                             )
                             .with_animations(
-                                controls_animation_id,
+                                "video-player-animations",
                                 vec![
                                     Animation::new(Duration::from_millis(500))
                                         .with_easing(ease_in_out),
                                 ],
                                 move |el, _, delta| {
-                                    let progress =
-                                        if controls_visible { delta } else { 1.0 - delta };
-                                    el.h(px(106.) * progress)
-                                        .top(px(50.) * (1.0 - progress))
-                                        .opacity(progress)
+                                    el.h(px(75.) * delta).opacity(0.2 + 0.8 * delta)
                                 },
                             ),
                     ),

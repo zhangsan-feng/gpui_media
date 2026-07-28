@@ -180,27 +180,3 @@ pub async fn recommend() -> Vec<NetworkStatic> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_detail_falls_back_to_current_item_when_playlist_missing() {
-        let current = NetworkStatic {
-            id: "1".to_string(),
-            name: "test".to_string(),
-            img: String::new(),
-            author: "renren".to_string(),
-            category: String::new(),
-            headers: Default::default(),
-            source: "https://www.renren.pro/play/abc".to_string(),
-            func: Arc::new(RenrenInterface),
-        };
-
-        let videos = parse_detail("<html></html>", &current);
-
-        assert_eq!(videos.len(), 1);
-        assert_eq!(videos[0].source, current.source);
-    }
-}

@@ -1,12 +1,13 @@
+use crate::component::window::window_center_settings;
 use crate::drive;
-use crate::drive::video_player::{VideoPlayer};
+use crate::drive::video_player::VideoPlayer;
 use crate::state::StateEvent::{TogglePlayVideo, UpdateVideoPlayList};
 use crate::state::{GlobalState, StateEvent};
 use gpui::http_client::http::header;
 use gpui::*;
 use gpui::{Context, RenderImage};
-use gpui_component::{Root, VirtualListScrollHandle};
 use gpui_component::input::InputState;
+use gpui_component::{Root, VirtualListScrollHandle};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer::prelude::{ElementExt, ElementExtManual};
@@ -15,9 +16,7 @@ use gstreamer_video as gst_video;
 use image::{Frame, RgbaImage};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use crate::component::window::window_center_settings;
 use std::time::Duration;
-
 
 #[derive(Clone, Copy)]
 pub struct ProgressDrag;
@@ -43,7 +42,6 @@ pub enum PlatState {
     Error(String),
 }
 
-
 impl Drop for VideoPlayer {
     fn drop(&mut self) {
         if let Some(playbin) = &self.video_frame_pipeline {
@@ -53,13 +51,11 @@ impl Drop for VideoPlayer {
     }
 }
 
-
 impl VideoPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let headers = header::HeaderMap::new();
 
         let window_id = window.window_handle().window_id();
-        let _ = gst::init();
         let mut s = Self {
             current_player: drive::NetworkStatic::default(),
             player_list: Vec::from([]),
@@ -82,7 +78,6 @@ impl VideoPlayer {
             frame_task: None,
             bus_watch_task: None,
             loading_timeout_task: None,
-            controls_visible: true,
             frame_buffer: Arc::new(Mutex::new(FrameBuffer::default())),
             last_rendered_frame_sequence: 0,
             render_image: None,
@@ -124,11 +119,7 @@ impl VideoPlayer {
         .detach();
     }
 
-
-    pub(crate) fn open_window(
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (WindowId, EntityId) {
+    pub(crate) fn open_window(window: &mut Window, cx: &mut App) -> (WindowId, EntityId) {
         let player_entity_id = Arc::new(Mutex::new(None));
         let player_entity_id_for_window = player_entity_id.clone();
         let handler = cx
@@ -164,7 +155,7 @@ impl VideoPlayer {
             return Ok(());
         }
 
-        let playbin = gst::ElementFactory::make("playbin")
+        let playbin = gst::ElementFactory::make("playbin3")
             .name("video-playbin")
             .build()?;
         let request_headers = self.video_request_headers.clone();
@@ -327,7 +318,6 @@ impl VideoPlayer {
         self.stop_frames.store(true, Ordering::Relaxed);
     }
 
-
     pub(crate) fn start_loading_timeout_task(&mut self, cx: &mut Context<Self>) {
         if self.loading_timeout_task.is_some() {
             return;
@@ -371,7 +361,6 @@ impl VideoPlayer {
         let Some(bus) = playbin.bus() else {
             return;
         };
-
 
         let is_local_file = self.current_player.source.starts_with("file://");
 

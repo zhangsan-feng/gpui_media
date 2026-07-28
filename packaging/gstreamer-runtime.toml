@@ -1,0 +1,92 @@
+schema = 1
+platform = "windows"
+gstreamer_version = "1.28.1"
+target = "x86_64-pc-windows-msvc"
+max_size_mib = 250
+core_dlls = [
+    "gstreamer-1.0-0.dll",
+    "gstbase-1.0-0.dll",
+    "gstapp-1.0-0.dll",
+    "gstaudio-1.0-0.dll",
+    "gstvideo-1.0-0.dll",
+    "gstpbutils-1.0-0.dll",
+    "gsttag-1.0-0.dll",
+    "gstriff-1.0-0.dll",
+]
+platform_dlls = [
+    "concrt140.dll",
+    "msvcp140.dll",
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+]
+required_features = [
+    "playbin3",
+    "appsink",
+    "audioconvert",
+    "audioresample",
+    "videoconvertscale",
+    "souphttpsrc",
+    "hlsdemux2",
+    "rtspsrc",
+    "avdec_h264",
+]
+
+[[runtime_module_groups]]
+name = "gio-tls"
+source_subdir = "lib/gio/modules"
+destination_subdir = "gio-modules"
+files = ["gioopenssl.dll"]
+
+[[plugin_groups]]
+name = "core-playback"
+plugins = [
+    "gstcoreelements.dll",
+    "gstplayback.dll",
+    "gstapp.dll",
+    "gsttypefindfunctions.dll",
+    "gstautodetect.dll",
+    "gstaudioconvert.dll",
+    "gstaudioresample.dll",
+    "gstvolume.dll",
+    "gstvideoconvertscale.dll",
+    "gstdeinterlace.dll",
+    "gstwasapi.dll",
+]
+
+[[plugin_groups]]
+name = "containers-parsers"
+plugins = [
+    "gstisomp4.dll",
+    "gstmatroska.dll",
+    "gstavi.dll",
+    "gstflv.dll",
+    "gstmpegtsdemux.dll",
+    "gstogg.dll",
+    "gstwavparse.dll",
+    "gstid3demux.dll",
+    "gstid3tag.dll",
+    "gstaudioparsers.dll",
+    "gstvideoparsersbad.dll",
+]
+
+[[plugin_groups]]
+name = "decoders"
+plugins = [
+    "gstlibav.dll",
+    "gstopus.dll",
+    "gstvorbis.dll",
+    "gstflac.dll",
+    "gstvpx.dll",
+]
+
+[[plugin_groups]]
+name = "network-live"
+plugins = [
+    "gstsoup.dll",
+    "gstadaptivedemux2.dll",
+    "gsttcp.dll",
+    "gstudp.dll",
+    "gstrtp.dll",
+    "gstrtpmanager.dll",
+    "gstrtsp.dll",
+]

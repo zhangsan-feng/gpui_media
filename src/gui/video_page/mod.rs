@@ -4,11 +4,11 @@ use crate::drive::video_player::VideoPlayer;
 use crate::state::{GlobalState, StateEvent};
 use crate::video_platform;
 use gpui::*;
+use gpui_component::VirtualListScrollHandle;
 use gpui_component::button::Button;
 use gpui_component::input::Input;
 use gpui_component::input::InputState;
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
-use gpui_component::VirtualListScrollHandle;
 use gpui_component::{h_flex, v_flex, v_virtual_list};
 use log::info;
 use std::collections::HashMap;
@@ -41,7 +41,7 @@ impl VideoPage {
             search_result: HashMap::new(),
             vm_scroll_handler: VirtualListScrollHandle::new(),
         };
-        // s.init_data( cx);
+        s.init_data( cx);
         s
     }
 
@@ -78,6 +78,7 @@ impl VideoPage {
         self.is_loading = true;
         self.is_searching = true;
         self.current_page = Page::SearchPage;
+        self.search_result.clear();
         let search_keyword = self.search_keyword.read(cx).text().to_string();
         cx.spawn(|_, _: &mut AsyncApp| async move {
             let res = tokio::spawn(async move { video_platform::search(search_keyword).await });
@@ -133,6 +134,10 @@ impl VideoPage {
     }
 
     fn search_content(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        if self.is_searching {
+            return self.video_grid_content(Vec::new(), "video-search-grid", window, cx);
+        }
+
         let items = self
             .search_result
             .values()
@@ -194,7 +199,8 @@ impl VideoPage {
 
         let available_width =
             (window.bounds().size.width.as_f32() - 100.).max(VIDEO_CARD_MIN_WIDTH);
-        let columns = self.video_grid_columns(available_width, VIDEO_CARD_MIN_WIDTH, VIDEO_GRID_GAP);
+        let columns =
+            self.video_grid_columns(available_width, VIDEO_CARD_MIN_WIDTH, VIDEO_GRID_GAP);
         let row_count = self.video_grid_rows(items.len(), columns);
         // let card_width = ((available_width - VIDEO_GRID_GAP * (columns.saturating_sub(1) as f32))
         //     / columns as f32)
@@ -207,7 +213,7 @@ impl VideoPage {
             Rc::new(
                 (0..row_count)
                     .map(|_| size(px(available_width), px(VIDEO_GRID_ROW_HEIGHT)))
-                    .collect()
+                    .collect(),
             ),
             move |_view, visible_range, _, cx| {
                 visible_range
@@ -290,7 +296,6 @@ impl VideoPage {
                                 div()
                                     .text_size(px(14.))
                                     .text_color(rgb_to_u32(15, 23, 42))
-                                    .text_ellipsis()
                                     .child(data.name.clone()),
                             )
                             .child(
@@ -361,7 +366,12 @@ impl Render for VideoPage {
                             .text_color(rgb_to_u32(37, 99, 235))
                             .child(match self.current_page {
                                 Page::RecommendPage => self.recommend_result.len().to_string(),
-                                Page::SearchPage => self.search_result.len().to_string(),
+                                Page::SearchPage => self
+                                    .search_result
+                                    .values()
+                                    .map(Vec::len)
+                                    .sum::<usize>()
+                                    .to_string(),
                             }),
                     ),
             )

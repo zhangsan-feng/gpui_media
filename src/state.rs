@@ -14,8 +14,8 @@ pub enum StateEvent {
 
 impl EventEmitter<StateEvent> for State {}
 pub struct GlobalState(pub(crate) Entity<State>);
-impl Global for GlobalState {}
 
+impl Global for GlobalState {}
 impl State {
     pub fn new(_: &mut Context<Self>) -> Self {
         State {}
