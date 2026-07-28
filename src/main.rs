@@ -108,7 +108,7 @@ impl AssetSource for MergedAssets {
 
 #[tokio::main]
 async fn main() {
-    let runtime_mode = match gst_runtime::prepare_current_process() {
+    let runtime_mode = match build_windows::runtime::prepare_current_process() {
         Ok(mode) => mode,
         Err(error) => {
             eprintln!("GStreamer runtime validation failed: {error:#}");
@@ -119,7 +119,6 @@ async fn main() {
         eprintln!("GStreamer initialization failed: {error}");
         return;
     }
-
     logger_init("./logs", "%Y-%m-%d");
     info!(
         "GStreamer {} initialized in {:?} mode",

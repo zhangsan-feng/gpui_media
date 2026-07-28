@@ -6,3 +6,6 @@
 logs
 Cargo.lock
 /.agents
+/gstreamer-main/
+__pycache__/
+*.pyc

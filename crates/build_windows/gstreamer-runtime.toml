@@ -1,9 +1,9 @@
 schema = 1
 platform = "windows"
-gstreamer_version = "1.28.1"
 target = "x86_64-pc-windows-msvc"
-max_size_mib = 250
+max_size_mib = 350
 core_dlls = [
+    "gst-inspect-1.0.exe",
     "gstreamer-1.0-0.dll",
     "gstbase-1.0-0.dll",
     "gstapp-1.0-0.dll",
@@ -26,8 +26,19 @@ required_features = [
     "audioresample",
     "videoconvertscale",
     "souphttpsrc",
+    "curlhttpsrc",
     "hlsdemux2",
+    "dashdemux2",
+    "mssdemux2",
     "rtspsrc",
+    "rtspclientsink",
+    "srtsrc",
+    "srtsink",
+    "webrtcbin",
+    "nicesrc",
+    "rtmpsrc",
+    "rtmp2src",
+    "ristsrc",
     "avdec_h264",
 ]
 
@@ -36,6 +47,24 @@ name = "gio-tls"
 source_subdir = "lib/gio/modules"
 destination_subdir = "gio-modules"
 files = ["gioopenssl.dll"]
+
+[[runtime_module_groups]]
+name = "plugin-scanner"
+source_subdir = "libexec/gstreamer-1.0"
+destination_subdir = "libexec/gstreamer-1.0"
+files = ["gst-plugin-scanner.exe"]
+
+[[runtime_data_groups]]
+name = "tls-ca-bundle"
+source_subdir = "etc/ssl/certs"
+destination_subdir = "etc/ssl/certs"
+files = ["ca-certificates.crt"]
+
+[[runtime_data_groups]]
+name = "glib-schemas"
+source_subdir = "share/glib-2.0/schemas"
+destination_subdir = "share/glib-2.0/schemas"
+files = ["gschemas.compiled"]
 
 [[plugin_groups]]
 name = "core-playback"
@@ -83,10 +112,30 @@ plugins = [
 name = "network-live"
 plugins = [
     "gstsoup.dll",
+    "gstcurl.dll",
     "gstadaptivedemux2.dll",
+    "gstdash.dll",
+    "gsthls.dll",
+    "gsthlssink3.dll",
+    "gsthlsmultivariantsink.dll",
     "gsttcp.dll",
     "gstudp.dll",
     "gstrtp.dll",
     "gstrtpmanager.dll",
+    "gstrtpmanagerbad.dll",
+    "gstrtponvif.dll",
     "gstrtsp.dll",
+    "gstrtspclientsink.dll",
+    "gstrsrtsp.dll",
+    "gstsrt.dll",
+    "gstsrtp.dll",
+    "gstrsrtp.dll",
+    "gstdtls.dll",
+    "gstwebrtc.dll",
+    "gstnice.dll",
+    "gstrswebrtc.dll",
+    "gstwebrtchttp.dll",
+    "gstrtmp.dll",
+    "gstrtmp2.dll",
+    "gstrist.dll",
 ]

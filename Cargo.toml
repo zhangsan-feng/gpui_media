@@ -4,26 +4,21 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["crates/dependency_check", "crates/gst_packager", "crates/gst_runtime"]
+members = ["crates/build_windows"]
 resolver = "3"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[[bin]]
-name = "gpui-medio"
-path = "crates/dependency_check/src/main.rs"
-
-[[bin]]
-name = "gui"
-path = "src/main.rs"
-
 
 [profile.release]
 debug = false
 strip = "symbols"
 
+[[bin]]
+name = "gpui-medio"
+path = "src/main.rs"
 
 [dependencies]
 gpui.workspace = true
@@ -46,7 +41,7 @@ md5.workspace = true
 gstreamer.workspace = true
 gstreamer-app.workspace = true
 gstreamer-video.workspace = true
-gst_runtime = { path = "crates/gst_runtime" }
+build_windows = { path = "crates/build_windows", default-features = false, features = ["runtime"] }
 image.workspace = true
 scraper.workspace = true
 

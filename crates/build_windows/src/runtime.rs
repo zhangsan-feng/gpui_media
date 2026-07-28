@@ -4,8 +4,6 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-pub const EXPECTED_GSTREAMER_VERSION: &str = "1.28.1";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeStrategy {
     PrivateBundle,
@@ -57,7 +55,6 @@ struct RuntimeModuleGroup {
 #[derive(Debug, Deserialize)]
 struct RuntimeContract {
     platform: String,
-    gstreamer_version: String,
     target: String,
     core_dlls: Vec<String>,
     plugin_groups: Vec<PluginGroup>,
@@ -71,12 +68,6 @@ pub fn validate_runtime(layout: &RuntimeLayout) -> Result<()> {
     let contract: RuntimeContract = serde_json::from_slice(&bytes)?;
     if contract.platform != "windows" {
         bail!("unsupported private runtime platform {}", contract.platform);
-    }
-    if contract.gstreamer_version != EXPECTED_GSTREAMER_VERSION {
-        bail!(
-            "expected GStreamer {EXPECTED_GSTREAMER_VERSION}, got {}",
-            contract.gstreamer_version
-        );
     }
     if contract.target != "x86_64-pc-windows-msvc" {
         bail!("unsupported GStreamer runtime target {}", contract.target);
@@ -129,7 +120,7 @@ pub fn runtime_environment(
             local_app_data
                 .join("gpui-medio")
                 .join("gstreamer")
-                .join(format!("registry-{EXPECTED_GSTREAMER_VERSION}.bin"))
+                .join("registry.bin")
                 .into_os_string(),
         ),
     ])
@@ -203,7 +194,6 @@ mod tests {
             r#"{
   "schema": 1,
   "platform": "windows",
-  "gstreamer_version": "1.28.1",
   "target": "x86_64-pc-windows-msvc",
   "max_size_mib": 250,
   "core_dlls": ["gstreamer-1.0-0.dll"],
@@ -243,7 +233,7 @@ mod tests {
         assert_eq!(
             values.get("GST_REGISTRY_1_0").unwrap(),
             &std::ffi::OsString::from(
-                r"C:\Users\tester\AppData\Local\gpui-medio\gstreamer\registry-1.28.1.bin"
+                r"C:\Users\tester\AppData\Local\gpui-medio\gstreamer\registry.bin"
             )
         );
     }
@@ -265,7 +255,6 @@ mod tests {
             r#"{
   "schema": 1,
   "platform": "windows",
-  "gstreamer_version": "1.28.1",
   "target": "x86_64-pc-windows-msvc",
   "max_size_mib": 250,
   "core_dlls": ["gstreamer-1.0-0.dll"],

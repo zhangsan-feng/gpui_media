@@ -4,7 +4,6 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
-pub const EXPECTED_GSTREAMER_VERSION: &str = "1.28.1";
 pub const EXPECTED_TARGET: &str = "x86_64-pc-windows-msvc";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -22,10 +21,17 @@ pub struct RuntimeModuleGroup {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RuntimeDataGroup {
+    pub name: String,
+    pub source_subdir: PathBuf,
+    pub destination_subdir: PathBuf,
+    pub files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RuntimeManifest {
     pub schema: u32,
     pub platform: String,
-    pub gstreamer_version: String,
     pub target: String,
     pub max_size_mib: u64,
     pub core_dlls: Vec<String>,
@@ -35,21 +41,24 @@ pub struct RuntimeManifest {
     pub plugin_groups: Vec<PluginGroup>,
     #[serde(default)]
     pub runtime_module_groups: Vec<RuntimeModuleGroup>,
+    #[serde(default)]
+    pub runtime_data_groups: Vec<RuntimeDataGroup>,
 }
 
 impl RuntimeManifest {
     pub fn from_toml(source: &str) -> Result<Self> {
-        let manifest: Self = toml::from_str(source)?;
+        Self::validate(toml::from_str(source)?)
+    }
+
+    pub fn from_json(source: &[u8]) -> Result<Self> {
+        Self::validate(serde_json::from_slice(source)?)
+    }
+
+    fn validate(manifest: Self) -> Result<Self> {
         if manifest.platform != "windows" {
             bail!(
                 "unsupported runtime platform {}; no dependency inspector is registered",
                 manifest.platform
-            );
-        }
-        if manifest.gstreamer_version != EXPECTED_GSTREAMER_VERSION {
-            bail!(
-                "expected GStreamer {EXPECTED_GSTREAMER_VERSION}, got {}",
-                manifest.gstreamer_version
             );
         }
         if manifest.target != EXPECTED_TARGET {
@@ -59,17 +68,7 @@ impl RuntimeManifest {
     }
 }
 
-pub fn parse_gstreamer_version(output: &str) -> Result<&str> {
-    output
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix("GStreamer ")
-                .and_then(|value| value.split_whitespace().next())
-        })
-        .ok_or_else(|| anyhow::anyhow!("gst-inspect output does not contain a GStreamer version"))
-}
-
-pub fn validate_source_runtime(manifest: &RuntimeManifest, gst_root: &Path) -> Result<()> {
+pub fn validate_source_runtime(gst_root: &Path) -> Result<()> {
     let inspect = gst_root.join("bin").join("gst-inspect-1.0.exe");
     let output = std::process::Command::new(&inspect)
         .arg("--version")
@@ -77,14 +76,6 @@ pub fn validate_source_runtime(manifest: &RuntimeManifest, gst_root: &Path) -> R
         .with_context(|| format!("failed to run {}", inspect.display()))?;
     if !output.status.success() {
         bail!("{} --version failed", inspect.display());
-    }
-    let stdout = String::from_utf8(output.stdout)?;
-    let actual = parse_gstreamer_version(&stdout)?;
-    if actual != manifest.gstreamer_version {
-        bail!(
-            "expected GStreamer {}, but source runtime is {actual}",
-            manifest.gstreamer_version
-        );
     }
     Ok(())
 }
@@ -152,6 +143,7 @@ pub fn is_windows_system_dll(name: &str) -> bool {
             | "usp10.dll"
             | "uxtheme.dll"
             | "version.dll"
+            | "wldap32.dll"
             | "windowscodecs.dll"
             | "winhttp.dll"
             | "wininet.dll"
@@ -326,7 +318,6 @@ pub struct PackageFile {
 
 #[derive(Debug, Serialize)]
 pub struct PackageReport {
-    pub gstreamer_version: String,
     pub target: String,
     pub total_size: u64,
     pub files: Vec<PackageFile>,
@@ -397,6 +388,7 @@ pub fn stage_runtime(
     let plugin_dir = gst_root.join("lib").join("gstreamer-1.0");
     let mut roots = Vec::new();
     let mut runtime_module_dirs = Vec::new();
+    let mut runtime_data_files = Vec::new();
     for dll in &manifest.core_dlls {
         roots.push(find_case_insensitive(&bin, dll)?);
     }
@@ -422,6 +414,15 @@ pub fn stage_runtime(
             group.destination_subdir.clone(),
         ));
     }
+    for group in &manifest.runtime_data_groups {
+        let source_dir = gst_root.join(&group.source_subdir);
+        for file in &group.files {
+            runtime_data_files.push((
+                find_case_insensitive(&source_dir, file)?,
+                group.destination_subdir.join(file),
+            ));
+        }
+    }
     let mut search_dirs = vec![bin.clone(), plugin_dir.clone()];
     search_dirs.extend(
         runtime_module_dirs
@@ -434,6 +435,11 @@ pub fn stage_runtime(
     std::fs::create_dir_all(output.join("gst-plugins"))?;
     for (_, destination_subdir) in &runtime_module_dirs {
         std::fs::create_dir_all(output.join(destination_subdir))?;
+    }
+    for (_, destination) in &runtime_data_files {
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(output.join(parent))?;
+        }
     }
     let canonical_plugins =
         std::fs::canonicalize(&plugin_dir).unwrap_or_else(|_| plugin_dir.clone());
@@ -485,6 +491,20 @@ pub fn stage_runtime(
             imports: pe_imports(&bytes)?,
         });
     }
+    for (source, relative) in runtime_data_files {
+        let destination = output.join(&relative);
+        std::fs::copy(&source, &destination)?;
+        let bytes = std::fs::read(&destination)?;
+        let size = bytes.len() as u64;
+        total_size = total_size.saturating_add(size);
+        files.push(PackageFile {
+            path: relative.to_string_lossy().replace('\\', "/"),
+            source: source.display().to_string(),
+            size,
+            sha256: format!("{:x}", Sha256::digest(&bytes)),
+            imports: Vec::new(),
+        });
+    }
     let max_size = manifest.max_size_mib.saturating_mul(1024 * 1024);
     if total_size > max_size {
         bail!(
@@ -495,7 +515,6 @@ pub fn stage_runtime(
     }
     files.sort_by(|left, right| left.path.cmp(&right.path));
     let report = PackageReport {
-        gstreamer_version: manifest.gstreamer_version.clone(),
         target: manifest.target.clone(),
         total_size,
         files,
@@ -550,8 +569,8 @@ pub fn discover_vc_runtime() -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        PackageOptions, RuntimeManifest, dependency_closure, is_windows_system_dll,
-        parse_gstreamer_version, pe_imports, stage_runtime,
+        PackageOptions, RuntimeManifest, dependency_closure, is_windows_system_dll, pe_imports,
+        stage_runtime,
     };
     use std::path::PathBuf;
 
@@ -586,28 +605,6 @@ mod tests {
             bytes[name_offset..name_offset + name.len()].copy_from_slice(name.as_bytes());
         }
         bytes
-    }
-
-    #[test]
-    fn manifest_rejects_wrong_gstreamer_version() {
-        let source = r#"
-schema = 1
-platform = "windows"
-gstreamer_version = "1.26.0"
-target = "x86_64-pc-windows-msvc"
-max_size_mib = 250
-core_dlls = ["gstreamer-1.0-0.dll"]
-required_features = ["playbin"]
-
-[[plugin_groups]]
-name = "core"
-plugins = ["gstplayback.dll"]
-"#;
-
-        let error = RuntimeManifest::from_toml(source)
-            .expect_err("a runtime from another GStreamer release must be rejected");
-
-        assert!(error.to_string().contains("expected GStreamer 1.28.1"));
     }
 
     #[test]
@@ -724,7 +721,6 @@ plugins = ["gstplayback.dll"]
             r#"
 schema = 1
 platform = "windows"
-gstreamer_version = "1.28.1"
 target = "x86_64-pc-windows-msvc"
 max_size_mib = 250
 core_dlls = ["gstreamer-1.0-0.dll"]
@@ -778,7 +774,6 @@ plugins = ["gstplayback.dll"]
             r#"
 schema = 1
 platform = "windows"
-gstreamer_version = "1.28.1"
 target = "x86_64-pc-windows-msvc"
 max_size_mib = 250
 core_dlls = ["gstreamer-1.0-0.dll"]
@@ -834,7 +829,6 @@ files = ["gioopenssl.dll"]
         let source = r#"
 schema = 1
 platform = "linux"
-gstreamer_version = "1.28.1"
 target = "x86_64-unknown-linux-gnu"
 max_size_mib = 250
 core_dlls = []
@@ -849,12 +843,5 @@ plugin_groups = []
                 .to_string()
                 .contains("unsupported runtime platform linux")
         );
-    }
-
-    #[test]
-    fn parses_gstreamer_version_from_inspect_output() {
-        let output = "gst-inspect-1.0 version 1.28.1\nGStreamer 1.28.1\n";
-
-        assert_eq!(parse_gstreamer_version(output).unwrap(), "1.28.1");
     }
 }
