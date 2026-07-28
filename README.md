@@ -2,6 +2,9 @@
 ```aiignore
 这是一个基于gpui + gst 实现的 音乐播放器和视频播放器 
 支持网络链接 和 本地拖拽 
+开发阶段需要 下载gst的c代码环境 
+https://gstreamer.freedesktop.org/download/
+
 比如 
 
 https://github.com/youhunwl/TVAPP
