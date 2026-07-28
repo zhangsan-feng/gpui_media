@@ -1,0 +1,96 @@
+name: Build Windows Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/build-windows.yml"
+      - "Cargo.toml"
+      - "build.rs"
+      - "crates/build_windows/**"
+      - "src/**"
+  pull_request:
+    paths:
+      - ".github/workflows/build-windows.yml"
+      - "Cargo.toml"
+      - "build.rs"
+      - "crates/build_windows/**"
+      - "src/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  GSTREAMER_VERSION: "1.28.5"
+  GSTREAMER_1_0_ROOT_MSVC_X86_64: C:\gstreamer\1.0\msvc_x86_64
+
+jobs:
+  build:
+    name: Build and package Windows x86_64
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.cargo\registry
+            ~\.cargo\git
+            target
+          key: windows-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            windows-cargo-
+
+      - name: Install GStreamer MSVC x86_64
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "gstreamer.exe"
+          $url = "https://gstreamer.freedesktop.org/data/pkg/windows/$env:GSTREAMER_VERSION/msvc/gstreamer-1.0-msvc-x86_64-$env:GSTREAMER_VERSION.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer
+
+          $arguments = @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/ALLUSERS",
+            "/TYPE=devel",
+            "/DIR=$env:GSTREAMER_1_0_ROOT_MSVC_X86_64"
+          )
+          $install = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "GStreamer installer failed with exit code $($install.ExitCode)"
+          }
+
+      - name: Check Windows build environment
+        run: cargo run --release -p build_windows -- doctor
+
+      - name: Build and package application
+        run: cargo run --release -p build_windows -- package --force
+
+      - name: Verify packaged runtime
+        run: cargo run --release -p build_windows -- verify
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpui-medio-windows-x86_64
+          path: target/build_windows
+          if-no-files-found: error
+          retention-days: 14
