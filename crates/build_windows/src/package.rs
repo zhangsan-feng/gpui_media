@@ -532,8 +532,7 @@ pub fn stage_runtime(
 
 pub fn discover_vc_runtime() -> Result<PathBuf> {
     if let Some(root) = std::env::var_os("VCToolsRedistDir") {
-        let candidate = PathBuf::from(root).join("x64").join("Microsoft.VC143.CRT");
-        if candidate.is_dir() {
+        if let Some(candidate) = latest_vc_runtime(PathBuf::from(root).join("x64"))? {
             return Ok(candidate);
         }
     }
@@ -553,8 +552,8 @@ pub fn discover_vc_runtime() -> Result<PathBuf> {
                 continue;
             }
             for version in std::fs::read_dir(versions)? {
-                let candidate = version?.path().join("x64").join("Microsoft.VC143.CRT");
-                if candidate.is_dir() {
+                let x64 = version?.path().join("x64");
+                if let Some(candidate) = latest_vc_runtime(x64)? {
                     candidates.push(candidate);
                 }
             }
@@ -563,7 +562,25 @@ pub fn discover_vc_runtime() -> Result<PathBuf> {
     candidates.sort();
     candidates
         .pop()
-        .ok_or_else(|| anyhow::anyhow!("Microsoft.VC143.CRT x64 redist directory not found"))
+        .ok_or_else(|| anyhow::anyhow!("Microsoft Visual C++ x64 runtime directory not found"))
+}
+
+fn latest_vc_runtime(x64: PathBuf) -> Result<Option<PathBuf>> {
+    if !x64.is_dir() {
+        return Ok(None);
+    }
+    let mut candidates = std::fs::read_dir(x64)?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.is_dir()
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("Microsoft.VC") && name.ends_with(".CRT"))
+        })
+        .collect::<Vec<_>>();
+    candidates.sort();
+    Ok(candidates.pop())
 }
 
 #[cfg(test)]

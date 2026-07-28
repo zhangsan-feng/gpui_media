@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install stable Rust
         shell: pwsh
@@ -48,7 +48,7 @@ jobs:
           rustup default stable
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~\.cargo\registry
@@ -88,7 +88,7 @@ jobs:
         run: cargo run --release -p build_windows -- verify
 
       - name: Upload Windows package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: gpui-medio-windows-x86_64
           path: target/build_windows
