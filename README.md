@@ -12,8 +12,12 @@ cargo run --release -p build_windows -- verify
 cargo run --release -p build_windows -- support
 
 支持网络直播 视频 tv  比如
+hls m3u8 flv 等等 能手动输入 构建在actions 里面 
+
 https://github.com/youhunwl/TVAPP
 https://raw.githubusercontent.com/YanG-1989/m3u/main/Gather.m3u
+
+
 
 ```
 

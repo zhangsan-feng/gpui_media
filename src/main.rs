@@ -44,6 +44,8 @@ pub fn logger_init(log_dir: impl AsRef<Path>, date_format: &str) {
             metadata.level() == Level::Info && !metadata.target().starts_with("symphonia")
         })
         .level(log::LevelFilter::Info)
+        .level(log::LevelFilter::Debug)
+        .level(log::LevelFilter::Error)
         .chain(std::io::stdout())
         .chain(fern::log_file(&log_file).expect("open log file failed"))
         .apply()
