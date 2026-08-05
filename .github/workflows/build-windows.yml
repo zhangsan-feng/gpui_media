@@ -2,22 +2,6 @@ name: Build Windows Package
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
-    paths:
-      - ".github/workflows/build-windows.yml"
-      - "Cargo.toml"
-      - "build.rs"
-      - "crates/build_windows/**"
-      - "src/**"
-  pull_request:
-    paths:
-      - ".github/workflows/build-windows.yml"
-      - "Cargo.toml"
-      - "build.rs"
-      - "crates/build_windows/**"
-      - "src/**"
 
 permissions:
   contents: read
