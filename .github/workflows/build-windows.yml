@@ -78,6 +78,32 @@ jobs:
             throw "GStreamer installer failed with exit code $($install.ExitCode)"
           }
 
+      - name: Configure GStreamer pkg-config
+        shell: pwsh
+        run: |
+          $gstreamerRoot = $env:GSTREAMER_1_0_ROOT_MSVC_X86_64
+          $gstreamerBin = Join-Path $gstreamerRoot "bin"
+          $pkgConfig = Join-Path $gstreamerBin "pkg-config.exe"
+
+          if (-not (Test-Path $pkgConfig)) {
+            throw "GStreamer pkg-config was not found at $pkgConfig"
+          }
+
+          $pkgConfigDirectories = @(
+            (Join-Path $gstreamerRoot "lib\pkgconfig"),
+            (Join-Path $gstreamerRoot "share\pkgconfig")
+          ) | Where-Object { Test-Path $_ }
+
+          $gstreamerBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "PKG_CONFIG=$pkgConfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PKG_CONFIG_PATH=$($pkgConfigDirectories -join [IO.Path]::PathSeparator)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          & $pkgConfig --modversion glib-2.0
+          if ($LASTEXITCODE -ne 0) {
+            throw "GStreamer pkg-config could not resolve glib-2.0"
+          }
+
       - name: Check Windows build environment
         run: cargo run --release -p build_windows -- doctor
 
