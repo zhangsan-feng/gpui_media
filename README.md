@@ -17,7 +17,7 @@ hls m3u8 flv 等等 能手动输入 构建在actions 里面
 https://github.com/youhunwl/TVAPP
 https://raw.githubusercontent.com/YanG-1989/m3u/main/Gather.m3u
 
-
+视频来源 都是网络上的cms 站点 src/plugins/extractor 如果你有更好的资源可以让ai 接入
 
 ```
 
