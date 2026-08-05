@@ -25,9 +25,7 @@ pub fn window_center(window: &mut Window, window_size: Size<Pixels>) -> WindowBo
     WindowBounds::Windowed(bounds)
 }
 
-
 pub fn window_center_options(window: &mut Window, window_size: Size<Pixels>) -> WindowOptions {
-    
     WindowOptions {
         window_bounds: Some(window_center(window, window_size)),
         window_min_size: Some(window_size),

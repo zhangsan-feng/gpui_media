@@ -30,6 +30,7 @@ chrono.workspace = true
 fern.workspace = true
 serde.workspace = true
 anyhow.workspace = true
+thiserror.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
@@ -38,12 +39,14 @@ rust-embed.workspace = true
 regex.workspace = true
 uuid.workspace = true
 md5.workspace = true
+
 gstreamer.workspace = true
 gstreamer-app.workspace = true
 gstreamer-video.workspace = true
 build_windows = { path = "crates/build_windows", default-features = false, features = ["runtime"] }
 image.workspace = true
 scraper.workspace = true
+
 
 [workspace.dependencies]
 # https://github.com/longbridge/gpui-component/blob/main/Cargo.toml
@@ -57,7 +60,8 @@ chrono = {version = "0.4.43", features = ["default"]}
 fern = "0.7.1"
 serde = "1.0.228"
 anyhow = "1.0.100"
-reqwest = { version = "0.13.1", features = ["gzip", "json", "multipart", "form", "stream"] }
+thiserror = "2.0.17"
+reqwest = { version = "0.13.1", features = ["blocking", "gzip", "json", "multipart", "form", "stream"] }
 tokio = {version = "1.49.0", features = ["full"]}
 futures-util="0.3.31"
 serde_json = "1.0.149"
@@ -65,7 +69,6 @@ rust-embed = "8.11.0"
 regex = "1.12.3"
 uuid = { version = "1.22.0", features = ["v4"] }
 md5 = {version = "0.8.0"}
-
 gstreamer = "0.25.1"
 gstreamer-app = "0.25.0"
 gstreamer-video = "0.25.0"

@@ -4,11 +4,10 @@ use crate::drive::video_player::core::{FrameBuffer, PlatState};
 use gpui::*;
 use gpui_component::input::InputState;
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::text::markdown;
+
 use gpui_component::{VirtualListScrollHandle, h_flex, v_flex};
 use gstreamer_app as gst_app;
 use gstreamer_app::gst;
-use reqwest::header;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -23,15 +22,17 @@ pub struct VideoPlayer {
     play_state: PlatState,
     input_text: Entity<InputState>,
 
-    video_request_headers: header::HeaderMap,
     vm_scroll_handle: VirtualListScrollHandle,
     video_player_volume: f32,
     video_frame_pipeline: Option<gst::Element>,
     video_frame_data: Option<gst_app::AppSink>,
     video_total_duration: Option<Duration>,
     video_player_duration: Duration,
-    video_frame_size: f32,
-    video_frame_bounds: Option<Bounds<Pixels>>,
+    video_frame_size_proportion: f32,
+    video_height: f32,
+    video_width: f32,
+    video_frame_rate: f64,
+    video_frame_player_size: Option<Bounds<Pixels>>,
     is_dragging_progress_bar: bool,
     pending_seek_position: Option<Duration>,
     progress_bar_bounds: Option<Bounds<Pixels>>,
@@ -88,41 +89,43 @@ impl Render for VideoPlayer {
                             .child(self.player_progress_control_ui(window, cx))
                             .child(
                                 h_flex()
+                                    .gap_4()
                                     .w_full()
                                     .justify_between()
                                     .items_center()
                                     .child(
-                                        div()
-                                            .w(window.bounds().size.width * 0.2)
-                                            .overflow_x_scrollbar()
-                                            .text_color(rgb_to_u32(15, 23, 42))
-                                            .child(
-                                                markdown(
-                                                    if self.current_player.source.is_empty() {
-                                                        "没有加载视频来源".to_string()
-                                                    } else {
-                                                        format!(
-                                                            "{} / {}",
-                                                            self.current_player.name,
-                                                            self.current_player.source
-                                                        )
-                                                    },
-                                                )
-                                                .selectable(true)
-                                                .scrollable(false)
-                                                .whitespace_nowrap()
-                                                .cursor_text(),
-                                            ),
+                                        div().flex_1(), //         .w(window.bounds().size.width * 0.2)
+                                                        //         .overflow_x_scrollbar()
+                                                        //         .text_color(rgb_to_u32(15, 23, 42))
+                                                        //         .child(
+                                                        //             markdown(
+                                                        //                 if self.current_player.source.is_empty() {
+                                                        //                     "没有加载视频来源".to_string()
+                                                        //                 } else {
+                                                        //                     format!(
+                                                        //                         "{} / {}",
+                                                        //                         self.current_player.name,
+                                                        //                         self.current_player.source
+                                                        //                     )
+                                                        //                 },
+                                                        //             )
+                                                        //             .selectable(true)
+                                                        //             .scrollable(false)
+                                                        //             .whitespace_nowrap()
+                                                        //             .cursor_text(),
+                                                        //         ),
                                     )
                                     .child(
                                         h_flex()
-                                            .gap_2()
-                                            .child(self.player_menu_ui(window, cx))
+                                            .gap_4()
+                                            .child(self.player_menu_popover_ui(window, cx))
                                             .child(self.player_control_ui(cx))
-                                            .child(self.player_volume_control_ui(cx)),
+                                            .child(self.player_volume_control_ui(cx))
+                                            .child(self.player_info_popover_ui(window, cx)),
                                     )
                                     .child(
                                         h_flex()
+                                            .gap_4()
                                             .child(self.format_time(display_position))
                                             .child("/")
                                             .child(self.format_time(total)),

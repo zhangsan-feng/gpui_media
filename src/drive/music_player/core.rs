@@ -4,6 +4,7 @@ use crate::state::StateEvent::{TogglePlayMusic, UpdateMusicPlatyList};
 use crate::state::{GlobalState, StateEvent};
 use anyhow::anyhow;
 use gpui::http_client::Url;
+use gpui::http_client::http::header;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::*;
@@ -84,6 +85,23 @@ impl MusicPlayer {
         let playbin = gst::ElementFactory::make("playbin")
             .name("music-playbin")
             .build()?;
+        let request_headers = self.current_player.headers.clone();
+        playbin.connect("source-setup", false, move |values| {
+            let Some(source) = values
+                .get(1)
+                .and_then(|value| value.get::<gst::Element>().ok())
+            else {
+                return None;
+            };
+
+            if !request_headers.is_empty() && source.find_property("extra-headers").is_some() {
+                source.set_property(
+                    "extra-headers",
+                    MusicPlayer::build_extra_headers(&request_headers),
+                );
+            }
+            None
+        });
         playbin.set_property("uri", &source);
         playbin.set_property("volume", &(self.volume as f64));
         let _ = playbin.set_state(gst::State::Paused);
@@ -93,6 +111,20 @@ impl MusicPlayer {
             .map(|d| Duration::from_nanos(d.nseconds()));
         self.audio_pipeline = Some(playbin);
         Ok(())
+    }
+
+    fn build_extra_headers(headers: &header::HeaderMap) -> gst::Structure {
+        let mut structure = gst::Structure::new_empty("extra-headers");
+        for (name, value) in headers {
+            let key = name.as_str().trim();
+            if key.is_empty() {
+                continue;
+            }
+            if let Ok(value) = value.to_str() {
+                structure.set(key, value.trim());
+            }
+        }
+        structure
     }
 
     pub(crate) fn reset_pipeline(&mut self, _cx: &mut Context<Self>) -> anyhow::Result<()> {

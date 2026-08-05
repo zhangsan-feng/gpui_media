@@ -3,14 +3,13 @@
     windows_subsystem = "windows"
 )]
 
-
 mod com;
 mod component;
 mod drive;
 mod gui;
-mod music_platform;
+mod plugins;
 mod state;
-mod video_platform;
+
 
 use crate::state::{GlobalState, State};
 use gpui::*;
@@ -141,7 +140,7 @@ async fn main() {
             window_options.window_min_size = Some(window_size);
             window_options.titlebar = Some(TitlebarOptions {
                 title: None,
-                // Hide the platform titlebar; HomeView renders the compatible custom one.
+                // Hide the extractor titlebar; HomeView renders the compatible custom one.
                 appears_transparent: true,
                 traffic_light_position: None,
             });

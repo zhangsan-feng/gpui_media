@@ -1,9 +1,8 @@
-
+use crate::component::color::rgb_to_u32;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::{h_flex, v_flex};
 use uuid::Uuid;
-use crate::component::color::rgb_to_u32;
 
 #[derive(Clone)]
 struct PanelResizeHandle {
@@ -151,11 +150,8 @@ fn panel_size_after_drag(initial_size: f32, delta: f32, min_size: f32, max_size:
     (initial_size + delta).clamp(min_size, max_size)
 }
 
-
 impl Render for ResizablePanel {
-
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-
         let container = match self.axis {
             Axis::Horizontal => h_flex(),
             Axis::Vertical => v_flex(),

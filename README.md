@@ -11,15 +11,15 @@ cargo run --release -p build_windows -- package --force
 cargo run --release -p build_windows -- verify
 cargo run --release -p build_windows -- support
 
-
+支持网络直播 视频 tv  比如
 https://github.com/youhunwl/TVAPP
 https://raw.githubusercontent.com/YanG-1989/m3u/main/Gather.m3u
 
 ```
 
 
-![111019.png](111019.png)
-![111041.png](111041.png)
-![111220.png](111220.png)
-![092210.png](092210.png)
-![092252.png](092252.png)
+![111019.png](example_img/111019.png)
+![111041.png](example_img/111041.png)
+![111220.png](example_img/111220.png)
+![092210.png](example_img/092210.png)
+![092252.png](example_img/092252.png)

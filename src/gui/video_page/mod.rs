@@ -1,8 +1,8 @@
 use crate::component::color::rgb_to_u32;
 use crate::drive::NetworkStatic;
 use crate::drive::video_player::VideoPlayer;
+use crate::plugins::extractor::video;
 use crate::state::{GlobalState, StateEvent};
-use crate::video_platform;
 use gpui::*;
 use gpui_component::VirtualListScrollHandle;
 use gpui_component::button::Button;
@@ -41,7 +41,7 @@ impl VideoPage {
             search_result: HashMap::new(),
             vm_scroll_handler: VirtualListScrollHandle::new(),
         };
-        s.init_data( cx);
+        s.init_data(cx);
         s
     }
 
@@ -51,7 +51,7 @@ impl VideoPage {
         self.is_loading = true;
 
         cx.spawn(|_, _: &mut AsyncApp| async move {
-            let res = tokio::spawn(async move { video_platform::recommend().await });
+            let res = tokio::spawn(async move { video::recommend().await });
             match res.await {
                 Ok(r) => {
                     entity.update(&mut cx_async, |this, cx| {
@@ -81,7 +81,7 @@ impl VideoPage {
         self.search_result.clear();
         let search_keyword = self.search_keyword.read(cx).text().to_string();
         cx.spawn(|_, _: &mut AsyncApp| async move {
-            let res = tokio::spawn(async move { video_platform::search(search_keyword).await });
+            let res = tokio::spawn(async move { video::search(search_keyword).await });
             match res.await {
                 Ok(r) => {
                     // log::info!("video recommend loaded: {}", r.len());
@@ -248,6 +248,25 @@ impl VideoPage {
     }
 
     fn video_card(data: NetworkStatic, cx: &mut Context<Self>) -> AnyElement {
+        let mut extra_fields = data.extra.iter().collect::<Vec<_>>();
+        extra_fields.sort_by(|left, right| left.0.cmp(right.0));
+        let extra_fields = extra_fields
+            .into_iter()
+            .map(|(key, value)| {
+                let value = value
+                    .as_str()
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_else(|| value.to_string());
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .text_size(px(11.))
+                    .text_color(rgb_to_u32(148, 163, 184))
+                    .text_ellipsis()
+                    .child(format!("{key}: {value}"))
+            })
+            .collect::<Vec<_>>();
+
         div()
             .id(format!("video-card-{}", data.id))
             .w(px(200.))
@@ -308,14 +327,15 @@ impl VideoPage {
                                     } else {
                                         data.author.clone()
                                     }),
-                            ), // .child(
-                               //     div()
-                               //         .min_w_0()
-                               //         .text_size(px(11.))
-                               //         .text_color(rgb_to_u32(148, 163, 184))
-                               //         .text_ellipsis()
-                               //         .child(data.source.clone()),
-                               // ),
+                            )
+                            .children(extra_fields), // .child(
+                                                     //     div()
+                                                     //         .min_w_0()
+                                                     //         .text_size(px(11.))
+                                                     //         .text_color(rgb_to_u32(148, 163, 184))
+                                                     //         .text_ellipsis()
+                                                     //         .child(data.source.clone()),
+                                                     // ),
                     ),
             )
             .into_any_element()

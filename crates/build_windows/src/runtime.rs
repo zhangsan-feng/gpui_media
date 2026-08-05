@@ -67,7 +67,10 @@ pub fn validate_runtime(layout: &RuntimeLayout) -> Result<()> {
         .with_context(|| format!("missing {}", layout.manifest.display()))?;
     let contract: RuntimeContract = serde_json::from_slice(&bytes)?;
     if contract.platform != "windows" {
-        bail!("unsupported private runtime platform {}", contract.platform);
+        bail!(
+            "unsupported private runtime extractor {}",
+            contract.platform
+        );
     }
     if contract.target != "x86_64-pc-windows-msvc" {
         bail!("unsupported GStreamer runtime target {}", contract.target);
@@ -193,7 +196,7 @@ mod tests {
             temp.path().join("gst-runtime-manifest.json"),
             r#"{
   "schema": 1,
-  "platform": "windows",
+  "extractor": "windows",
   "target": "x86_64-pc-windows-msvc",
   "max_size_mib": 250,
   "core_dlls": ["gstreamer-1.0-0.dll"],
@@ -254,7 +257,7 @@ mod tests {
             temp.path().join("gst-runtime-manifest.json"),
             r#"{
   "schema": 1,
-  "platform": "windows",
+  "extractor": "windows",
   "target": "x86_64-pc-windows-msvc",
   "max_size_mib": 250,
   "core_dlls": ["gstreamer-1.0-0.dll"],

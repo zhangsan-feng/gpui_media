@@ -57,7 +57,7 @@ impl RuntimeManifest {
     fn validate(manifest: Self) -> Result<Self> {
         if manifest.platform != "windows" {
             bail!(
-                "unsupported runtime platform {}; no dependency inspector is registered",
+                "unsupported runtime extractor {}; no dependency inspector is registered",
                 manifest.platform
             );
         }
@@ -743,7 +743,7 @@ mod tests {
         let manifest = RuntimeManifest::from_toml(
             r#"
 schema = 1
-platform = "windows"
+extractor = "windows"
 target = "x86_64-pc-windows-msvc"
 max_size_mib = 250
 core_dlls = ["gstreamer-1.0-0.dll"]
@@ -796,7 +796,7 @@ plugins = ["gstplayback.dll"]
         let manifest = RuntimeManifest::from_toml(
             r#"
 schema = 1
-platform = "windows"
+extractor = "windows"
 target = "x86_64-pc-windows-msvc"
 max_size_mib = 250
 core_dlls = ["gstreamer-1.0-0.dll"]
@@ -851,7 +851,7 @@ files = ["gioopenssl.dll"]
     fn manifest_rejects_platform_without_a_dependency_inspector() {
         let source = r#"
 schema = 1
-platform = "linux"
+extractor = "linux"
 target = "x86_64-unknown-linux-gnu"
 max_size_mib = 250
 core_dlls = []
@@ -864,7 +864,7 @@ plugin_groups = []
         assert!(
             error
                 .to_string()
-                .contains("unsupported runtime platform linux")
+                .contains("unsupported runtime extractor linux")
         );
     }
 }

@@ -1,4 +1,5 @@
 use gpui::http_client::Url;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::Path;
 use std::sync::Arc;
@@ -13,6 +14,7 @@ pub struct NetworkStatic {
     pub author: String,
     pub category: String,
     pub headers: reqwest::header::HeaderMap,
+    pub extra: HashMap<String, serde_json::Value>,
     pub source: String,
     pub func: Arc<dyn NetworkStaticInterface + Send + Sync>,
 }
@@ -26,6 +28,7 @@ impl Default for NetworkStatic {
             author: String::new(),
             category: String::new(),
             headers: reqwest::header::HeaderMap::new(),
+            extra: HashMap::new(),
             source: String::new(),
             func: Arc::new(LocalStatic),
         }
@@ -41,6 +44,7 @@ impl Debug for NetworkStatic {
             .field("author", &self.author)
             .field("category", &self.category)
             .field("headers", &self.headers)
+            .field("extra", &self.extra)
             .field("source", &self.source)
             .finish()
     }

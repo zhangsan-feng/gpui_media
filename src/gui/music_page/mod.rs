@@ -1,12 +1,11 @@
 use crate::component::color::rgb_to_u32;
 use crate::drive;
 use crate::drive::music_player::MusicPlayer;
-use crate::music_platform;
+use crate::plugins::extractor::audio;
 use crate::state::{GlobalState, StateEvent};
 use gpui::*;
 use gpui_component::button::Button;
 use gpui_component::input::InputState;
-use gpui_component::scroll::ScrollbarShow;
 use gpui_component::{StyledExt, VirtualListScrollHandle, h_flex, v_flex, v_virtual_list};
 use log::info;
 use std::rc::Rc;
@@ -42,10 +41,10 @@ impl MusicPage {
         self.is_loading = true;
 
         cx.spawn(|_, _: &mut AsyncApp| async move {
-            let res = tokio::spawn(async move { music_platform::music_recommend().await });
+            let res = tokio::spawn(async move { audio::recommend().await });
 
             match res.await {
-                Ok(Ok(r)) => {
+                Ok(r) => {
                     entity.update(&mut cx_async, |this, cx| {
                         this.is_loading = false;
                         this.music_data = r.clone();
@@ -56,7 +55,6 @@ impl MusicPage {
                         cx.emit(StateEvent::UpdateMusicPlatyList(r));
                     });
                 }
-                Ok(Err(e)) => info!("http error: {:?}", e),
                 Err(e) => info!("tokio runtime error: {:?}", e),
             }
         })

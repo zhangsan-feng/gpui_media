@@ -28,6 +28,7 @@ pub struct VolumeDrag;
 pub struct FrameBuffer {
     width: u32,
     height: u32,
+    frame_rate: f64,
     data: Vec<u8>,
     seq: u64,
 }
@@ -53,23 +54,22 @@ impl Drop for VideoPlayer {
 
 impl VideoPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let headers = header::HeaderMap::new();
-
         let window_id = window.window_handle().window_id();
         let mut s = Self {
             current_player: drive::NetworkStatic::default(),
             player_list: Vec::from([]),
             play_state: PlatState::UnLoading,
-            video_request_headers: headers,
             vm_scroll_handle: VirtualListScrollHandle::new(),
             video_player_volume: 0.6,
             video_frame_pipeline: None,
             video_frame_data: None,
             video_player_duration: Duration::from_secs(0),
-
             video_total_duration: None,
-            video_frame_size: 16.0 / 9.0,
-            video_frame_bounds: None,
+            video_frame_size_proportion: 16.0 / 9.0,
+            video_frame_player_size: None,
+            video_height: 0.,
+            video_width: 0.,
+            video_frame_rate: 0.0,
             is_dragging_progress_bar: false,
             pending_seek_position: None,
             progress_bar_bounds: None,
@@ -158,7 +158,7 @@ impl VideoPlayer {
         let playbin = gst::ElementFactory::make("playbin3")
             .name("video-playbin")
             .build()?;
-        let request_headers = self.video_request_headers.clone();
+        let request_headers = self.current_player.headers.clone();
         playbin.connect("source-setup", false, move |values| {
             let Some(source) = values
                 .get(1)
@@ -205,6 +205,14 @@ impl VideoPlayer {
 
                         let width = info.width() as usize;
                         let height = info.height() as usize;
+                        let fps = info.fps();
+                        let frame_rate = if fps.denom() > 0 {
+                            fps.numer() as f64 / fps.denom() as f64
+                        } else {
+                            0.0
+                        };
+
+                        // println!("video width: {}, height: {}", width, height);
                         if width == 0 || height == 0 {
                             return Ok(gst::FlowSuccess::Ok);
                         }
@@ -243,6 +251,7 @@ impl VideoPlayer {
                         let mut target = buffer_clone.lock().unwrap();
                         target.width = width as u32;
                         target.height = height as u32;
+                        target.frame_rate = frame_rate;
                         target.data = out;
                         target.seq = target.seq.wrapping_add(1);
 
@@ -272,6 +281,9 @@ impl VideoPlayer {
         self.play_state = PlatState::UnLoading;
         self.video_total_duration = None;
         self.video_player_duration = Duration::from_secs(0);
+        self.video_width = 0.0;
+        self.video_height = 0.0;
+        self.video_frame_rate = 0.0;
         self.is_dragging_progress_bar = false;
         self.pending_seek_position = None;
 
@@ -288,6 +300,7 @@ impl VideoPlayer {
             let mut buffer = self.frame_buffer.lock().unwrap();
             buffer.width = 0;
             buffer.height = 0;
+            buffer.frame_rate = 0.0;
             buffer.data.clear();
             buffer.seq = 0;
         }
@@ -307,11 +320,6 @@ impl VideoPlayer {
             }
         }
         structure
-    }
-
-    pub(crate) fn set_video_request_headers(&mut self, headers: header::HeaderMap) {
-        self.video_request_headers = headers;
-        self.reset_pipeline();
     }
 
     pub(crate) fn stop_frame_thread(&mut self) {
@@ -564,7 +572,7 @@ impl VideoPlayer {
     }
 
     fn update_frame(&mut self, buffer: &Arc<Mutex<FrameBuffer>>, cx: &mut Context<Self>) -> bool {
-        let (seq, width, height, data) = {
+        let (seq, width, height, frame_rate, data) = {
             let guard = buffer.lock().unwrap();
             if guard.seq == self.last_rendered_frame_sequence {
                 return self.video_frame_pipeline.is_some();
@@ -572,7 +580,13 @@ impl VideoPlayer {
             if guard.width == 0 || guard.height == 0 {
                 return self.video_frame_pipeline.is_some();
             }
-            (guard.seq, guard.width, guard.height, guard.data.clone())
+            (
+                guard.seq,
+                guard.width,
+                guard.height,
+                guard.frame_rate,
+                guard.data.clone(),
+            )
         };
 
         if let Some(image) = RgbaImage::from_raw(width, height, data) {
@@ -582,7 +596,11 @@ impl VideoPlayer {
                 self.pending_drop_images.push(old);
             }
             self.last_rendered_frame_sequence = seq;
-            self.video_frame_size = (width as f32 / height as f32).max(0.01);
+            self.video_frame_size_proportion = (width as f32 / height as f32).max(0.01);
+            println!("video width: {}, height: {}", width, height);
+            self.video_width = width as f32;
+            self.video_height = height as f32;
+            self.video_frame_rate = frame_rate;
             // 仅在首次加载阶段切换到 Playing。暂停后仍会继续收到已排队的帧，
             // 不能让这些帧把用户刚刚选择的 Paused 状态覆盖掉。
             if matches!(self.play_state, PlatState::Loading | PlatState::Cache(_)) {

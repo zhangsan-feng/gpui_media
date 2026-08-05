@@ -1,5 +1,6 @@
 use crate::component::color::rgb_to_u32;
-use crate::drive::video_player::{PlatState,  VideoPlayer};
+use crate::drive::video_player::core::{ProgressDrag, VolumeDrag};
+use crate::drive::video_player::{PlatState, VideoPlayer};
 use crate::drive::{LocalStatic, NetworkStatic};
 use gpui::*;
 use gpui_component::ElementExt;
@@ -12,7 +13,6 @@ use gpui_component::{h_flex, v_flex, v_virtual_list};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::drive::video_player::core::{ProgressDrag, VolumeDrag};
 
 impl VideoPlayer {
     fn player_list_vm(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -160,7 +160,7 @@ impl VideoPlayer {
         .track_scroll(&self.vm_scroll_handle)
     }
 
-    pub(crate) fn player_menu_ui(
+    pub(crate) fn player_menu_popover_ui(
         &self,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -168,7 +168,7 @@ impl VideoPlayer {
         let menu_h = window.bounds().size.height * 0.7;
         let menu_w = window.bounds().size.width * 0.5;
 
-        Popover::new("video-player-open-popover")
+        Popover::new("video-player-menu-popover")
             .anchor(Anchor::BottomRight)
             .trigger(Button::new("show-form").label("播放列表").outline())
             .child(
@@ -209,6 +209,7 @@ impl VideoPlayer {
                                                     author: "".to_string(),
                                                     category: "".to_string(),
                                                     headers: Default::default(),
+                                                    extra: Default::default(),
                                                     source: source.clone(),
                                                     func: Arc::new(LocalStatic),
                                                 };
@@ -259,7 +260,185 @@ impl VideoPlayer {
                             ),
                     )
                     .with_animation(
-                        "video-player-open-popover-animation",
+                        "video-player-menu-open-popover-animation",
+                        Animation::new(Duration::from_millis(550)).with_easing(ease_in_out),
+                        move |el, delta| el.opacity(0.2 + 0.8 * delta).h(menu_h * delta.max(0.02)),
+                    ),
+            )
+    }
+
+    pub(crate) fn player_info_popover_ui(
+        &self,
+        window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let menu_h = (window.bounds().size.height * 0.48).min(px(360.));
+        let menu_w = (window.bounds().size.width * 0.36).clamp(px(320.), px(460.));
+        let title = if self.current_player.name.trim().is_empty() {
+            "未命名视频".to_string()
+        } else {
+            self.current_player.name.clone()
+        };
+        let source = if self.current_player.source.trim().is_empty() {
+            "尚未加载视频来源".to_string()
+        } else {
+            self.current_player.source.clone()
+        };
+        let resolution = if self.video_width > 0.0 && self.video_height > 0.0 {
+            format!("{:.0} × {:.0}", self.video_width, self.video_height)
+        } else {
+            "等待视频元数据".to_string()
+        };
+        let frame_rate = if self.video_frame_rate > 0.0 {
+            format!("{:.2} FPS", self.video_frame_rate)
+        } else {
+            "等待视频元数据".to_string()
+        };
+        let playback_status = match &self.play_state {
+            PlatState::Playing => "播放中",
+            PlatState::Paused => "已暂停",
+            PlatState::Loading => "加载中",
+            PlatState::UnLoading => "未加载",
+            PlatState::Cache(_) => "缓冲中",
+            PlatState::Error(_) => "播放错误",
+        };
+
+        Popover::new("video-player-info-popover")
+            .anchor(Anchor::BottomRight)
+            .trigger(Button::new("show-video-info").label("!").outline())
+            .child(
+                div()
+                    .h(menu_h)
+                    .w(menu_w)
+                    .overflow_hidden()
+                    .child(
+                        v_flex()
+                            .size_full()
+                            .gap_3()
+                            .p_4()
+                            .bg(rgb_to_u32(248, 250, 252))
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .p_4()
+                                    .rounded_xl()
+                                    .border_1()
+                                    .border_color(rgb_to_u32(191, 219, 254))
+                                    .bg(rgb_to_u32(239, 246, 255))
+                                    .child(
+                                        h_flex()
+                                            .items_center()
+                                            .justify_between()
+                                            .child(
+                                                div()
+                                                    .text_size(px(12.))
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .text_color(rgb_to_u32(37, 99, 235))
+                                                    .child("当前视频"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .rounded_full()
+                                                    .px_2()
+                                                    .py_1()
+                                                    .bg(rgb_to_u32(219, 234, 254))
+                                                    .text_size(px(11.))
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .text_color(rgb_to_u32(29, 78, 216))
+                                                    .child(playback_status),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .overflow_hidden()
+                                            .whitespace_nowrap()
+                                            .text_ellipsis()
+                                            .text_size(px(16.))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(rgb_to_u32(15, 23, 42))
+                                            .child(title),
+                                    ),
+                            )
+                            .child(
+                                v_flex()
+                                    .gap_3()
+                                    .p_4()
+                                    .rounded_xl()
+                                    .border_1()
+                                    .border_color(rgb_to_u32(226, 232, 240))
+                                    .bg(rgb_to_u32(255, 255, 255))
+                                    .child(
+                                        v_flex()
+                                            .gap_1()
+                                            .child(
+                                                div()
+                                                    .text_size(px(11.))
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .text_color(rgb_to_u32(100, 116, 139))
+                                                    .child("播放来源"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .overflow_hidden()
+                                                    .whitespace_nowrap()
+                                                    .text_ellipsis()
+                                                    .text_size(px(13.))
+                                                    .text_color(rgb_to_u32(30, 41, 59))
+                                                    .child(source),
+                                            ),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .gap_3()
+                                            .child(
+                                                v_flex()
+                                                    .flex_1()
+                                                    .gap_1()
+                                                    .p_3()
+                                                    .rounded_lg()
+                                                    .bg(rgb_to_u32(248, 250, 252))
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(11.))
+                                                            .font_weight(FontWeight::MEDIUM)
+                                                            .text_color(rgb_to_u32(100, 116, 139))
+                                                            .child("分辨率"),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(14.))
+                                                            .font_weight(FontWeight::SEMIBOLD)
+                                                            .text_color(rgb_to_u32(15, 23, 42))
+                                                            .child(resolution),
+                                                    ),
+                                            )
+                                            .child(
+                                                v_flex()
+                                                    .flex_1()
+                                                    .gap_1()
+                                                    .p_3()
+                                                    .rounded_lg()
+                                                    .bg(rgb_to_u32(248, 250, 252))
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(11.))
+                                                            .font_weight(FontWeight::MEDIUM)
+                                                            .text_color(rgb_to_u32(100, 116, 139))
+                                                            .child("视频帧率"),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(14.))
+                                                            .font_weight(FontWeight::SEMIBOLD)
+                                                            .text_color(rgb_to_u32(15, 23, 42))
+                                                            .child(frame_rate),
+                                                    ),
+                                            ),
+                                    ),
+                            ),
+                    )
+                    .with_animation(
+                        "video-player-info-open-popover-animation",
                         Animation::new(Duration::from_millis(550)).with_easing(ease_in_out),
                         move |el, delta| el.opacity(0.2 + 0.8 * delta).h(menu_h * delta.max(0.02)),
                     ),
@@ -498,8 +677,8 @@ impl VideoPlayer {
     }
 
     pub(crate) fn video_frame_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let frame_aspect = self.video_frame_size.max(0.01);
-        let fitted_frame_size = self.video_frame_bounds.map(|bounds| {
+        let frame_aspect = self.video_frame_size_proportion.max(0.01);
+        let fitted_frame_size = self.video_frame_player_size.map(|bounds| {
             let container_width = bounds.size.width.as_f32().max(1.0);
             let container_height = bounds.size.height.as_f32().max(1.0);
             let container_aspect = container_width / container_height;
@@ -529,7 +708,7 @@ impl VideoPlayer {
                 move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
                     let _ = video_frame_entity.update(cx, |this, cx| {
                         let changed = this
-                            .video_frame_bounds
+                            .video_frame_player_size
                             .map(|current| {
                                 current.size.width != bounds.size.width
                                     || current.size.height != bounds.size.height
@@ -537,7 +716,7 @@ impl VideoPlayer {
                             .unwrap_or(true);
 
                         if changed {
-                            this.video_frame_bounds = Some(bounds);
+                            this.video_frame_player_size = Some(bounds);
                             cx.notify();
                         }
                     });

@@ -353,7 +353,11 @@ impl MusicPlayer {
         .track_scroll(&self.vm_scroll_handle)
     }
 
-    pub(crate) fn player_list_ui(&self,window:&mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn player_list_ui(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let menu_h = window.bounds().size.height * 0.7;
         let menu_w = window.bounds().size.width * 0.5;
 

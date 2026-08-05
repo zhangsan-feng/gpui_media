@@ -41,6 +41,7 @@ impl MusicPlayer {
             author: "".to_string(),
             category: String::new(),
             headers: Default::default(),
+            extra: Default::default(),
             source: file_path,
             func: Arc::new(drive::LocalStatic),
         })

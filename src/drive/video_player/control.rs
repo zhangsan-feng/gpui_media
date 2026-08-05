@@ -9,7 +9,6 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 impl VideoPlayer {
-
     fn handler_local_file(&self, path: &Path) -> Option<drive::NetworkStatic> {
         if !path.is_file() {
             return None;
@@ -28,6 +27,7 @@ impl VideoPlayer {
             author: String::from(""),
             category: String::new(),
             headers: Default::default(),
+            extra: Default::default(),
             source: file_path,
             func: Arc::new(drive::LocalStatic),
         })
@@ -156,6 +156,12 @@ impl VideoPlayer {
             match res.await {
                 Ok(val) => {
                     let _ = this.update(cx, |this, cx| {
+                        if val.is_empty() {
+                            this.reset_pipeline();
+                            this.play_state = PlatState::Error("未找到播放地址".to_string());
+                            cx.notify();
+                            return;
+                        }
                         this.current_player.source = val;
                         if let Err(err) = this.set_pipeline() {
                             this.reset_pipeline();

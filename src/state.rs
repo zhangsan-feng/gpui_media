@@ -6,8 +6,8 @@ use gpui::{Context, Entity, EntityId, EventEmitter, Global, WindowId};
 pub struct State {}
 
 pub enum StateEvent {
-    TogglePlayMusic(drive::NetworkStatic),
-    UpdateMusicPlatyList(Vec<drive::NetworkStatic>),
+    TogglePlayMusic(NetworkStatic),
+    UpdateMusicPlatyList(Vec<NetworkStatic>),
     TogglePlayVideo(WindowId, EntityId, NetworkStatic),
     UpdateVideoPlayList(WindowId, EntityId, Vec<NetworkStatic>),
 }
