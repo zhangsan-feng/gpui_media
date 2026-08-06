@@ -2,7 +2,7 @@ mod play;
 mod recommend;
 mod search;
 
-use crate::plugins::extractor::{PlatformConfig, ResourceType, config};
+use crate::plugins::extractor::config::{self, PlatformConfig, ResourceType};
 
 pub use recommend::recommend;
 pub use search::search;

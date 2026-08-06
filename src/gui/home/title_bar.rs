@@ -6,7 +6,7 @@ use gpui_component::*;
 pub struct CustomTitleBar {}
 
 impl CustomTitleBar {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
         Self {}
     }
     fn render_window_button(

@@ -1,6 +1,6 @@
 use super::FetchDocument;
 use crate::drive::{NetworkStatic, NetworkStaticInterface};
-use crate::plugins::extractor::config::{self, ExtractType, PlatformConfig};
+use crate::plugins::extractor::config::{self, PlatformConfig};
 
 pub(crate) struct ConfiguredVideoInterface {
     pub(crate) config: PlatformConfig,
@@ -14,18 +14,27 @@ impl NetworkStaticInterface for ConfiguredVideoInterface {
         if params.source.contains(".m3u8") || params.source.contains(".mp4") {
             return params.source.clone();
         }
-        if self.config.play_regex.is_none()
-            && !matches!(self.config.extract_type, ExtractType::Json)
-        {
+        let Some(detail) = self.config.item_children.detail.as_ref() else {
             return params.source.clone();
-        }
+        };
+        let Some(play) = detail.play.as_ref() else {
+            return params.source.clone();
+        };
+        let url = play
+            .base_url
+            .as_deref()
+            .map(|template| config::resolve_template(&params.source, template, &params.source))
+            .unwrap_or_else(|| params.source.clone());
+        let config = self.config.clone();
+        let fetcher = self.fetcher.clone();
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                let document = (self.fetcher)(params.source.clone(), self.config.clone())
-                    .await
-                    .expect("extractor play page request failed");
-                config::extract_play_url(&document, &self.config, &params.source)
-                    .unwrap_or_default()
+            tokio::runtime::Handle::current().block_on(async move {
+                let extract_type = config::play_extract_type(&config, play);
+                let Ok(document) = fetcher(url.clone(), config.clone(), extract_type).await else {
+                    log::error!("video play request failed: url={url}");
+                    return String::new();
+                };
+                config::extract_play_url(&document, play, &url, &config).unwrap_or_default()
             })
         })
     }
@@ -37,68 +46,55 @@ impl NetworkStaticInterface for ConfiguredVideoInterface {
         {
             return vec![params.clone()];
         }
-        let Some(page) = self
-            .config
-            .search
-            .as_ref()
-            .or_else(|| self.config.recommend.first())
-        else {
+        let Some(detail) = self.config.item_children.detail.as_ref() else {
             return vec![params.clone()];
         };
-        let Some(children) = &page.children else {
+        let Some(children) = detail.item_children.as_ref() else {
             return vec![params.clone()];
         };
+        let detail_url = detail
+            .base_url
+            .as_deref()
+            .map(|template| config::resolve_template(&params.source, template, &params.source))
+            .unwrap_or_else(|| params.source.clone());
+        let child_url = children
+            .base_url
+            .as_deref()
+            .map(|template| config::resolve_template(&detail_url, template, &params.source))
+            .unwrap_or_else(|| detail_url.clone());
+        let config = self.config.clone();
+        let fetcher = self.fetcher.clone();
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                let extract_type = config::children_extract_type(&self.config, children);
-                let Ok(document) = config::fetch_document_with_type(
-                    params.source.as_str(),
-                    &self.config,
-                    extract_type,
-                )
-                .await
+            tokio::runtime::Handle::current().block_on(async move {
+                let extract_type = config::detail_extract_type(&config, detail, children);
+                let Ok(document) = fetcher(child_url.clone(), config.clone(), extract_type).await
                 else {
+                    log::error!("video detail request failed: url={child_url}");
                     return vec![params.clone()];
                 };
-                let Some(base) = base_url(&params.source) else {
-                    return vec![params.clone()];
-                };
-                let values = config::parse_children(&document, children, &base);
+                let values = config::parse_items(&document, children, &child_url);
                 if values.is_empty() {
                     return vec![params.clone()];
                 }
                 values
                     .into_iter()
-                    .map(|(source, name, image)| NetworkStatic {
+                    .map(|item| NetworkStatic {
                         id: uuid::Uuid::new_v4().to_string(),
-                        name,
-                        img: if image.is_empty() {
+                        name: item.name,
+                        img: if item.image.is_empty() {
                             params.img.clone()
                         } else {
-                            image
+                            item.image
                         },
                         author: params.author.clone(),
                         category: params.category.clone(),
                         headers: params.headers.clone(),
-                        extra: params.extra.clone(),
-                        source,
+                        extra: item.extra,
+                        source: item.source,
                         func: params.func.clone(),
                     })
                     .collect()
             })
         })
     }
-}
-
-pub(crate) fn base_url(value: &str) -> Option<String> {
-    reqwest::Url::parse(value).ok().map(|url| {
-        format!(
-            "{}://{}{}",
-            url.scheme(),
-            url.host_str().unwrap_or_default(),
-            url.port()
-                .map(|port| format!(":{port}"))
-                .unwrap_or_default()
-        )
-    })
 }

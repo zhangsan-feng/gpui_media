@@ -1,7 +1,7 @@
 use super::{FetchDocument, default_fetcher, default_plugins, play::ConfiguredVideoInterface};
 use crate::drive::NetworkStatic;
 
-use crate::plugins::extractor::config::{self, ExtractedDocument, PageConfig, PlatformConfig};
+use crate::plugins::extractor::config::{self, ExtractedDocument, PlatformConfig};
 use futures_util::future::{BoxFuture, join_all};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,6 +19,7 @@ async fn search_with_configs(
     log::debug!("video search started: keyword={:?}", keyword);
     let tasks: Vec<(String, BoxFuture<'static, Vec<NetworkStatic>>)> = configs
         .into_iter()
+        .filter(|config| config::is_search_config(config))
         .map(|config| {
             let name = config.id.clone();
             let task = Box::pin(search_one(config, keyword.clone(), fetcher.clone()))
@@ -39,12 +40,15 @@ async fn search_one(
     keyword: String,
     fetcher: FetchDocument,
 ) -> Vec<NetworkStatic> {
-    let Some(page) = config.search.as_ref() else {
-        return Vec::new();
-    };
-    let url = config::search_url(&page.url, &keyword);
-    match fetcher(url.clone(), config.clone()).await {
-        Ok(body) => build_items(&body, page, &config, &url, fetcher),
+    let url = config::entry_url(&config, Some(&keyword));
+    match fetcher(
+        url.clone(),
+        config.clone(),
+        config::item_extract_type(&config),
+    )
+    .await
+    {
+        Ok(body) => build_items(&body, &config, &url, fetcher),
         Err(error) => {
             log::error!("request {} error: {:#}", config.id, error);
             Vec::new()
@@ -54,22 +58,18 @@ async fn search_one(
 
 pub(crate) fn build_items(
     document: &ExtractedDocument,
-    page: &PageConfig,
     config: &PlatformConfig,
-    page_url: &str,
+    entry_url: &str,
     fetcher: FetchDocument,
 ) -> Vec<NetworkStatic> {
-    let Some(base) = super::play::base_url(page_url) else {
-        return Vec::new();
-    };
-    config::parse_page(document, page, &base)
+    config::parse_items(document, &config.item_children, entry_url)
         .into_iter()
         .map(|item| NetworkStatic {
             id: Uuid::new_v4().to_string(),
             name: item.name,
             img: item.image,
             author: config.id.clone(),
-            category: page.category.clone(),
+            category: config.category.clone(),
             headers: config::headers(config),
             extra: item.extra,
             source: item.source,

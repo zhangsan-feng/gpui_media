@@ -10,7 +10,9 @@ pub(crate) struct ExtractedItem {
     pub(crate) source: String,
     pub(crate) name: String,
     pub(crate) image: String,
+    pub(crate) author: String,
     pub(crate) extra: HashMap<String, Value>,
+    pub(crate) raw: Option<Value>,
 }
 
 impl ExtractedItem {
@@ -18,13 +20,17 @@ impl ExtractedItem {
         source: String,
         name: String,
         image: String,
+        author: String,
         extra: HashMap<String, Value>,
+        raw: Option<Value>,
     ) -> Self {
         Self {
             source,
             name,
             image,
+            author,
             extra,
+            raw,
         }
     }
 }

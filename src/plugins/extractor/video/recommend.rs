@@ -1,19 +1,11 @@
-use super::{FetchDocument, append_unique, default_fetcher, default_plugins};
+use super::{FetchDocument, default_fetcher, default_plugins};
 use crate::drive::NetworkStatic;
 
-use crate::plugins::extractor::config::PlatformConfig;
+use crate::plugins::extractor::config::{self, PlatformConfig};
 use futures_util::future::join_all;
-use std::collections::HashSet;
 
 pub async fn recommend() -> Vec<NetworkStatic> {
-    recommend_with_configs(
-        default_plugins()
-            .into_iter()
-            .filter(|config| !config.recommend.is_empty())
-            .collect::<Vec<_>>(),
-        default_fetcher(),
-    )
-    .await
+    recommend_with_configs(default_plugins(), default_fetcher()).await
 }
 
 async fn recommend_with_configs(
@@ -23,6 +15,7 @@ async fn recommend_with_configs(
     let result = join_all(
         configs
             .into_iter()
+            .filter(|config| !config::is_search_config(config))
             .map(|config| recommend_one(config, fetcher.clone())),
     )
     .await
@@ -34,17 +27,18 @@ async fn recommend_with_configs(
 }
 
 async fn recommend_one(config: PlatformConfig, fetcher: FetchDocument) -> Vec<NetworkStatic> {
-    let mut seen = HashSet::new();
-    let mut result = Vec::new();
-    for page in &config.recommend {
-        let url = page.url.clone();
-        match fetcher(url.clone(), config.clone()).await {
-            Ok(body) => {
-                let items = super::search::build_items(&body, page, &config, &url, fetcher.clone());
-                append_unique(&mut result, &mut seen, items);
-            }
-            Err(error) => log::error!("request {} error: {:#}", config.id, error),
+    let url = config::entry_url(&config, None);
+    match fetcher(
+        url.clone(),
+        config.clone(),
+        config::item_extract_type(&config),
+    )
+    .await
+    {
+        Ok(body) => super::search::build_items(&body, &config, &url, fetcher),
+        Err(error) => {
+            log::error!("request {} error: {:#}", config.id, error);
+            Vec::new()
         }
     }
-    result
 }

@@ -9,6 +9,7 @@ type FetchDocument = Arc<
     dyn Fn(
             String,
             PlatformConfig,
+            super::config::ExtractType,
         ) -> BoxFuture<'static, anyhow::Result<super::template::ExtractedDocument>>
         + Send
         + Sync,
@@ -24,25 +25,13 @@ pub fn default_plugins() -> Vec<PlatformConfig> {
 }
 
 fn default_fetcher() -> FetchDocument {
-    Arc::new(|url, config| {
-        Box::pin(async move { super::config::fetch_document(&url, &config).await })
+    Arc::new(|url, config, extract_type| {
+        Box::pin(async move { super::config::fetch_document(&url, &config, extract_type).await })
     })
 }
 
-fn append_unique(
-    result: &mut Vec<crate::drive::NetworkStatic>,
-    seen: &mut std::collections::HashSet<String>,
-    items: impl IntoIterator<Item = crate::drive::NetworkStatic>,
-) {
-    for item in items {
-        if seen.insert(item.source.clone()) {
-            result.push(item);
-        }
-    }
-}
-
 /*
-
+# cms 站点
 https://suonizy.net/                    验证码
 http://caiji.dyttzyapi.com/             验证码
 https://www.wujinzy.net/                验证码
@@ -53,7 +42,7 @@ https://yayazy2.com/                    验证码
 https://niuniuzy.cc                     验证码
 https://okzyw.cc/                       验证码
 http://kuaichezy.com/                   验证码
-
+https://mtzy5.com/                      验证码
 
 https://lzizy.net/
 https://hongniuzy.net
@@ -63,8 +52,10 @@ https://haohuazy.com/
 https://www.ryzyw.com/
 https://ffzy5.tv/
 https://hongniuziyuan.net/
+http://ryzy.tv/
 
 
+# cms 转发站
 https://youzisp.tv
 https://www.keke2.app/
 https://www.renren.pro/
@@ -72,10 +63,10 @@ https://www.bttwo.org/
 https://tyyszyapi.com/
 
 
-
-
 cms 采集站
 https://www.zzzypro.com/
 https://www.yszzq.com/ziyuan/
+
+
 
 */

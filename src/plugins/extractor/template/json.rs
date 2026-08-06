@@ -1,7 +1,9 @@
 use super::ExtractedItem;
 use super::css;
 use crate::com::request::HttpClient;
-use crate::plugins::extractor::config::{ChildrenConfig, FieldConfig, PageConfig, PlatformConfig};
+use crate::plugins::extractor::config::{
+    FieldConfig, ItemChildrenConfig, ItemSplitConfig, PlatformConfig,
+};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
@@ -60,56 +62,88 @@ pub(crate) fn fill_template(template: &str, value: &str) -> String {
         .replace("{{source}}", value)
 }
 
-pub(crate) fn parse_page(document: &Value, page: &PageConfig, base: &str) -> Vec<ExtractedItem> {
-    let Some(items) = json_path(document, &page.item_selector).and_then(Value::as_array) else {
+pub(crate) fn parse_items(
+    document: &Value,
+    config: &ItemChildrenConfig,
+    base: &str,
+) -> Vec<ExtractedItem> {
+    let Some(value) = json_path(document, &config.item_selector) else {
+        return Vec::new();
+    };
+    let items = if let Some(items) = value.as_array() {
+        items.clone()
+    } else if let (Some(value), Some(item_split)) = (value.as_str(), config.item_split.as_ref()) {
+        split_items(value, item_split)
+    } else {
         return Vec::new();
     };
     items
         .iter()
         .filter_map(|item| {
-            let source = field_value(item, &page.detail_url)
-                .map(|value| super::css::resolve(base, &value))?;
-            let name = field_value(item, &page.name).unwrap_or_else(|| "未命名资源".to_string());
-            let image = page
+            let source =
+                field_value(item, &config.source).map(|value| resolve_value(base, &value))?;
+            let name = field_value(item, &config.name).unwrap_or_else(|| "未命名资源".to_string());
+            let image = config
                 .image
                 .as_ref()
                 .and_then(|field| field_value(item, field))
-                .map(|value| super::css::resolve(base, &value))
+                .map(|value| resolve_value(base, &value))
                 .unwrap_or_default();
-            let extra = page
+            let author = config
+                .author
+                .as_ref()
+                .and_then(|field| field_value(item, field))
+                .unwrap_or_default();
+            let extra = config
                 .extra
                 .iter()
                 .filter_map(|(key, field)| {
                     field_value(item, field).map(|value| (key.clone(), json!(value)))
                 })
                 .collect::<HashMap<String, Value>>();
-            Some(ExtractedItem::new(source, name, image, extra))
+            Some(ExtractedItem::new(
+                source,
+                name,
+                image,
+                author,
+                extra,
+                Some(item.clone()),
+            ))
         })
         .collect()
 }
 
-pub(crate) fn parse_children(
-    document: &Value,
-    children: &ChildrenConfig,
-    base: &str,
-) -> Vec<(String, String, String)> {
-    let Some(items) = json_path(document, &children.item_selector).and_then(Value::as_array) else {
-        return Vec::new();
-    };
-    items
-        .iter()
+fn split_items(value: &str, config: &ItemSplitConfig) -> Vec<Value> {
+    value
+        .split(&config.item_separator)
         .filter_map(|item| {
-            let source = field_value(item, &children.play_url)
-                .map(|value| super::css::resolve(base, &value))?;
-            let name =
-                field_value(item, &children.name).unwrap_or_else(|| "未命名分集".to_string());
-            let image = children
-                .image
-                .as_ref()
-                .and_then(|field| field_value(item, field))
-                .map(|value| super::css::resolve(base, &value))
-                .unwrap_or_default();
-            Some((source, name, image))
+            let item = item.trim();
+            if item.is_empty() {
+                return None;
+            }
+            let fields = config
+                .field_separator
+                .as_deref()
+                .map(|separator| {
+                    item.split(separator)
+                        .map(|field| Value::String(field.trim().to_string()))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| vec![Value::String(item.to_string())]);
+            Some(Value::Array(fields))
         })
         .collect()
+}
+
+fn resolve_value(base: &str, value: &str) -> String {
+    if value.starts_with("http://")
+        || value.starts_with("https://")
+        || value.starts_with('/')
+        || value.starts_with("./")
+        || value.starts_with("../")
+    {
+        super::css::resolve(base, value)
+    } else {
+        value.to_string()
+    }
 }

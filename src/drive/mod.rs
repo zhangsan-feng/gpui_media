@@ -13,9 +13,9 @@ pub struct NetworkStatic {
     pub img: String,
     pub author: String,
     pub category: String,
+    pub source: String,
     pub headers: reqwest::header::HeaderMap,
     pub extra: HashMap<String, serde_json::Value>,
-    pub source: String,
     pub func: Arc<dyn NetworkStaticInterface + Send + Sync>,
 }
 

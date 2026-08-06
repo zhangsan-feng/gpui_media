@@ -1,4 +1,4 @@
-use super::super::config::{FieldConfig, PageConfig};
+use super::super::config::{FieldConfig, ItemChildrenConfig};
 use super::ExtractedItem;
 use crate::com::request::HttpClient;
 use anyhow::{Context, Result};
@@ -61,88 +61,72 @@ fn percent_encode(value: &str) -> String {
     })
 }
 
-pub(crate) fn parse_page(html: &str, page: &PageConfig, base: &str) -> Vec<ExtractedItem> {
+pub(crate) fn parse_items(
+    html: &str,
+    items: &ItemChildrenConfig,
+    base: &str,
+) -> Vec<ExtractedItem> {
     let document = Html::parse_document(html);
-    let Ok(item_selector) = Selector::parse(&page.item_selector) else {
+    let Ok(item_selector) = Selector::parse(&items.item_selector) else {
         return Vec::new();
     };
-    document
-        .select(&item_selector)
-        .filter_map(|item| {
-            let source = field_value(item, &page.detail_url).map(|value| resolve(base, &value))?;
-            let name = field_value(item, &page.name)
-                .or_else(|| field_value(item, &FieldConfig::text(":scope")))
-                .unwrap_or_else(|| "未命名资源".to_string());
-            let image = page
-                .image
-                .as_ref()
-                .and_then(|field| field_value(item, field))
-                .map(|value| resolve(base, &value))
-                .unwrap_or_default();
-            let extra = page
-                .extra
-                .iter()
-                .filter_map(|(key, field)| {
-                    field_value(item, field).map(|value| (key.clone(), json!(value)))
-                })
-                .collect::<HashMap<String, Value>>();
-            Some(ExtractedItem::new(source, name, image, extra))
-        })
-        .collect()
-}
-
-pub(crate) fn parse_children(
-    html: &str,
-    item: &super::super::config::ChildrenConfig,
-    base: &str,
-) -> Vec<(String, String, String)> {
-    let document = Html::parse_document(html);
     let mut result = Vec::new();
     let mut seen = HashSet::new();
-
-    if let Ok(selector) = Selector::parse(&item.item_selector) {
-        for element in document.select(&selector) {
-            if let Some(value) = parse_child(element, item, base)
-                && seen.insert(value.0.clone())
-            {
-                result.push(value);
+    for element in document.select(&item_selector) {
+        if let Some(item) = parse_item(element, items, base)
+            && seen.insert(item.source.clone())
+        {
+            result.push(item);
+        }
+    }
+    if items.fallback_play_links {
+        if let Ok(selector) = Selector::parse("a[href]") {
+            for element in document.select(&selector) {
+                let Some(href) = element.value().attr("href") else {
+                    continue;
+                };
+                if !is_play_url(href) {
+                    continue;
+                }
+                if let Some(item) = parse_item(element, items, base)
+                    && seen.insert(item.source.clone())
+                {
+                    result.push(item);
+                }
             }
         }
     }
-
-    if let Ok(selector) = Selector::parse("a[href]") {
-        for element in document.select(&selector) {
-            let Some(href) = element.value().attr("href") else {
-                continue;
-            };
-            if !is_play_url(href) {
-                continue;
-            }
-            if let Some(value) = parse_child(element, item, base)
-                && seen.insert(value.0.clone())
-            {
-                result.push(value);
-            }
-        }
-    }
-
     result
 }
 
-fn parse_child(
+fn parse_item(
     element: ElementRef<'_>,
-    item: &super::super::config::ChildrenConfig,
+    items: &ItemChildrenConfig,
     base: &str,
-) -> Option<(String, String, String)> {
-    let source = field_value(element, &item.play_url).map(|value| resolve(base, &value))?;
-    let name = field_value(element, &item.name).unwrap_or_else(|| "未命名分集".to_string());
-    let image = item
+) -> Option<ExtractedItem> {
+    let source = field_value(element, &items.source).map(|value| resolve(base, &value))?;
+    let name = field_value(element, &items.name)
+        .or_else(|| field_value(element, &FieldConfig::text(":scope")))
+        .unwrap_or_else(|| "未命名资源".to_string());
+    let image = items
         .image
         .as_ref()
         .and_then(|field| field_value(element, field))
         .map(|value| resolve(base, &value))
         .unwrap_or_default();
-    Some((source, name, image))
+    let author = items
+        .author
+        .as_ref()
+        .and_then(|field| field_value(element, field))
+        .unwrap_or_default();
+    let extra = items
+        .extra
+        .iter()
+        .filter_map(|(key, field)| {
+            field_value(element, field).map(|value| (key.clone(), json!(value)))
+        })
+        .collect::<HashMap<String, Value>>();
+    Some(ExtractedItem::new(source, name, image, author, extra, None))
 }
 
 fn is_play_url(value: &str) -> bool {

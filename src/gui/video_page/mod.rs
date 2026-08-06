@@ -41,7 +41,7 @@ impl VideoPage {
             search_result: HashMap::new(),
             vm_scroll_handler: VirtualListScrollHandle::new(),
         };
-        s.init_data(cx);
+        // s.init_data(cx);
         s
     }
 
@@ -135,7 +135,7 @@ impl VideoPage {
 
     fn search_content(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         if self.is_searching {
-            return self.video_grid_content(Vec::new(), "video-search-grid", window, cx);
+            return self.video_list_content(Vec::new(), "video-search-list", window, cx);
         }
 
         let items = self
@@ -144,47 +144,26 @@ impl VideoPage {
             .flat_map(|videos| videos.iter().cloned())
             .collect();
 
-        self.video_grid_content(items, "video-search-grid", window, cx)
+        self.video_list_content(items, "video-search-list", window, cx)
     }
 
     fn recommend_content(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        self.video_grid_content(
+        self.video_list_content(
             self.recommend_result.clone(),
-            "video-recommend-grid",
+            "video-recommend-list",
             window,
             cx,
         )
     }
 
-    fn video_grid_columns(&self, available_width: f32, min_card_width: f32, gap: f32) -> usize {
-        if available_width <= min_card_width {
-            return 1;
-        }
-
-        ((available_width + gap) / (min_card_width + gap))
-            .floor()
-            .max(1.) as usize
-    }
-
-    fn video_grid_rows(&self, item_count: usize, columns: usize) -> usize {
-        if item_count == 0 {
-            return 0;
-        }
-
-        let columns = columns.max(1);
-        item_count.div_ceil(columns)
-    }
-
-    fn video_grid_content(
+    fn video_list_content(
         &self,
         items: Vec<NetworkStatic>,
         list_id: &'static str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        const VIDEO_CARD_MIN_WIDTH: f32 = 200.;
-        const VIDEO_GRID_GAP: f32 = 12.;
-        const VIDEO_GRID_ROW_HEIGHT: f32 = 280.;
+        const VIDEO_LIST_ROW_HEIGHT: f32 = 124.;
 
         if items.is_empty() {
             return div()
@@ -197,39 +176,25 @@ impl VideoPage {
                 .into_any_element();
         }
 
-        let available_width =
-            (window.bounds().size.width.as_f32() - 100.).max(VIDEO_CARD_MIN_WIDTH);
-        let columns =
-            self.video_grid_columns(available_width, VIDEO_CARD_MIN_WIDTH, VIDEO_GRID_GAP);
-        let row_count = self.video_grid_rows(items.len(), columns);
-        // let card_width = ((available_width - VIDEO_GRID_GAP * (columns.saturating_sub(1) as f32))
-        //     / columns as f32)
-        //     .floor();
+        let available_width = (window.bounds().size.width.as_f32() - 100.).max(240.);
         let items = Rc::new(items);
 
         v_virtual_list(
             cx.entity().clone(),
             list_id,
             Rc::new(
-                (0..row_count)
-                    .map(|_| size(px(available_width), px(VIDEO_GRID_ROW_HEIGHT)))
+                (0..items.len())
+                    .map(|_| size(px(available_width), px(VIDEO_LIST_ROW_HEIGHT)))
                     .collect(),
             ),
             move |_view, visible_range, _, cx| {
                 visible_range
-                    .map(|row_index| {
-                        let start = row_index * columns;
-                        let end = (start + columns).min(items.len());
-                        let row_items = (start..end)
-                            .map(|index| VideoPage::video_card(items[index].clone(), cx))
-                            .collect::<Vec<_>>();
-
-                        h_flex()
+                    .map(|index| {
+                        div()
                             .w_full()
-                            .h(px(VIDEO_GRID_ROW_HEIGHT))
-                            .gap_3()
-                            .items_start()
-                            .children(row_items)
+                            .h(px(VIDEO_LIST_ROW_HEIGHT))
+                            .pb_3()
+                            .child(VideoPage::video_card(items[index].clone(), cx))
                     })
                     .collect()
             },
@@ -248,6 +213,22 @@ impl VideoPage {
     }
 
     fn video_card(data: NetworkStatic, cx: &mut Context<Self>) -> AnyElement {
+        let cover = if data.img.trim().is_empty() {
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(px(13.))
+                .text_color(rgb_to_u32(100, 116, 139))
+                .child("暂无封面")
+                .into_any_element()
+        } else {
+            img(data.img.clone())
+                .size_full()
+                .object_fit(ObjectFit::Cover)
+                .into_any_element()
+        };
         let mut extra_fields = data.extra.iter().collect::<Vec<_>>();
         extra_fields.sort_by(|left, right| left.0.cmp(right.0));
         let extra_fields = extra_fields
@@ -269,8 +250,8 @@ impl VideoPage {
 
         div()
             .id(format!("video-card-{}", data.id))
-            .w(px(200.))
-            .h(px(260.))
+            .w_full()
+            .h(px(112.))
             .rounded_lg()
             .border_1()
             .border_color(rgb_to_u32(226, 232, 240))
@@ -289,53 +270,49 @@ impl VideoPage {
                 })
             })
             .child(
-                v_flex()
+                h_flex()
                     .size_full()
                     .child(
                         div()
-                            .flex_grow(8.)
-                            .w_full()
-                            .h(px(150.))
+                            .w(px(168.))
+                            .h_full()
                             .flex_shrink_0()
                             .overflow_hidden()
                             .bg(rgb_to_u32(241, 245, 249))
-                            .child(
-                                img(data.img.clone())
-                                    .size_full()
-                                    .object_fit(ObjectFit::Cover),
-                            ),
+                            .child(cover),
                     )
                     .child(
                         v_flex()
-                            .p_1()
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .p_3()
                             .gap_1()
-                            .flex_grow(2.)
-                            .text_center()
+                            .items_start()
                             .child(
                                 div()
-                                    .text_size(px(14.))
+                                    .w_full()
+                                    .text_size(px(15.))
                                     .text_color(rgb_to_u32(15, 23, 42))
+                                    .text_ellipsis()
                                     .child(data.name.clone()),
                             )
                             .child(
                                 div()
+                                    .w_full()
                                     .text_size(px(12.))
                                     .text_color(rgb_to_u32(100, 116, 139))
                                     .text_ellipsis()
-                                    .child(if data.author.is_empty() {
-                                        data.category.clone()
-                                    } else {
-                                        data.author.clone()
-                                    }),
+                                    .child(format!(
+                                        "来源：{}",
+                                        if data.author.is_empty() {
+                                            data.category.clone()
+                                        } else {
+                                            data.author.clone()
+                                        }
+                                    )),
                             )
-                            .children(extra_fields), // .child(
-                                                     //     div()
-                                                     //         .min_w_0()
-                                                     //         .text_size(px(11.))
-                                                     //         .text_color(rgb_to_u32(148, 163, 184))
-                                                     //         .text_ellipsis()
-                                                     //         .child(data.source.clone()),
-                                                     // ),
+                            .children(extra_fields),
                     ),
             )
             .into_any_element()

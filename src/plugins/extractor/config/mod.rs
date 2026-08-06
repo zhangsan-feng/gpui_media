@@ -8,11 +8,12 @@ use crate::plugins::extractor::config::video_config::{
 };
 
 mod audio_config;
+mod legacy;
 mod video_config;
 
-pub(crate) use super::template::ExtractedDocument;
+pub(crate) use super::template::*;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ResourceType {
     Video,
@@ -30,7 +31,15 @@ pub enum ExtractType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldConfig {
     pub selector: String,
+    #[serde(default)]
     pub attribute: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemSplitConfig {
+    pub item_separator: String,
+    #[serde(default)]
+    pub field_separator: Option<String>,
 }
 
 impl FieldConfig {
@@ -50,99 +59,119 @@ impl FieldConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChildrenConfig {
-    pub item_selector: String,
+pub struct ItemChildrenConfig {
+    #[serde(default)]
+    pub base_url: Option<String>,
     #[serde(default)]
     pub extract_type: Option<ExtractType>,
+    pub item_selector: String,
+    pub source: FieldConfig,
     pub name: FieldConfig,
     #[serde(default)]
     pub author: Option<FieldConfig>,
+    #[serde(default)]
     pub image: Option<FieldConfig>,
-    pub play_url: FieldConfig,
+    #[serde(default)]
+    pub extra: HashMap<String, FieldConfig>,
+    #[serde(default = "default_fallback_play_links")]
+    pub fallback_play_links: bool,
+    #[serde(default)]
+    pub item_split: Option<ItemSplitConfig>,
+    #[serde(default)]
+    pub detail: Option<Box<DetailConfig>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PageConfig {
-    pub url: String,
-    pub category: String,
-    pub item_selector: String,
-    pub name: FieldConfig,
+pub struct DetailConfig {
     #[serde(default)]
-    pub author: Option<FieldConfig>,
-    pub image: Option<FieldConfig>,
-    pub detail_url: FieldConfig,
+    pub base_url: Option<String>,
     #[serde(default)]
-    pub extra: HashMap<String, FieldConfig>,
+    pub extract_type: Option<ExtractType>,
     #[serde(default)]
-    pub children_url: Option<String>,
-    pub children: Option<ChildrenConfig>,
+    pub item_children: Option<Box<ItemChildrenConfig>>,
+    #[serde(default)]
+    pub play: Option<PlayConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayConfig {
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub extract_type: Option<ExtractType>,
+    #[serde(default)]
+    pub selector: Option<String>,
+    #[serde(default)]
+    pub regex: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlatformConfig {
     pub id: String,
-    pub resource_type: ResourceType,
-    pub extract_type: ExtractType,
+    #[serde(default)]
     pub headers: HashMap<String, String>,
-    pub search: Option<PageConfig>,
-    pub recommend: Vec<PageConfig>,
-    pub play_regex: Option<String>,
+    pub base_url: String,
+    pub extract_type: ExtractType,
     #[serde(default)]
-    pub play_url: Option<String>,
-    #[serde(default)]
-    pub play_selector: Option<String>,
+    pub category: String,
+    pub item_children: ItemChildrenConfig,
+}
+
+fn default_fallback_play_links() -> bool {
+    true
 }
 
 pub fn load_from_dir(
     path: impl AsRef<std::path::Path>,
     resource_type: ResourceType,
 ) -> Vec<PlatformConfig> {
-    let Ok(entries) = std::fs::read_dir(path) else {
+    let Ok(entries) = std::fs::read_dir(path.as_ref()) else {
         return Vec::new();
     };
-    let mut configs = entries
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
-        .filter_map(|path| {
-            let content = std::fs::read_to_string(&path).ok()?;
-            let value = serde_json::from_str::<serde_json::Value>(&content).ok()?;
-            if let Some(items) = value.as_array() {
-                return Some(
-                    items
-                        .iter()
-                        .filter_map(|item| {
-                            serde_json::from_value::<PlatformConfig>(item.clone()).ok()
-                        })
-                        .filter(|config| config.resource_type == resource_type)
-                        .collect::<Vec<_>>(),
-                );
-            }
-            let config = serde_json::from_value::<PlatformConfig>(value).ok()?;
-            Some(
-                (config.resource_type == resource_type)
-                    .then_some(config)
-                    .into_iter()
-                    .collect(),
-            )
-        })
-        .flatten()
-        .collect::<Vec<_>>();
+    let mut configs = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            log::warn!("failed to read extractor config {}", path.display());
+            continue;
+        };
+        configs.extend(parse_configs(
+            &content,
+            resource_type,
+            path.display().to_string(),
+        ));
+    }
     configs.sort_by(|left, right| left.id.cmp(&right.id));
     configs
 }
 
 pub fn load_default(resource_type: ResourceType) -> Vec<PlatformConfig> {
+    let mut configs = match resource_type {
+        ResourceType::Video => {
+            let mut configs = parse_configs(
+                VIDEO_SEARCH_CONFIG,
+                resource_type,
+                "embedded video search config".into(),
+            );
+            configs.extend(parse_configs(
+                VIDEO_RECOMMEND_CONFIG,
+                resource_type,
+                "embedded video recommend config".into(),
+            ));
+            configs
+        }
+        ResourceType::Audio => parse_configs(
+            AUDIO_RECOMMEND_CONFIG,
+            resource_type,
+            "embedded audio recommend config".into(),
+        ),
+    };
     let folder = match resource_type {
         ResourceType::Video => "video",
         ResourceType::Audio => "audio",
-    };
-    let mut configs = match resource_type {
-        ResourceType::Video => {
-            let mut configs = parse_configs(VIDEO_SEARCH_CONFIG, resource_type);
-            configs.extend(parse_configs(VIDEO_RECOMMEND_CONFIG, resource_type));
-            configs
-        }
-        ResourceType::Audio => parse_configs(AUDIO_RECOMMEND_CONFIG, resource_type),
     };
     let external = [
         std::path::PathBuf::from("plugins").join(folder),
@@ -152,135 +181,156 @@ pub fn load_default(resource_type: ResourceType) -> Vec<PlatformConfig> {
     ]
     .into_iter()
     .find_map(|path| {
-        let configs = load_from_dir(path, resource_type);
-        (!configs.is_empty()).then_some(configs)
+        let values = load_from_dir(path, resource_type);
+        (!values.is_empty()).then_some(values)
     })
     .unwrap_or_default();
-    configs.extend(external);
+    if !external.is_empty() {
+        let external_ids = external
+            .iter()
+            .map(|config| config.id.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        configs.retain(|config| !external_ids.contains(config.id.as_str()));
+        configs.extend(external);
+    }
     configs.sort_by(|left, right| left.id.cmp(&right.id));
     configs
 }
 
-fn parse_configs(content: &str, resource_type: ResourceType) -> Vec<PlatformConfig> {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(content) else {
+fn parse_configs(
+    content: &str,
+    resource_type: ResourceType,
+    origin: String,
+) -> Vec<PlatformConfig> {
+    let Ok(value) = serde_json::from_str::<Value>(content) else {
+        log::warn!("invalid extractor config JSON: {origin}");
         return Vec::new();
     };
-    let values = value.as_array().cloned().unwrap_or_else(|| vec![value]);
-    values
+    value
+        .as_array()
+        .cloned()
+        .unwrap_or_else(|| vec![value])
         .into_iter()
-        .filter_map(|value| serde_json::from_value::<PlatformConfig>(value).ok())
-        .filter(|config| config.resource_type == resource_type)
+        .flat_map(|value| parse_config(value, resource_type, &origin))
         .collect()
 }
 
+fn parse_config(value: Value, resource_type: ResourceType, origin: &str) -> Vec<PlatformConfig> {
+    if value.get("item_children").is_some() {
+        let id = value
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("<unknown>")
+            .to_string();
+        let Ok(mut config) = serde_json::from_value::<PlatformConfig>(value) else {
+            log::warn!("invalid extractor config {origin}, id={id}");
+            return Vec::new();
+        };
+        if config.category.is_empty() {
+            config.category = config.id.clone();
+        }
+        return vec![config];
+    }
+    legacy::parse(value, resource_type, origin)
+}
+
+pub(crate) fn entry_url(config: &PlatformConfig, keyword: Option<&str>) -> String {
+    let path = config
+        .item_children
+        .base_url
+        .as_deref()
+        .unwrap_or(&config.base_url);
+    let url = css::resolve(&config.base_url, path);
+    keyword
+        .map(|keyword| search_url(&url, keyword))
+        .unwrap_or(url)
+}
+
+pub(crate) fn is_search_config(config: &PlatformConfig) -> bool {
+    config
+        .item_children
+        .base_url
+        .as_deref()
+        .is_some_and(|url| url.contains("{{keyword}}"))
+}
+
+pub(crate) fn item_extract_type(config: &PlatformConfig) -> ExtractType {
+    config
+        .item_children
+        .extract_type
+        .unwrap_or(config.extract_type)
+}
+
+pub(crate) fn detail_extract_type(
+    config: &PlatformConfig,
+    detail: &DetailConfig,
+    children: &ItemChildrenConfig,
+) -> ExtractType {
+    children
+        .extract_type
+        .or(detail.extract_type)
+        .unwrap_or(config.extract_type)
+}
+
+pub(crate) fn play_extract_type(config: &PlatformConfig, play: &PlayConfig) -> ExtractType {
+    play.extract_type.unwrap_or(config.extract_type)
+}
+
 pub(crate) fn headers(config: &PlatformConfig) -> reqwest::header::HeaderMap {
-    super::template::css::headers(&config.headers)
+    css::headers(&config.headers)
 }
 
 pub(crate) async fn fetch_document(
     url: &str,
     config: &PlatformConfig,
-) -> anyhow::Result<super::template::ExtractedDocument> {
-    fetch_document_with_type(url, config, config.extract_type).await
-}
-
-pub(crate) async fn fetch_document_with_type(
-    url: &str,
-    config: &PlatformConfig,
     extract_type: ExtractType,
-) -> anyhow::Result<super::template::ExtractedDocument> {
+) -> anyhow::Result<ExtractedDocument> {
     match extract_type {
-        ExtractType::Json => super::template::json::fetch(url, config)
+        ExtractType::Json => json::fetch(url, config).await.map(ExtractedDocument::Json),
+        ExtractType::Css | ExtractType::Regex => css::fetch(url, &headers(config))
             .await
-            .map(super::template::ExtractedDocument::Json),
-        ExtractType::Css | ExtractType::Regex => super::template::css::fetch(url, &headers(config))
-            .await
-            .map(super::template::ExtractedDocument::Html),
+            .map(ExtractedDocument::Html),
     }
 }
 
-pub(crate) fn children_extract_type(
-    config: &PlatformConfig,
-    children: &ChildrenConfig,
-) -> ExtractType {
-    children.extract_type.unwrap_or(config.extract_type)
-}
-
-pub(crate) fn search_url(template: &str, keyword: &str) -> String {
-    super::template::css::search_url(template, keyword)
-}
-
-pub(crate) fn base_url(value: &str) -> Option<String> {
-    reqwest::Url::parse(value).ok().map(|url| {
-        format!(
-            "{}://{}{}",
-            url.scheme(),
-            url.host_str().unwrap_or_default(),
-            url.port()
-                .map(|port| format!(":{port}"))
-                .unwrap_or_default()
-        )
-    })
-}
-
-pub(crate) fn parse_page(
-    document: &super::template::ExtractedDocument,
-    page: &PageConfig,
+pub(crate) fn parse_items(
+    document: &ExtractedDocument,
+    items: &ItemChildrenConfig,
     base: &str,
-) -> Vec<super::template::ExtractedItem> {
+) -> Vec<ExtractedItem> {
     match document {
-        super::template::ExtractedDocument::Html(body) => {
-            super::template::css::parse_page(body, page, base)
-        }
-        super::template::ExtractedDocument::Json(document) => {
-            super::template::json::parse_page(document, page, base)
-        }
-    }
-}
-
-pub(crate) fn parse_children(
-    document: &super::template::ExtractedDocument,
-    children: &ChildrenConfig,
-    base: &str,
-) -> Vec<(String, String, String)> {
-    match document {
-        super::template::ExtractedDocument::Html(body) => {
-            super::template::css::parse_children(body, children, base)
-        }
-        super::template::ExtractedDocument::Json(document) => {
-            super::template::json::parse_children(document, children, base)
-        }
+        ExtractedDocument::Html(body) => css::parse_items(body, items, base),
+        ExtractedDocument::Json(document) => json::parse_items(document, items, base),
     }
 }
 
 pub(crate) fn extract_play_url(
-    document: &super::template::ExtractedDocument,
-    config: &PlatformConfig,
+    document: &ExtractedDocument,
+    play: &PlayConfig,
     base: &str,
+    config: &PlatformConfig,
 ) -> Option<String> {
-    match (&config.extract_type, document) {
-        (ExtractType::Json, super::template::ExtractedDocument::Json(document)) => config
-            .play_selector
+    match (play_extract_type(config, play), document) {
+        (ExtractType::Json, ExtractedDocument::Json(document)) => play
+            .selector
             .as_deref()
-            .and_then(|selector| super::template::json::json_string(document, selector)),
-        (ExtractType::Css | ExtractType::Regex, super::template::ExtractedDocument::Html(body)) => {
-            config
-                .play_regex
-                .as_deref()
-                .and_then(|pattern| super::template::regex::extract(body, pattern, base))
-        }
+            .and_then(|selector| json::json_string(document, selector)),
+        (ExtractType::Css | ExtractType::Regex, ExtractedDocument::Html(body)) => play
+            .regex
+            .as_deref()
+            .and_then(|pattern| regex::extract(body, pattern, base)),
         _ => None,
     }
 }
 
-pub(crate) fn field_value(value: &Value, field: &FieldConfig) -> Option<String> {
-    super::template::json::field_value(value, field)
-}
-
-pub(crate) fn json_path<'a>(value: &'a Value, selector: &str) -> Option<&'a Value> {
-    super::template::json::json_path(value, selector)
-}
-
 pub(crate) fn fill_template(template: &str, value: &str) -> String {
-    super::template::json::fill_template(template, value)
+    json::fill_template(template, value)
+}
+
+pub(crate) fn resolve_template(base: &str, template: &str, value: &str) -> String {
+    css::resolve(base, &fill_template(template, value))
+}
+
+pub(crate) fn search_url(template: &str, keyword: &str) -> String {
+    css::search_url(template, keyword)
 }

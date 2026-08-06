@@ -3,8 +3,6 @@ use crate::drive::NetworkStatic;
 use crate::drive::video_player::core::{FrameBuffer, PlatState};
 use gpui::*;
 use gpui_component::input::InputState;
-use gpui_component::scroll::ScrollableElement;
-
 use gpui_component::{VirtualListScrollHandle, h_flex, v_flex};
 use gstreamer_app as gst_app;
 use gstreamer_app::gst;
@@ -89,43 +87,27 @@ impl Render for VideoPlayer {
                             .child(self.player_progress_control_ui(window, cx))
                             .child(
                                 h_flex()
-                                    .gap_4()
                                     .w_full()
                                     .justify_between()
                                     .items_center()
                                     .child(
-                                        div().flex_1(), //         .w(window.bounds().size.width * 0.2)
-                                                        //         .overflow_x_scrollbar()
-                                                        //         .text_color(rgb_to_u32(15, 23, 42))
-                                                        //         .child(
-                                                        //             markdown(
-                                                        //                 if self.current_player.source.is_empty() {
-                                                        //                     "没有加载视频来源".to_string()
-                                                        //                 } else {
-                                                        //                     format!(
-                                                        //                         "{} / {}",
-                                                        //                         self.current_player.name,
-                                                        //                         self.current_player.source
-                                                        //                     )
-                                                        //                 },
-                                                        //             )
-                                                        //             .selectable(true)
-                                                        //             .scrollable(false)
-                                                        //             .whitespace_nowrap()
-                                                        //             .cursor_text(),
-                                                        //         ),
-                                    )
-                                    .child(
                                         h_flex()
-                                            .gap_4()
+                                            .flex_1()
+                                            .gap_2()
+                                            .justify_end()
                                             .child(self.player_menu_popover_ui(window, cx))
-                                            .child(self.player_control_ui(cx))
-                                            .child(self.player_volume_control_ui(cx))
                                             .child(self.player_info_popover_ui(window, cx)),
                                     )
                                     .child(
                                         h_flex()
-                                            .gap_4()
+                                            .flex_1()
+                                            .child(self.player_control_ui(cx))
+                                            .child(self.player_volume_control_ui(cx)),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .justify_end()
+                                            .gap_2()
                                             .child(self.format_time(display_position))
                                             .child("/")
                                             .child(self.format_time(total)),

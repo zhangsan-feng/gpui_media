@@ -10,7 +10,6 @@ mod gui;
 mod plugins;
 mod state;
 
-
 use crate::state::{GlobalState, State};
 use gpui::*;
 use gpui_component::*;
@@ -40,12 +39,12 @@ pub fn logger_init(log_dir: impl AsRef<Path>, date_format: &str) {
                 message
             ))
         })
-        .filter(|metadata| {
-            metadata.level() == Level::Info && !metadata.target().starts_with("symphonia")
-        })
-        .level(log::LevelFilter::Info)
-        .level(log::LevelFilter::Debug)
-        .level(log::LevelFilter::Error)
+        // .filter(|metadata| {
+        //     metadata.level() == Level::Info && !metadata.target().starts_with("symphonia")
+        // })
+        
+        .level(log::LevelFilter::Trace)
+        // .level(log::LevelFilter::Debug)
         .chain(std::io::stdout())
         .chain(fern::log_file(&log_file).expect("open log file failed"))
         .apply()

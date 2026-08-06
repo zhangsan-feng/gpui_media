@@ -10,7 +10,7 @@ pub struct CustomSidebarMenu {
 }
 
 impl CustomSidebarMenu {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
         Self {
             select_id: Page::VideoPlayer,
             previous_select_id: Page::VideoPlayer,
@@ -88,7 +88,7 @@ impl CustomSidebarMenu {
 }
 
 impl Render for CustomSidebarMenu {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let previous_index = Self::page_index(self.previous_select_id);
         let selected_index = Self::page_index(self.select_id);
 
