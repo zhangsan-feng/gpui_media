@@ -41,7 +41,7 @@ impl VideoPage {
             search_result: HashMap::new(),
             vm_scroll_handler: VirtualListScrollHandle::new(),
         };
-        // s.init_data(cx);
+        s.init_data(cx);
         s
     }
 
