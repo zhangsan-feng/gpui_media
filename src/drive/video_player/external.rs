@@ -9,13 +9,7 @@ impl VideoPlayer{
     pub(crate) fn open_window(window: &mut Window, cx: &mut App) -> (WindowId, EntityId) {
         let player_entity_id = Arc::new(Mutex::new(None));
         let player_entity_id_for_window = player_entity_id.clone();
-        let mut options = window_center_settings(window, 1300., 700.);
-        options.titlebar = Some(TitlebarOptions {
-            title: None,
-            // Hide the extractor titlebar; HomeView renders the compatible custom one.
-            appears_transparent: true,
-            traffic_light_position: None,
-        });
+        let options = window_center_settings(window, 1300., 700.);
         let handler = cx
             .open_window(
                 options,

@@ -1,6 +1,32 @@
 use super::FetchDocument;
 use crate::drive::{NetworkStatic, NetworkStaticInterface};
 use crate::plugins::extractor::config::{self, PlatformConfig};
+use futures_util::future::join_all;
+
+pub(crate) async fn filter_playable(items: Vec<NetworkStatic>) -> Vec<NetworkStatic> {
+    join_all(items.into_iter().map(|item| async move {
+        let candidate = item.clone();
+        let playable = tokio::task::spawn_blocking(move || {
+            let details = candidate.func.detail(&candidate);
+            details.iter().any(|detail| {
+                let source = detail.func.play(detail);
+                is_play_url(&source)
+            })
+        })
+        .await
+        .unwrap_or(false);
+        playable.then_some(item)
+    }))
+    .await
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+fn is_play_url(value: &str) -> bool {
+    let value = value.trim().to_ascii_lowercase();
+    value.contains(".m3u8") || value.contains(".mp4")
+}
 
 pub(crate) struct ConfiguredVideoInterface {
     pub(crate) config: PlatformConfig,
