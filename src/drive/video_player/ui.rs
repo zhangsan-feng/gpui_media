@@ -13,8 +13,99 @@ use gpui_component::{h_flex, v_flex, v_virtual_list};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
+use gpui::prelude::FluentBuilder;
 
 impl VideoPlayer {
+    pub(crate) fn render_video_frame(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let frame_aspect = self.frame_aspect.max(0.01);
+        let fitted_frame_size = self.surface_bounds.map(|bounds| {
+            let container_width = bounds.size.width.as_f32().max(1.0);
+            let container_height = bounds.size.height.as_f32().max(1.0);
+            let container_aspect = container_width / container_height;
+
+            if container_aspect > frame_aspect {
+                (container_height * frame_aspect, container_height)
+            } else {
+                (container_width, container_width / frame_aspect)
+            }
+        });
+
+        div()
+            .flex_grow_1()
+            .min_w_0()
+            .min_h_0()
+            .flex()
+            .relative()
+            .justify_center()
+            .items_center()
+            .overflow_hidden()
+            .rounded_xl()
+            .bg(rgb_to_u32(15, 23, 42))
+            .border_1()
+            .border_color(rgb_to_u32(30, 41, 59))
+            .on_prepaint({
+                let player_entity = cx.entity();
+                move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
+                    let _ = player_entity.update(cx, |player, cx| {
+                        let changed = player
+                            .surface_bounds
+                            .map(|current| {
+                                current.size.width != bounds.size.width
+                                    || current.size.height != bounds.size.height
+                            })
+                            .unwrap_or(true);
+                        if changed {
+                            player.surface_bounds = Some(bounds);
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .child(if let Some(frame) = self.frames.current_image() {
+                div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .justify_center()
+                    .items_center()
+                    .child(if let Some((width, height)) = fitted_frame_size {
+                        img(frame)
+                            .w(px(width))
+                            .h(px(height))
+                            .object_fit(ObjectFit::Cover)
+                            .into_any_element()
+                    } else {
+                        img(frame)
+                            .size_full()
+                            .object_fit(ObjectFit::Cover)
+                            .into_any_element()
+                    })
+                    .into_any_element()
+            } else {
+                v_flex()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .justify_center()
+                    .items_center()
+                    .child(
+                        div().px_4().child(
+                            markdown(match &self.playback.state {
+                                PlatState::Playing | PlatState::Paused => String::new(),
+                                PlatState::Loading => "加载中".to_string(),
+                                PlatState::UnLoading => "没有加载播放来源".to_string(),
+                                PlatState::Error(err) => err.clone(),
+                                PlatState::Cache(message) => message.clone(),
+                            })
+                            .selectable(true)
+                            .text_color(rgb(0xCBD5E1))
+                            .cursor_text(),
+                        ),
+                    )
+                    .into_any_element()
+            })
+    }
+
     fn player_list_vm(&self, cx: &mut Context<Self>) -> impl IntoElement {
         v_virtual_list(
             cx.entity().clone(),
@@ -135,7 +226,7 @@ impl VideoPlayer {
                                             let c = data.clone();
                                             cx.listener(move |this, _, _, cx| {
                                                 this.current_player = c.clone();
-                                                this.play(cx);
+                                                this.request_play(cx);
                                             })
                                         })
                                         .into_any_element()
@@ -148,7 +239,7 @@ impl VideoPlayer {
                                             let c = data.clone();
                                             cx.listener(move |this, _, _, cx| {
                                                 this.current_player = c.clone();
-                                                this.play(cx);
+                                                this.request_play(cx);
                                             })
                                         }),
                                 ),
@@ -223,7 +314,7 @@ impl VideoPlayer {
                                                 {
                                                     this.player_list.push(player);
                                                 }
-                                                this.play(cx);
+                                                this.request_play(cx);
                                             })),
                                     ),
                             )
@@ -284,17 +375,19 @@ impl VideoPlayer {
         } else {
             self.current_player.source.clone()
         };
-        let resolution = if self.video_width > 0.0 && self.video_height > 0.0 {
-            format!("{:.0} × {:.0}", self.video_width, self.video_height)
+        let (frame_width, frame_height, frame_rate_value) =
+            (self.frame_width, self.frame_height, self.frame_rate);
+        let resolution = if frame_width > 0.0 && frame_height > 0.0 {
+            format!("{frame_width:.0} × {frame_height:.0}")
         } else {
             "等待视频元数据".to_string()
         };
-        let frame_rate = if self.video_frame_rate > 0.0 {
-            format!("{:.2} FPS", self.video_frame_rate)
+        let frame_rate = if frame_rate_value > 0.0 {
+            format!("{frame_rate_value:.2} FPS")
         } else {
             "等待视频元数据".to_string()
         };
-        let playback_status = match &self.play_state {
+        let playback_status = match &self.playback.state {
             PlatState::Playing => "播放中",
             PlatState::Paused => "已暂停",
             PlatState::Loading => "加载中",
@@ -446,7 +539,7 @@ impl VideoPlayer {
     }
 
     pub(crate) fn player_volume_control_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let volume_ratio = self.video_player_volume.clamp(0.0, 1.0);
+        let volume_ratio = self.volume.clamp(0.0, 1.0);
         let volume_bar_width = 150.0;
 
         h_flex().child(
@@ -493,7 +586,7 @@ impl VideoPlayer {
                             cx.listener(|this, event: &MouseDownEvent, _, _| {
                                 if let Some(bounds) = this.volume_bar_bounds {
                                     let ratio = this.get_volume_position(event.position, bounds);
-                                    this.set_volume_size(ratio);
+                                    this.set_volume(ratio);
                                 }
                             }),
                         )
@@ -504,7 +597,7 @@ impl VideoPlayer {
                                 let width = event.bounds.size.width.as_f32().max(1.0);
                                 let ratio = ((event.event.position.x.as_f32() - left) / width)
                                     .clamp(0.0, 1.0);
-                                this.set_volume_size(ratio);
+                                this.set_volume(ratio);
                             },
                         ))
                         .child(
@@ -523,13 +616,11 @@ impl VideoPlayer {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let total = self
-            .video_total_duration
-            .unwrap_or_else(|| Duration::from_secs(0));
+        let total = self.total_duration.unwrap_or(Duration::ZERO);
         let display_position = self
             .pending_seek_position
             .filter(|_| self.is_dragging_progress_bar)
-            .unwrap_or(self.video_player_duration);
+            .unwrap_or(self.position);
         let progress_ratio = if total.as_secs_f32() > 0.0 {
             (display_position.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
         } else {
@@ -564,7 +655,7 @@ impl VideoPlayer {
                         if let Some(bounds) = this.progress_bar_bounds {
                             if let Some(target) = this.get_progress_position(event.position, bounds)
                             {
-                                this.seek_video_progress(target);
+                                this.seek(target);
                                 this.is_dragging_progress_bar = false;
                                 this.pending_seek_position = None;
                             }
@@ -587,7 +678,7 @@ impl VideoPlayer {
                     cx.listener(|this, _, _, _| {
                         if this.is_dragging_progress_bar {
                             if let Some(target) = this.pending_seek_position.take() {
-                                this.seek_video_progress(target);
+                                this.seek(target);
                             }
                             this.is_dragging_progress_bar = false;
                         }
@@ -598,7 +689,7 @@ impl VideoPlayer {
                     cx.listener(|this, _, _, _| {
                         if this.is_dragging_progress_bar {
                             if let Some(target) = this.pending_seek_position.take() {
-                                this.seek_video_progress(target);
+                                this.seek(target);
                             }
                             this.is_dragging_progress_bar = false;
                         }
@@ -653,120 +744,63 @@ impl VideoPlayer {
                 "video_prev_button",
                 "<",
                 cx.listener(|this, _, _, cx| {
-                    this.prev_video(cx);
+                    this.request_prev_video(cx);
                 }),
             ))
             .child(self.render_control_button(
                 "video_play_button",
-                if self.play_state == PlatState::Playing {
+                if self.playback.state == PlatState::Playing {
                     div().child("◼")
                 } else {
                     div().child("▶")
                 },
                 cx.listener(|this, _, _, cx| {
-                    this.toggle_play(cx);
+                    this.request_toggle_play(cx);
                 }),
             ))
             .child(self.render_control_button(
                 "video_next_button",
                 ">",
                 cx.listener(|this, _, _, cx| {
-                    this.next_video(cx);
+                    this.request_next_video(cx);
                 }),
             ))
     }
 
-    pub(crate) fn video_frame_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let frame_aspect = self.video_frame_size_proportion.max(0.01);
-        let fitted_frame_size = self.video_frame_player_size.map(|bounds| {
-            let container_width = bounds.size.width.as_f32().max(1.0);
-            let container_height = bounds.size.height.as_f32().max(1.0);
-            let container_aspect = container_width / container_height;
-
-            if container_aspect > frame_aspect {
-                (container_height * frame_aspect, container_height)
-            } else {
-                (container_width, container_width / frame_aspect)
-            }
-        });
-
+    fn render_window_button(
+        &self,
+        id: &'static str,
+        label: &'static str,
+        control: WindowControlArea,
+        hover_color: Rgba,
+        cx: &Context<Self>,
+    ) -> AnyElement {
         div()
-            .flex_grow_1()
-            .min_w_0()
-            .min_h_0()
+            .id(id)
+            .size(px(34.))
             .flex()
-            .relative()
-            .justify_center()
             .items_center()
-            .overflow_hidden()
-            .rounded_xl()
-            .bg(rgb_to_u32(15, 23, 42))
-            .border_1()
-            .border_color(rgb_to_u32(30, 41, 59))
-            .on_prepaint({
-                let video_frame_entity = cx.entity();
-                move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
-                    let _ = video_frame_entity.update(cx, |this, cx| {
-                        let changed = this
-                            .video_frame_player_size
-                            .map(|current| {
-                                current.size.width != bounds.size.width
-                                    || current.size.height != bounds.size.height
-                            })
-                            .unwrap_or(true);
-
-                        if changed {
-                            this.video_frame_player_size = Some(bounds);
-                            cx.notify();
-                        }
-                    });
-                }
+            .justify_center()
+            .bg(rgb_to_u32(250, 247, 252))
+            .text_color(rgb_to_u32(91, 82, 108))
+            .hover(|style| style.bg(hover_color))
+            .window_control_area(control)
+            .when(cfg!(target_os = "linux"), move |this| {
+                this.on_click(cx.listener(move |_, _, window, _| match control {
+                    WindowControlArea::Min => window.minimize_window(),
+                    WindowControlArea::Max => window.zoom_window(),
+                    WindowControlArea::Close => window.remove_window(),
+                    _ => {}
+                }))
             })
-            .child(if let Some(frame) = self.render_image.clone() {
+            .child(
                 div()
-                    .absolute()
-                    .inset_0()
-                    .flex()
-                    .justify_center()
-                    .items_center()
-                    .child(
-                        if let Some((frame_width, frame_height)) = fitted_frame_size {
-                            img(frame)
-                                .w(px(frame_width))
-                                .h(px(frame_height))
-                                .object_fit(ObjectFit::Cover)
-                                .into_any_element()
-                        } else {
-                            img(frame)
-                                .size_full()
-                                .object_fit(ObjectFit::Cover)
-                                .into_any_element()
-                        },
-                    )
-                    .into_any_element()
-            } else {
-                v_flex()
-                    .absolute()
-                    .inset_0()
-                    .flex()
-                    .justify_center()
-                    .items_center()
-                    .child(
-                        div().px_4().child(
-                            markdown(match &self.play_state {
-                                PlatState::Playing => "".to_string(),
-                                PlatState::Paused => "".to_string(),
-                                PlatState::Loading => "加载中".to_string(),
-                                PlatState::UnLoading => "没有加载播放来源".to_string(),
-                                PlatState::Error(err) => err.to_string(),
-                                PlatState::Cache(val) => val.clone(),
-                            })
-                            .selectable(true)
-                            .text_color(rgb(0xCBD5E1))
-                            .cursor_text(),
-                        ),
-                    )
-                    .into_any_element()
-            })
+                    .text_size(px(14.))
+                    .font_weight(FontWeight::NORMAL)
+                    .text_color(rgb_to_u32(73, 66, 92))
+                    .child(label),
+            )
+            .into_any_element()
     }
+    
 }

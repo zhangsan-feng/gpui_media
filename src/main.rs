@@ -31,9 +31,10 @@ pub fn logger_init(log_dir: impl AsRef<Path>, date_format: &str) {
             let file = record.file().unwrap_or("<unknown>");
             let line = record.line().unwrap_or(0);
             out.finish(format_args!(
-                "[{}] [{}] [{}:{}] {}",
+                "[{}] [{}] [{}] [{}:{}] {}",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 record.level(),
+                record.target(),
                 file,
                 line,
                 message
@@ -42,9 +43,10 @@ pub fn logger_init(log_dir: impl AsRef<Path>, date_format: &str) {
         // .filter(|metadata| {
         //     metadata.level() == Level::Info && !metadata.target().starts_with("symphonia")
         // })
-        
-        .level(log::LevelFilter::Trace)
+        .level(log::LevelFilter::Info)
+        // .level_for("gstreamer", log::LevelFilter::Debug)
         // .level(log::LevelFilter::Debug)
+        // .level(log::LevelFilter::Trace)
         .chain(std::io::stdout())
         .chain(fern::log_file(&log_file).expect("open log file failed"))
         .apply()

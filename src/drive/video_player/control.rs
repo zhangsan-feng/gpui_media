@@ -55,8 +55,7 @@ impl VideoPlayer {
 
         self.current_player = added[0].clone();
         self.player_list.extend(added);
-        self.reset_pipeline();
-        self.play(cx);
+        self.request_play(cx);
 
         cx.notify();
     }
@@ -106,14 +105,12 @@ impl VideoPlayer {
     }
 
     pub(crate) fn toggle_play(&mut self, cx: &mut Context<Self>) {
-        match &self.play_state {
+        match &self.playback.state {
             PlatState::Playing => {
                 self.pause(cx);
             }
             PlatState::Paused => {
-                if let Some(playbin) = &self.video_frame_pipeline {
-                    let _ = playbin.set_state(gst::State::Playing);
-                    self.play_state = PlatState::Playing;
+                if self.resume() {
                     self.start_progress_task(cx);
                     cx.notify();
                 } else {
@@ -123,9 +120,7 @@ impl VideoPlayer {
             PlatState::Loading | PlatState::Cache(_) => {
                 // 已经有 pipeline 时允许用户在加载状态下手动开始播放，
                 // 避免状态机短暂处于 Loading/Cache 时按钮无响应。
-                if let Some(playbin) = &self.video_frame_pipeline {
-                    let _ = playbin.set_state(gst::State::Playing);
-                    self.play_state = PlatState::Playing;
+                if self.resume() {
                     cx.notify();
                 }
             }
@@ -133,6 +128,34 @@ impl VideoPlayer {
                 self.play(cx);
             }
         }
+    }
+
+    pub(crate) fn request_toggle_play(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let _ = this.update(cx, |this, cx| this.toggle_play(cx));
+        })
+        .detach();
+    }
+
+    pub(crate) fn request_prev_video(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let _ = this.update(cx, |this, cx| this.prev_video(cx));
+        })
+        .detach();
+    }
+
+    pub(crate) fn request_next_video(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let _ = this.update(cx, |this, cx| this.next_video(cx));
+        })
+        .detach();
+    }
+
+    pub(crate) fn request_play(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let _ = this.update(cx, |this, cx| this.play(cx));
+        })
+        .detach();
     }
 
     pub(crate) fn play(&mut self, cx: &mut Context<Self>) {
@@ -147,8 +170,9 @@ impl VideoPlayer {
         };
 
         self.reset_pipeline();
+        let session_id = self.playback.session_id;
         let player = self.current_player.clone();
-        self.play_state = PlatState::Loading;
+        self.playback.state = PlatState::Loading;
         cx.notify();
         cx.spawn(async move |this, cx| {
             let res = tokio::spawn(async move { player.play(player.source.as_str()) });
@@ -156,22 +180,25 @@ impl VideoPlayer {
             match res.await {
                 Ok(val) => {
                     let _ = this.update(cx, |this, cx| {
+                        if !this.playback.is_current_session(session_id) {
+                            return;
+                        }
                         if val.is_empty() {
                             this.reset_pipeline();
-                            this.play_state = PlatState::Error("未找到播放地址".to_string());
+                            this.playback.state = PlatState::Error("未找到播放地址".to_string());
                             cx.notify();
                             return;
                         }
                         this.current_player.source = val;
                         if let Err(err) = this.set_pipeline() {
                             this.reset_pipeline();
-                            this.play_state = PlatState::Error("播放失败".to_string());
+                            this.playback.state = PlatState::Error("播放失败".to_string());
                             log::debug!("{}", err.backtrace());
                             cx.notify();
                             return;
                         }
 
-                        if let Some(playbin) = &this.video_frame_pipeline {
+                        if let Some(playbin) = &this.playback.pipeline {
                             let _ = playbin.set_state(gst::State::Playing);
                             this.start_event_bus(cx);
                             this.start_loading_timeout_task(cx);
@@ -183,8 +210,11 @@ impl VideoPlayer {
                 }
                 Err(err) => {
                     let _ = this.update(cx, |this, cx| {
+                        if !this.playback.is_current_session(session_id) {
+                            return;
+                        }
                         this.reset_pipeline();
-                        this.play_state = PlatState::Error("播放失败".to_string());
+                        this.playback.state = PlatState::Error("播放失败".to_string());
                         log::debug!("{}", err.to_string());
                         cx.notify();
                     });
@@ -195,10 +225,7 @@ impl VideoPlayer {
     }
 
     fn pause(&mut self, cx: &mut Context<Self>) {
-        if let Some(playbin) = &self.video_frame_pipeline {
-            let _ = playbin.set_state(gst::State::Paused);
-        }
-        self.play_state = PlatState::Paused;
+        self.pause_pipeline();
         cx.notify();
     }
 }

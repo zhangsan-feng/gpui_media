@@ -1,63 +1,109 @@
 use crate::component::color::rgb_to_u32;
 use crate::drive::NetworkStatic;
-use crate::drive::video_player::core::{FrameBuffer, PlatState};
 use gpui::*;
 use gpui_component::input::InputState;
 use gpui_component::{VirtualListScrollHandle, h_flex, v_flex};
-use gstreamer_app as gst_app;
-use gstreamer_app::gst;
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 pub mod control;
 mod core;
 mod ui;
+mod external;
+
+pub(crate) use core::PlatState;
+use core::{FramePipeline, PlaybackRuntime};
+use crate::drive;
+use crate::state::{GlobalState, StateEvent};
+use crate::state::StateEvent::{TogglePlayVideo, UpdateVideoPlayList};
 
 pub struct VideoPlayer {
     pub current_player: NetworkStatic,
     pub player_list: Vec<NetworkStatic>,
-    play_state: PlatState,
     input_text: Entity<InputState>,
-
     vm_scroll_handle: VirtualListScrollHandle,
-    video_player_volume: f32,
-    video_frame_pipeline: Option<gst::Element>,
-    video_frame_data: Option<gst_app::AppSink>,
-    video_total_duration: Option<Duration>,
-    video_player_duration: Duration,
-    video_frame_size_proportion: f32,
-    video_height: f32,
-    video_width: f32,
-    video_frame_rate: f64,
-    video_frame_player_size: Option<Bounds<Pixels>>,
+    playback: PlaybackRuntime,
+    frames: FramePipeline,
+    volume: f32,
+    total_duration: Option<Duration>,
+    position: Duration,
+    frame_aspect: f32,
+    frame_width: f32,
+    frame_height: f32,
+    frame_rate: f64,
+    surface_bounds: Option<Bounds<Pixels>>,
     is_dragging_progress_bar: bool,
     pending_seek_position: Option<Duration>,
     progress_bar_bounds: Option<Bounds<Pixels>>,
     volume_bar_bounds: Option<Bounds<Pixels>>,
-    progress_task: Option<Task<()>>,
-    frame_task: Option<Task<()>>,
-    bus_watch_task: Option<Task<()>>,
-    loading_timeout_task: Option<Task<()>>,
-    frame_buffer: Arc<Mutex<FrameBuffer>>,
-    last_rendered_frame_sequence: u64,
-    render_image: Option<Arc<RenderImage>>,
-    stop_frames: Arc<AtomicBool>,
-    bus_watch_started: bool,
-    pending_drop_images: Vec<Arc<RenderImage>>,
+}
+
+
+impl VideoPlayer {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let window_id = window.window_handle().window_id();
+        let mut s = Self {
+            current_player: drive::NetworkStatic::default(),
+            player_list: Vec::from([]),
+            vm_scroll_handle: VirtualListScrollHandle::new(),
+            playback: PlaybackRuntime::default(),
+            frames: FramePipeline::default(),
+            volume: 0.6,
+            total_duration: None,
+            position: Duration::ZERO,
+            frame_aspect: 16.0 / 9.0,
+            frame_width: 0.0,
+            frame_height: 0.0,
+            frame_rate: 0.0,
+            surface_bounds: None,
+            is_dragging_progress_bar: false,
+            pending_seek_position: None,
+            progress_bar_bounds: None,
+            volume_bar_bounds: None,
+            input_text: cx.new(|cx| InputState::new(window, cx)),
+        };
+        s.init_subscribe(window_id, cx);
+        s
+    }
+
+    fn init_subscribe(&mut self, window_id: WindowId, cx: &mut Context<Self>) {
+        let state_handler = cx.global::<GlobalState>().0.clone();
+        let self_entity_id = cx.entity_id().clone();
+        cx.subscribe(
+            &state_handler,
+            move |this: &mut Self, _model, event: &StateEvent, cx| match event {
+                // ############################################################################# 跨组件传递数据
+                TogglePlayVideo(event_window_id, event_entity_id, data) => {
+                    if event_window_id.as_u64() == window_id.as_u64()
+                        && self_entity_id == *event_entity_id
+                    {
+                        this.current_player = data.clone();
+                        cx.notify();
+                    }
+                }
+                UpdateVideoPlayList(event_window_id, event_entity_id, data) => {
+                    if event_window_id.as_u64() == window_id.as_u64()
+                        && self_entity_id == *event_entity_id
+                    {
+                        this.player_list = data.clone();
+                        cx.notify();
+                    }
+                }
+                _ => {} // ############################################################################# 跨组件传递数据
+            },
+        )
+            .detach();
+    }
 }
 
 impl Render for VideoPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.free_video_frame(window);
+        self.frames.drain_retired_images(window);
 
-        let total = self
-            .video_total_duration
-            .unwrap_or_else(|| Duration::from_secs(0));
+        let total = self.total_duration.unwrap_or(Duration::ZERO);
         let display_position = self
             .pending_seek_position
             .filter(|_| self.is_dragging_progress_bar)
-            .unwrap_or(self.video_player_duration);
+            .unwrap_or(self.position);
 
         v_flex()
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
@@ -73,7 +119,7 @@ impl Render for VideoPlayer {
                     .min_w_0()
                     .min_h_0()
                     .relative()
-                    .child(self.video_frame_ui(cx))
+                    .child(self.render_video_frame(cx))
                     .child(
                         v_flex()
                             .w_full()

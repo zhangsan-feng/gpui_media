@@ -3,13 +3,14 @@ use crate::drive::NetworkStatic;
 use crate::drive::video_player::VideoPlayer;
 use crate::plugins::extractor::video;
 use crate::state::{GlobalState, StateEvent};
+use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::VirtualListScrollHandle;
-use gpui_component::button::Button;
+use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::input::InputState;
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarShow};
-use gpui_component::{h_flex, v_flex, v_virtual_list};
+use gpui_component::{IconName, h_flex, v_flex, v_virtual_list};
 use log::info;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -103,6 +104,15 @@ impl VideoPage {
             }
         })
         .detach();
+    }
+
+    pub fn clear_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.current_page = Page::RecommendPage;
+        self.is_searching = false;
+        self.search_result.clear();
+        self.search_keyword
+            .update(cx, |input, cx| input.set_value("", window, cx));
+        cx.notify();
     }
 
     pub(crate) fn play_video(
@@ -355,6 +365,18 @@ impl Render for VideoPage {
                                 }),
                         ),
                     )
+                    .when(matches!(self.current_page, Page::SearchPage), |this| {
+                        this.child(
+                            Button::new("video-page-clear-search-btn")
+                                .icon(IconName::Close)
+                                .ghost()
+                                .compact()
+                                .tooltip("返回推荐")
+                                .on_click({
+                                    cx.listener(|this, _, window, cx| this.clear_search(window, cx))
+                                }),
+                        )
+                    })
                     .child(
                         div()
                             .rounded_full()
