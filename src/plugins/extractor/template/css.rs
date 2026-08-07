@@ -104,8 +104,10 @@ fn parse_item(
     items: &ItemChildrenConfig,
     base: &str,
 ) -> Option<ExtractedItem> {
-    let source = field_value(element, &items.source).map(|value| resolve(base, &value))?;
+    let source = field_value(element, &items.source)
+        .map(|value| resolve(base, &normalize_media_value(&value)))?;
     let name = field_value(element, &items.name)
+        .map(|value| normalize_media_name(&value))
         .or_else(|| field_value(element, &FieldConfig::text(":scope")))
         .unwrap_or_else(|| "未命名资源".to_string());
     let image = items
@@ -127,6 +129,29 @@ fn parse_item(
         })
         .collect::<HashMap<String, Value>>();
     Some(ExtractedItem::new(source, name, image, author, extra, None))
+}
+
+fn normalize_media_value(value: &str) -> String {
+    value
+        .split('$')
+        .rfind(|part| {
+            let part = part.trim().to_ascii_lowercase();
+            part.starts_with("http://") && (part.contains(".m3u8") || part.contains(".mp4"))
+                || part.starts_with("https://") && (part.contains(".m3u8") || part.contains(".mp4"))
+        })
+        .unwrap_or(value)
+        .trim()
+        .to_string()
+}
+
+fn normalize_media_name(value: &str) -> String {
+    value
+        .split('$')
+        .next()
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .unwrap_or(value)
+        .to_string()
 }
 
 fn is_play_url(value: &str) -> bool {

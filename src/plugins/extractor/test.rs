@@ -44,8 +44,8 @@ async fn video_recommend_fetches_default_platforms_and_details() {
     println!("recommend items: {}", result.len());
     for item in result.iter().take(10) {
         println!(
-            "recommend item: name={:?}, source={}",
-            item.name, item.source
+            "recommend item: name={:?}, source={} category={}",
+            item.name, item.source, item.category
         );
     }
     for item in result.iter().take(3) {

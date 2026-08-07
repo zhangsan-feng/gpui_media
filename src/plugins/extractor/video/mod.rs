@@ -32,22 +32,22 @@ fn default_fetcher() -> FetchDocument {
 
 /*
 # cms 站点
-https://suonizy.net/                    验证码
-http://caiji.dyttzyapi.com/             验证码
-https://www.wujinzy.net/                验证码
-http://jinyingzy.com/                   验证码
-https://cj.ffzyapi.com                  验证码
-https://api.apibdzy.com                 验证码
-https://yayazy2.com/                    验证码
-https://niuniuzy.cc                     验证码
-https://okzyw.cc/                       验证码
-http://kuaichezy.com/                   验证码
-https://mtzy5.com/                      验证码
+https://suonizy.net/                    验证
+https://www.wujinzy.net/                验证
+http://jinyingzy.com/                   验证
+https://cj.ffzyapi.com                  验证
+https://api.apibdzy.com                 验证
+https://yayazy2.com/                    验证
+https://okzyw.cc/                       验证
+http://kuaichezy.com/                   验证
+https://mtzy5.com/                      验证
+https://niuniuzy5.com/                  验证
+https://jszy333.com/                    验证
+
 
 https://lzizy.net/
 https://hongniuzy.net
 https://ukuzy0.com/
-https://jszy333.com/
 https://haohuazy.com/
 https://www.ryzyw.com/
 https://ffzy5.tv/
@@ -58,7 +58,6 @@ http://ryzy.tv/
 # cms 转发站
 https://youzisp.tv
 https://www.bttwo.org/
-
 https://www.keke2.app/
 https://tyyszyapi.com/
 https://gaze.red/
