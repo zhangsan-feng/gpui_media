@@ -1,4 +1,5 @@
 mod core;
+mod side_panel;
 mod ui;
 
 use gpui::{AppContext, Context, Entity, ListAlignment, ListState, Subscription, Window};
@@ -13,6 +14,25 @@ enum SidePanelState {
     Closing,
 }
 
+#[derive(Default)]
+struct BrightnessFilterDrag;
+
+#[derive(Default)]
+struct ContrastFilterDrag;
+
+#[derive(Default)]
+struct SaturationFilterDrag;
+
+#[derive(Default)]
+struct HueFilterDrag;
+
+#[derive(Clone, Debug)]
+enum ExportStatus {
+    Working(String),
+    Success(String),
+    Error(String),
+}
+
 pub struct VideoPlayer {
     play_core: Entity<PlayCore>,
     play_list: Vec<player_core::PlayStatic>,
@@ -22,6 +42,8 @@ pub struct VideoPlayer {
     play_list_state: ListState,
     network_url_input: Entity<InputState>,
     _network_url_input_subscription: Subscription,
+    export_in_progress: bool,
+    export_status: Option<ExportStatus>,
 }
 
 impl VideoPlayer {
@@ -53,6 +75,8 @@ impl VideoPlayer {
                 .with_uniform_item_height(gpui::px(44.)),
             network_url_input,
             _network_url_input_subscription: network_url_input_subscription,
+            export_in_progress: false,
+            export_status: None,
         }
     }
 }

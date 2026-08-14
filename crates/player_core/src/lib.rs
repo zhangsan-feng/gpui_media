@@ -15,7 +15,7 @@ pub use self::core::{
     PlayCoreExportTrim, PlayCoreRealtimeTranscodeRequest, PlayCoreTranscodeFormat,
     PlayCoreTranscodeRequest, PlayCoreTranscodeSession, PlayCoreTranscoder,
 };
-pub use self::external::{PlayCoreProgress, PlayCoreViewState};
+pub use self::external::{PlayCoreMediaType, PlayCoreProgress, PlayCoreViewState};
 use self::state::PlayCoreStateEvent::TogglePlay;
 pub use self::state::{PlayCoreGlobalState, PlayCoreState, PlayCoreStateEvent};
 
@@ -96,6 +96,7 @@ pub struct PlayCore {
     frame_height: f32,
     frame_rate: f64,
     codec: Option<String>,
+    media_type: PlayCoreMediaType,
     filter_state: PlayCoreFilterState,
     segment_end: Option<Duration>,
     surface_bounds: Option<Bounds<Pixels>>,
@@ -130,6 +131,7 @@ impl PlayCore {
             frame_height: 0.0,
             frame_rate: 0.0,
             codec: None,
+            media_type: PlayCoreMediaType::Unknown,
             filter_state: PlayCoreFilterState::default(),
             segment_end: None,
             surface_bounds: None,

@@ -1,4 +1,4 @@
-use crate::{PlatState, PlayCore};
+use crate::{PlatState, PlayCore, PlayCoreMediaType};
 use gpui::Context;
 use std::time::Duration;
 
@@ -116,6 +116,7 @@ impl PlayCore {
         self.frame_height = 0.0;
         self.frame_rate = 0.0;
         self.codec = None;
+        self.media_type = PlayCoreMediaType::Unknown;
         self.segment_end = None;
         self.frames.reset();
         self.is_dragging_progress_bar = false;

@@ -117,6 +117,7 @@ impl PlayCore {
             self.frame_width = frame.width as f32;
             self.frame_height = frame.height as f32;
             self.frame_rate = frame.frame_rate;
+            self.mark_video_present();
             if matches!(
                 self.playback.state,
                 PlatState::Loading | PlatState::Cache(_)

@@ -40,6 +40,18 @@ required_features = [
     "rtmp2src",
     "ristsrc",
     "avdec_h264",
+    "videobalance",
+    "x264enc",
+    "voaacenc",
+    "opusenc",
+    "flacenc",
+    "lamemp3enc",
+    "wavenc",
+    "mp4mux",
+    "qtmux",
+    "matroskamux",
+    "h264parse",
+    "aacparse",
 ]
 
 [[runtime_module_groups]]
@@ -106,6 +118,21 @@ plugins = [
     "gstvorbis.dll",
     "gstflac.dll",
     "gstvpx.dll",
+]
+
+[[plugin_groups]]
+name = "filters"
+plugins = [
+    "gstvideofilter.dll",
+]
+
+[[plugin_groups]]
+name = "encoders"
+plugins = [
+    "gstx264.dll",
+    "gstvoaacenc.dll",
+    "gstlame.dll",
+    "gstwavenc.dll",
 ]
 
 [[plugin_groups]]

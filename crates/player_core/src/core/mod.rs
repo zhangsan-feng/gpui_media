@@ -3,6 +3,7 @@ mod export;
 mod player_control;
 mod player_event;
 mod player_filter;
+mod player_media;
 mod player_pipeline;
 mod player_runtime;
 mod player_task;

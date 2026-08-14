@@ -68,21 +68,52 @@ impl PlayCore {
                                 warning.debug()
                             );
                         }
-                        gst::MessageView::Tag(tag) => {
-                            let tags = tag.tags();
-                            let codec = tags
-                                .get::<gst::tags::VideoCodec>()
-                                .map(|value| value.get().to_string())
-                                .or_else(|| {
-                                    tags.get::<gst::tags::Codec>()
-                                        .map(|value| value.get().to_string())
-                                });
-                            let Some(codec) = codec.filter(|codec| !codec.is_empty()) else {
-                                continue;
-                            };
+                        gst::MessageView::StreamCollection(collection) => {
+                            let metadata =
+                                PlayCore::stream_metadata(&collection.stream_collection());
                             let _ = this.update(cx, |this, cx| {
                                 if this.playback.is_current_session(session_id) {
-                                    this.codec = Some(codec);
+                                    this.apply_stream_metadata(metadata);
+                                    cx.notify();
+                                }
+                            });
+                        }
+                        gst::MessageView::StreamsSelected(selected) => {
+                            let metadata = PlayCore::stream_metadata(selected.streams());
+                            let _ = this.update(cx, |this, cx| {
+                                if this.playback.is_current_session(session_id) {
+                                    this.apply_stream_metadata(metadata);
+                                    cx.notify();
+                                }
+                            });
+                        }
+                        gst::MessageView::Tag(tag) => {
+                            let tags = tag.tags();
+                            let video_codec = tags
+                                .get::<gst::tags::VideoCodec>()
+                                .map(|value| value.get().to_string())
+                                .filter(|codec| !codec.is_empty());
+                            let audio_codec = tags
+                                .get::<gst::tags::AudioCodec>()
+                                .map(|value| value.get().to_string())
+                                .filter(|codec| !codec.is_empty());
+                            let fallback_codec = tags
+                                .get::<gst::tags::Codec>()
+                                .map(|value| value.get().to_string())
+                                .filter(|codec| !codec.is_empty());
+                            if video_codec.is_none()
+                                && audio_codec.is_none()
+                                && fallback_codec.is_none()
+                            {
+                                continue;
+                            }
+                            let _ = this.update(cx, |this, cx| {
+                                if this.playback.is_current_session(session_id) {
+                                    this.update_codec_metadata(
+                                        video_codec,
+                                        audio_codec,
+                                        fallback_codec,
+                                    );
                                     cx.notify();
                                 }
                             });

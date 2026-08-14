@@ -18,6 +18,14 @@ pub struct PlayCoreProgress {
     pub ratio: f32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PlayCoreMediaType {
+    #[default]
+    Unknown,
+    Audio,
+    Video,
+}
+
 #[derive(Clone, Debug)]
 pub struct PlayCoreViewState {
     pub player: PlayStatic,
@@ -35,6 +43,7 @@ pub struct PlayCoreViewState {
     pub frame_height: f32,
     pub frame_rate: f64,
     pub codec: Option<String>,
+    pub media_type: PlayCoreMediaType,
     pub filters: PlayCoreFilterState,
 }
 
@@ -180,6 +189,7 @@ impl PlayCore {
             frame_height: self.frame_height,
             frame_rate: self.frame_rate,
             codec: self.codec.clone(),
+            media_type: self.media_type,
             filters: self.filter_state,
         }
     }

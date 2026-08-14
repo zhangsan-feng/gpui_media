@@ -1,12 +1,9 @@
 use super::PlayCoreTranscodeFormat;
-use super::export::{
-    build_output_branches, connect_decodebin_pad_added, connect_source_setup, prepare_output,
-    run_export_pipeline,
-};
+use super::transcoder::{PlayCoreTranscoder, make_uri_decodebin};
 use anyhow::{Context, bail};
 use gstreamer as gst;
 use gstreamer::prelude::*;
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -27,24 +24,66 @@ impl PlayCoreDownload {
     }
 
     pub fn download_blocking(request: PlayCoreDownloadRequest) -> anyhow::Result<()> {
-        gst::init().context("初始化 GStreamer 失败")?;
         validate_request(&request)?;
-        prepare_output(&request.output)?;
-
-        let pipeline = gst::Pipeline::new();
-        let source = gst::ElementFactory::make("uridecodebin")
-            .name("download-source")
-            .build()
-            .context("创建 GStreamer 下载源失败")?;
-        source.set_property("uri", &request.url);
+        let source = make_uri_decodebin(&request.url)?;
         connect_source_setup(&source, request.headers);
-
-        let branches = build_output_branches(&pipeline, &request.output, request.format, None)?;
-        connect_decodebin_pad_added(&source, branches);
-        pipeline.add(&source)?;
-
-        run_export_pipeline(&pipeline, None)
+        PlayCoreTranscoder::transcode_source_blocking(
+            source,
+            &request.output,
+            request.format,
+            None,
+            None,
+        )
     }
+}
+
+pub(crate) fn connect_source_setup(source: &gst::Element, mut headers: HeaderMap) {
+    if !headers.contains_key(USER_AGENT) {
+        headers.insert(
+            USER_AGENT,
+            HeaderValue::from_static(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+            ),
+        );
+    }
+
+    source.connect("source-setup", false, move |values| {
+        let Some(source) = values
+            .get(1)
+            .and_then(|value| value.get::<gst::Element>().ok())
+        else {
+            return None;
+        };
+
+        let has_extra_headers = source.find_property("extra-headers").is_some();
+        let has_user_agent = source.find_property("user-agent").is_some();
+        if !has_extra_headers && !has_user_agent {
+            return None;
+        }
+
+        let mut extra_headers = gst::Structure::builder("extra-headers");
+        let mut header_count = 0;
+        for (name, value) in &headers {
+            let Ok(value) = value.to_str() else {
+                continue;
+            };
+            if name == USER_AGENT {
+                if has_user_agent {
+                    source.set_property("user-agent", value);
+                }
+                continue;
+            }
+            if has_extra_headers {
+                extra_headers = extra_headers.field(name.as_str(), value.to_owned());
+                header_count += 1;
+            }
+        }
+
+        if has_extra_headers && header_count > 0 {
+            source.set_property("extra-headers", extra_headers.build());
+        }
+        None
+    });
 }
 
 fn validate_request(request: &PlayCoreDownloadRequest) -> anyhow::Result<()> {

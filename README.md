@@ -1,8 +1,18 @@
 
 ```aiignore
-这是一个基于gpui + gst 实现的 音乐播放器和视频播放器 
-支持网络直播 视频 tv  
-hls m3u8 flv 等等 能手动输入网络链接 或者本地拖拽 播放 构建在actions 里面 
+这是一个基于 GPUI + GStreamer 实现的音乐播放器和视频播放器。
+
+
+本地视频：MP4、MOV、M4V、3GP、MKV、WebM、AVI、FLV
+本地音频：MP3、AAC/M4A、FLAC、WAV、OGG
+
+网络直播协议：
+HLS（m3u8）、DASH
+RTSP、RTMP、WebRTC
+SRT、RIST、UDP/RTP
+HTTP/HTTPS
+
+支持手动输入网络链接或拖拽本地媒体播放。
 
 比如
 https://live.zbds.top/tv/iptv4.txt
