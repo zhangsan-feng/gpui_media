@@ -26,7 +26,9 @@ pub fn default_plugins() -> Vec<PlatformConfig> {
 
 fn default_fetcher() -> FetchDocument {
     Arc::new(|url, config, extract_type| {
-        Box::pin(async move { super::config::fetch_document(&url, &config, extract_type).await })
+        Box::pin(
+            async move { super::config::fetch_video_document(&url, &config, extract_type).await },
+        )
     })
 }
 
@@ -36,7 +38,7 @@ https://suonizy.net/                    验证
 https://www.wujinzy.net/                验证
 http://jinyingzy.com/                   验证
 https://cj.ffzyapi.com                  验证
-https://api.apibdzy.com                 验证
+https://api.apibdzy.com                 验证  cf limit
 https://yayazy2.com/                    验证
 https://okzyw.cc/                       验证
 http://kuaichezy.com/                   验证

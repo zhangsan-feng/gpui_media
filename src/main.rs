@@ -8,12 +8,11 @@ mod component;
 mod drive;
 mod gui;
 mod plugins;
-mod state;
 
-use crate::state::{GlobalState, State};
 use gpui::*;
 use gpui_component::*;
 use log::{Level, info};
+use player_core::{PlayCoreGlobalState, PlayCoreState};
 use reqwest_client::ReqwestClient;
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
@@ -61,6 +60,7 @@ struct AssetFiles;
 
 struct MergedAssets {
     local_directories: Vec<PathBuf>,
+    component_assets: gpui_component_assets::Assets,
 }
 
 impl AssetSource for MergedAssets {
@@ -78,7 +78,7 @@ impl AssetSource for MergedAssets {
             return Ok(Some(file.data));
         }
 
-        Ok(None)
+        self.component_assets.load(path)
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
@@ -102,6 +102,10 @@ impl AssetSource for MergedAssets {
             if file_path.starts_with(clean_path) {
                 all_files.insert(file_path.to_string());
             }
+        }
+
+        for file_path in self.component_assets.list(path)? {
+            all_files.insert(file_path.to_string());
         }
 
         Ok(all_files.into_iter().map(SharedString::from).collect())
@@ -131,6 +135,7 @@ async fn main() {
     let http_client = ReqwestClient::user_agent("gpui").unwrap();
     let assets = MergedAssets {
         local_directories: vec![PathBuf::from("/"), PathBuf::from("./src/icon")],
+        component_assets: gpui_component_assets::Assets,
     };
 
     gpui_platform::application()
@@ -138,7 +143,7 @@ async fn main() {
         .with_assets(assets)
         .run(move |cx| {
             let mut window_options = WindowOptions::default();
-            let window_size = size(px(1200.), px(700.));
+            let window_size = size(px(1400.), px(800.));
             window_options.window_bounds = Some(WindowBounds::centered(window_size, cx));
             window_options.window_min_size = Some(window_size);
             window_options.titlebar = Some(TitlebarOptions {
@@ -155,8 +160,8 @@ async fn main() {
                 gpui_component::init(app);
 
                 app.new(|cx| {
-                    let state_entity = cx.new(|cx| State::new(cx));
-                    cx.set_global(GlobalState(state_entity));
+                    let play_core_state = cx.new(|cx| PlayCoreState::new(cx));
+                    cx.set_global(PlayCoreGlobalState::new(play_core_state));
                     let main_window = cx.new(|cx| gui::home::HomeView::new(window, cx));
                     Root::new(main_window, window, cx)
                 })

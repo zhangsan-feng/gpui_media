@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["crates/build_windows"]
+members = ["crates/build_windows", "crates/player_core"]
 resolver = "3"
 
 [workspace.package]
@@ -44,16 +44,19 @@ gstreamer.workspace = true
 gstreamer-app.workspace = true
 gstreamer-video.workspace = true
 build_windows = { path = "crates/build_windows", default-features = false, features = ["runtime"] }
+player_core = { path = "crates/player_core" }
 image.workspace = true
 scraper.workspace = true
+gpui-component-assets.workspace = true
 
 
 [workspace.dependencies]
 # https://github.com/longbridge/gpui-component/blob/main/Cargo.toml
-gpui = {git = "https://github.com/zed-industries/zed", }
-gpui_platform = {git = "https://github.com/zed-industries/zed", }
-reqwest_client = {git = "https://github.com/zed-industries/zed",  package = "reqwest_client"}
-gpui-component = {git = "https://github.com/longbridge/gpui-component", }
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed" }
+reqwest_client = { git = "https://github.com/zed-industries/zed" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component"}
 
 log = {version = "0.4.29"}
 chrono = {version = "0.4.43", features = ["default"]}

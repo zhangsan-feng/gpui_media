@@ -1,13 +1,13 @@
 mod sidebar_menu;
 mod title_bar;
+mod video_player;
 
 use crate::component::color::rgb_to_u32;
-use crate::drive::video_player::VideoPlayer;
 use crate::gui::home::sidebar_menu::CustomSidebarMenu;
 use crate::gui::home::title_bar::CustomTitleBar;
+use crate::gui::home::video_player::VideoPlayer;
 use crate::gui::music_page::MusicPage;
 use crate::gui::video_page::VideoPage;
-use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::{Root, h_flex, v_flex};
 use std::time::Duration;
@@ -23,20 +23,21 @@ pub struct HomeView {
     select_id: Page,
     music_recommend_page: Entity<MusicPage>,
     video_recommend_page: Entity<VideoPage>,
-    video_player_page: Entity<VideoPlayer>,
+    custmer_player: Entity<VideoPlayer>,
     title_bar: Entity<CustomTitleBar>,
     sidebar_menu: Entity<CustomSidebarMenu>,
 }
 
 impl HomeView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> HomeView {
+        let custmer_player = cx.new(|cx| VideoPlayer::new(window, cx));
         HomeView {
             title_bar: cx.new(|cx| CustomTitleBar::new(window, cx)),
             sidebar_menu: cx.new(|cx| CustomSidebarMenu::new(window, cx)),
             select_id: Page::VideoPlayer,
             music_recommend_page: cx.new(|cx| MusicPage::new(window, cx)),
             video_recommend_page: cx.new(|cx| VideoPage::new(window, cx)),
-            video_player_page: cx.new(|cx| VideoPlayer::new(window, cx)),
+            custmer_player,
         }
     }
 }
@@ -58,15 +59,23 @@ impl Render for HomeView {
             .child(
                 h_flex()
                     .size_full()
+                    .min_w_0()
+                    .min_h_0()
                     .child(self.sidebar_menu.clone())
                     .child(
                         v_flex()
-                            .size_full()
+                            .flex_1()
+                            .h_full()
+                            .min_w_0()
+                            .min_h_0()
                             .p_5()
                             .bg(rgb_to_u32(246, 243, 249))
                             .child(
                                 div()
-                                    .size_full()
+                                    .flex_1()
+                                    .h_full()
+                                    .min_w_0()
+                                    .min_h_0()
                                     .child(match self.select_id {
                                         Page::MusicPage => {
                                             self.music_recommend_page.clone().into_any_element()
@@ -75,7 +84,7 @@ impl Render for HomeView {
                                             self.video_recommend_page.clone().into_any_element()
                                         }
                                         Page::VideoPlayer => {
-                                            self.video_player_page.clone().into_any_element()
+                                            self.custmer_player.clone().into_any_element()
                                         }
                                     })
                                     .with_animations(

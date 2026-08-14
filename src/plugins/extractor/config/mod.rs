@@ -280,6 +280,103 @@ pub(crate) fn headers(config: &PlatformConfig) -> reqwest::header::HeaderMap {
     css::headers(&config.headers)
 }
 
+pub(crate) fn video_headers(
+    config: &PlatformConfig,
+    request_url: &str,
+    navigation: bool,
+) -> reqwest::header::HeaderMap {
+    let mut headers = headers_with_browser_defaults(config, navigation);
+    if !headers.contains_key(reqwest::header::REFERER) {
+        headers.insert(
+            reqwest::header::REFERER,
+            reqwest::header::HeaderValue::try_from(format!(
+                "{}/",
+                config.base_url.trim_end_matches('/')
+            ))
+            .unwrap_or_else(|_| reqwest::header::HeaderValue::from_static("https://localhost/")),
+        );
+    }
+    if !headers.contains_key(reqwest::header::ORIGIN) {
+        if let Ok(origin) =
+            reqwest::header::HeaderValue::try_from(config.base_url.trim_end_matches('/'))
+        {
+            headers.insert(reqwest::header::ORIGIN, origin);
+        }
+    }
+    // log::info!(
+    //     "[video:http] url={} navigation={} headers={:?}",
+    //     request_url,
+    //     navigation,
+    //     headers.keys().map(|name| name.as_str()).collect::<Vec<_>>()
+    // );
+    headers
+}
+
+fn headers_with_browser_defaults(
+    config: &PlatformConfig,
+    navigation: bool,
+) -> reqwest::header::HeaderMap {
+    let mut headers = reqwest::header::HeaderMap::new();
+    let defaults = [
+        (
+            "user-agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        ),
+        ("accept-language", "zh-CN,zh;q=0.9,en;q=0.8"),
+        ("cache-control", "no-cache"),
+        ("pragma", "no-cache"),
+        (
+            "sec-ch-ua",
+            r#""Not_A Brand";v="99", "Chromium";v="131", "Google Chrome";v="131""#,
+        ),
+        ("sec-ch-ua-mobile", "?0"),
+        ("sec-ch-ua-platform", "\"Windows\""),
+    ];
+    for (name, value) in defaults {
+        if let (Ok(name), Ok(value)) = (
+            reqwest::header::HeaderName::try_from(name),
+            reqwest::header::HeaderValue::try_from(value),
+        ) {
+            headers.insert(name, value);
+        }
+    }
+    let request_headers: Vec<(&str, &str)> = if navigation {
+        vec![
+            (
+                "accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            ),
+            ("sec-fetch-dest", "document"),
+            ("sec-fetch-mode", "navigate"),
+            ("sec-fetch-site", "none"),
+            ("sec-fetch-user", "?1"),
+            ("upgrade-insecure-requests", "1"),
+        ]
+    } else {
+        vec![
+            ("accept", "application/json, text/plain, */*"),
+            ("sec-fetch-dest", "empty"),
+            ("sec-fetch-mode", "cors"),
+            ("sec-fetch-site", "same-origin"),
+        ]
+    };
+    for (name, value) in request_headers {
+        if let (Ok(name), Ok(value)) = (
+            reqwest::header::HeaderName::try_from(name),
+            reqwest::header::HeaderValue::try_from(value),
+        ) {
+            headers.insert(name, value);
+        }
+    }
+
+    for (name, value) in css::headers(&config.headers) {
+        if let Some(name) = name {
+            headers.insert(name, value);
+        }
+    }
+    headers
+}
+
 pub(crate) async fn fetch_document(
     url: &str,
     config: &PlatformConfig,
@@ -288,6 +385,23 @@ pub(crate) async fn fetch_document(
     match extract_type {
         ExtractType::Json => json::fetch(url, config).await.map(ExtractedDocument::Json),
         ExtractType::Css | ExtractType::Regex => css::fetch(url, &headers(config))
+            .await
+            .map(ExtractedDocument::Html),
+    }
+}
+
+pub(crate) async fn fetch_video_document(
+    url: &str,
+    config: &PlatformConfig,
+    extract_type: ExtractType,
+) -> anyhow::Result<ExtractedDocument> {
+    match extract_type {
+        ExtractType::Json => {
+            json::fetch_with_headers(url, config, video_headers(config, url, false))
+                .await
+                .map(ExtractedDocument::Json)
+        }
+        ExtractType::Css | ExtractType::Regex => css::fetch(url, &video_headers(config, url, true))
             .await
             .map(ExtractedDocument::Html),
     }

@@ -8,9 +8,15 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 pub(crate) async fn fetch(url: &str, config: &PlatformConfig) -> anyhow::Result<Value> {
-    HttpClient::new()
-        .get(url, css::headers(&config.headers))
-        .await
+    fetch_with_headers(url, config, css::headers(&config.headers)).await
+}
+
+pub(crate) async fn fetch_with_headers(
+    url: &str,
+    _config: &PlatformConfig,
+    headers: reqwest::header::HeaderMap,
+) -> anyhow::Result<Value> {
+    HttpClient::new().get(url, headers).await
 }
 
 pub(crate) fn field_value(value: &Value, field: &FieldConfig) -> Option<String> {

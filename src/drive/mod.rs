@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::Path;
 use std::sync::Arc;
-pub mod music_player;
-pub mod video_player;
 
 #[derive(Clone)]
 pub struct NetworkStatic {
@@ -27,9 +25,9 @@ impl Default for NetworkStatic {
             img: String::new(),
             author: String::new(),
             category: String::new(),
+            source: String::new(),
             headers: reqwest::header::HeaderMap::new(),
             extra: HashMap::new(),
-            source: String::new(),
             func: Arc::new(LocalStatic),
         }
     }
@@ -43,19 +41,8 @@ impl Debug for NetworkStatic {
             .field("img", &self.img)
             .field("author", &self.author)
             .field("category", &self.category)
-            .field("headers", &self.headers)
-            .field("extra", &self.extra)
             .field("source", &self.source)
             .finish()
-    }
-}
-
-impl NetworkStatic {
-    pub fn download(&self) {
-        self.func.download(self);
-    }
-    pub fn play(&self, url: &str) -> String {
-        self.func.play(self)
     }
 }
 
@@ -66,13 +53,12 @@ pub trait NetworkStaticInterface {
 }
 
 pub struct LocalStatic;
+
 impl NetworkStaticInterface for LocalStatic {
-    fn download(&self, params: &NetworkStatic) {}
+    fn download(&self, _params: &NetworkStatic) {}
+
     fn play(&self, params: &NetworkStatic) -> String {
         let source = params.source.trim();
-        if source.is_empty() {
-            panic!("player source not found");
-        }
         if source.contains("://") {
             return source.to_string();
         }
@@ -81,7 +67,8 @@ impl NetworkStaticInterface for LocalStatic {
             .map(|uri| uri.to_string())
             .unwrap_or_else(|_| source.to_string())
     }
-    fn detail(&self, params: &NetworkStatic) -> Vec<NetworkStatic> {
+
+    fn detail(&self, _params: &NetworkStatic) -> Vec<NetworkStatic> {
         Vec::new()
     }
 }

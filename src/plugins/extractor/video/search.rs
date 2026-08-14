@@ -64,19 +64,22 @@ pub(crate) fn build_items(
 ) -> Vec<NetworkStatic> {
     config::parse_items(document, &config.item_children, entry_url)
         .into_iter()
-        .map(|item| NetworkStatic {
-            id: Uuid::new_v4().to_string(),
-            name: item.name,
-            img: item.image,
-            author: config.id.clone(),
-            category: config.category.clone(),
-            headers: config::headers(config),
-            extra: item.extra,
-            source: item.source,
-            func: Arc::new(ConfiguredVideoInterface {
-                config: config.clone(),
-                fetcher: fetcher.clone(),
-            }),
+        .map(|item| {
+            let source = item.source;
+            NetworkStatic {
+                id: Uuid::new_v4().to_string(),
+                name: item.name,
+                img: item.image,
+                author: config.id.clone(),
+                category: config.category.clone(),
+                headers: config::video_headers(config, &source, false),
+                extra: item.extra,
+                source,
+                func: Arc::new(ConfiguredVideoInterface {
+                    config: config.clone(),
+                    fetcher: fetcher.clone(),
+                }),
+            }
         })
         .collect()
 }

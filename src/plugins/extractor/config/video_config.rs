@@ -56,16 +56,6 @@ pub const VIDEO_RECOMMEND_CONFIG: &str = r###"
       "detail":{"base_url":"{{source}}","item_children":{"fallback_play_links":false,"item_selector":".vodplayinfo li","source":{"selector":"input[name='copy_sel']","attribute":"value"},"name":{"selector":":scope"}}}}
   },
   {
-    "id":"jinyingzy","headers":{"user-agent":"Mozilla/5.0","referer":"https://jinyingzy.com/"},"base_url":"https://jinyingzy.com","extract_type":"css","category":"推荐",
-    "item_children":{"base_url":"/","item_selector":".xing_vb > ul > li","source":{"selector":".xing_vb4 a","attribute":"href"},"name":{"selector":".xing_vb4 a"},"extra":{"update_time":{"selector":".xing_vb7"}},
-      "detail":{"base_url":"{{source}}","item_children":{"fallback_play_links":false,"item_selector":"a[href*='.m3u8']","source":{"selector":":scope","attribute":"href"},"name":{"selector":":scope","attribute":"title"}}}}
-  },
-  {
-    "id":"apibdzy","headers":{"user-agent":"Mozilla/5.0","referer":"https://api.apibdzy.com/"},"base_url":"https://api.apibdzy.com","extract_type":"css","category":"推荐",
-    "item_children":{"base_url":"/","item_selector":".stui-vodlist > li","source":{"selector":"h3.title a","attribute":"href"},"name":{"selector":"h3.title a"},"extra":{"update_time":{"selector":".time"}},
-      "detail":{"base_url":"{{source}}","item_children":{"fallback_play_links":false,"item_selector":".stui-content__playlist li","source":{"selector":".copy_text span"},"name":{"selector":".copy_text"}}}}
-  },
-  {
     "id":"yayazy2","headers":{"user-agent":"Mozilla/5.0","referer":"https://yayazy2.com/"},"base_url":"https://yayazy2.com","extract_type":"css","category":"推荐",
     "item_children":{"base_url":"/","item_selector":".stui-vodlist > li","source":{"selector":"h3.title a","attribute":"href"},"name":{"selector":"h3.title a"},"extra":{"update_time":{"selector":".time"}},
       "detail":{"base_url":"{{source}}","item_children":{"fallback_play_links":false,"item_selector":".stui-content__playlist li","source":{"selector":".copy_text span"},"name":{"selector":".copy_text"}}}}

@@ -2,6 +2,7 @@ use super::FetchDocument;
 use crate::drive::{NetworkStatic, NetworkStaticInterface};
 use crate::plugins::extractor::config::{self, PlatformConfig};
 use futures_util::future::join_all;
+use gpui::http_client::Url;
 
 pub(crate) async fn filter_playable(items: Vec<NetworkStatic>) -> Vec<NetworkStatic> {
     join_all(items.into_iter().map(|item| async move {
@@ -10,7 +11,7 @@ pub(crate) async fn filter_playable(items: Vec<NetworkStatic>) -> Vec<NetworkSta
             let details = candidate.func.detail(&candidate);
             details.iter().any(|detail| {
                 let source = detail.func.play(detail);
-                is_play_url(&source)
+                !source.trim().is_empty()
             })
         })
         .await
@@ -23,11 +24,6 @@ pub(crate) async fn filter_playable(items: Vec<NetworkStatic>) -> Vec<NetworkSta
     .collect()
 }
 
-fn is_play_url(value: &str) -> bool {
-    let value = value.trim().to_ascii_lowercase();
-    value.contains(".m3u8") || value.contains(".mp4")
-}
-
 pub(crate) struct ConfiguredVideoInterface {
     pub(crate) config: PlatformConfig,
     pub(crate) fetcher: FetchDocument,
@@ -37,14 +33,26 @@ impl NetworkStaticInterface for ConfiguredVideoInterface {
     fn download(&self, _params: &NetworkStatic) {}
 
     fn play(&self, params: &NetworkStatic) -> String {
-        if params.source.contains(".m3u8") || params.source.contains(".mp4") {
-            return params.source.clone();
+        if params.source.trim().is_empty() {
+            // log::warn!("[video:play] empty source, id={}", params.id);
+            return String::new();
         }
+
         let Some(detail) = self.config.item_children.detail.as_ref() else {
-            return params.source.clone();
+            // log::info!(
+            //     "[video:play] no detail resolver, use source as-is id={} url={}",
+            //     params.id,
+            //     params.source
+            // );
+            return unwrap_play_source(&params.source);
         };
         let Some(play) = detail.play.as_ref() else {
-            return params.source.clone();
+            // log::info!(
+            //     "[video:play] no play resolver, use source as-is id={} url={}",
+            //     params.id,
+            //     params.source
+            // );
+            return unwrap_play_source(&params.source);
         };
         let url = play
             .base_url
@@ -60,16 +68,20 @@ impl NetworkStaticInterface for ConfiguredVideoInterface {
                     log::error!("video play request failed: url={url}");
                     return String::new();
                 };
-                config::extract_play_url(&document, play, &url, &config).unwrap_or_default()
+                let source =
+                    config::extract_play_url(&document, play, &url, &config).unwrap_or_default();
+                if source.trim().is_empty() {
+                    log::warn!("[video:play] resolver returned empty source: url={url}");
+                } else {
+                    log::info!("[video:play] resolved url={source} from={url}");
+                }
+                source
             })
         })
     }
 
     fn detail(&self, params: &NetworkStatic) -> Vec<NetworkStatic> {
-        if params.source.contains("/vod/play")
-            || params.source.contains("vodplay")
-            || params.source.contains(".m3u8")
-        {
+        if params.source.contains("/vod/play") || params.source.contains("vodplay") {
             return vec![params.clone()];
         }
         let Some(detail) = self.config.item_children.detail.as_ref() else {
@@ -96,12 +108,14 @@ impl NetworkStaticInterface for ConfiguredVideoInterface {
                 let Ok(document) = fetcher(child_url.clone(), config.clone(), extract_type).await
                 else {
                     log::error!("video detail request failed: url={child_url}");
-                    return vec![params.clone()];
+                    return Vec::new();
                 };
                 let values = config::parse_items(&document, children, &child_url);
                 if values.is_empty() {
-                    return vec![params.clone()];
+                    log::warn!("video detail returned no episodes: url={child_url}");
+                    return Vec::new();
                 }
+                // log::info!("[video:detail] url={} episodes={}", child_url, values.len());
                 values
                     .into_iter()
                     .map(|item| NetworkStatic {
@@ -123,4 +137,22 @@ impl NetworkStaticInterface for ConfiguredVideoInterface {
             })
         })
     }
+}
+
+fn unwrap_play_source(source: &str) -> String {
+    let Some(url) = Url::parse(source).ok() else {
+        return source.to_string();
+    };
+    let Some(embedded_url) = url.query_pairs().find_map(|(_, value)| {
+        let value = value.trim();
+        (value.starts_with("http://") || value.starts_with("https://")).then(|| value.to_string())
+    }) else {
+        return source.to_string();
+    };
+    // log::info!(
+    //     "[video:play] unwrapped embedded source from={} to={}",
+    //     source,
+    //     embedded_url
+    // );
+    embedded_url
 }
