@@ -40,7 +40,7 @@ pub struct VideoPage {
 
 impl VideoPage {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> VideoPage {
-        let page = VideoPage {
+        let mut page = VideoPage {
             current_page: Page::Recommend,
             detail_origin: DetailOrigin::Recommend,
             is_loading: false,
@@ -95,7 +95,7 @@ impl VideoPage {
             this.request_play_episode(next, *event_window_id, *event_entity_id, cx);
         })
         .detach();
-        // page.init_data(cx);
+        page.init_data(cx);
         page
     }
 }

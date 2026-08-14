@@ -57,7 +57,7 @@ impl MusicPage {
                 .new(|cx| InputState::new(window, cx).placeholder("input search music")),
             music_player: music_player_for_event,
         };
-        // s.init_data(cx);
+        s.init_data(cx);
         s
     }
 
