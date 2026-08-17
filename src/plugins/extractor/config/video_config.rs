@@ -23,7 +23,7 @@ pub const VIDEO_SEARCH_CONFIG: &str = r###"
   {
     "id":"ffzy5","headers":{"user-agent":"Mozilla/5.0"},"base_url":"https://ffzy5.tv","extract_type":"json",
     "item_children":{"base_url":"/api.php/provide/vod/?ac=list&wd={{keyword}}","item_selector":"list","source":{"selector":"vod_id"},"name":{"selector":"vod_name"},"image":{"selector":"vod_pic"},"extra":{"update_time":{"selector":"vod_time"}},
-      "detail":{"base_url":"/api.php/provide/vod/?ac=detail&ids={{source}}","extract_type":"json","item_children":{"item_selector":"list.0.vod_play_url","item_split":{"item_separator":"#","field_separator":"$"},"source":{"selector":"1"},"name":{"selector":"0"}},"play":{"base_url":"{{source}}","extract_type":"regex","regex":"https?://[^\\s\"'<>]+\\.m3u8[^\\s\"'<>]*"}}}
+      "detail":{"base_url":"/api.php/provide/vod/?ac=detail&ids={{source}}","extract_type":"json","item_children":{"item_selector":"list.0.vod_play_url","item_split":{"item_separator":"#","field_separator":"$","group_separator":"$$$","group_index":1},"source":{"selector":"1"},"name":{"selector":"0"}},"play":{"base_url":"{{source}}","extract_type":"regex","regex":"https?://[^\\s\"'<>]+\\.m3u8[^\\s\"'<>]*"}}}
   },
   {
     "id":"hongniuziyuan","headers":{"user-agent":"Mozilla/5.0"},"base_url":"https://hongniuziyuan.net","extract_type":"css",

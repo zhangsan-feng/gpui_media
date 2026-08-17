@@ -1,4 +1,5 @@
-use crate::PlayCore;
+use crate::{PlayCore, PlayCoreMediaType};
+use gpui::Context;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
@@ -13,7 +14,7 @@ impl Drop for PlayCore {
 }
 
 impl PlayCore {
-    pub(crate) fn set_pipeline(&mut self) -> anyhow::Result<()> {
+    pub(crate) fn set_pipeline(&mut self, cx: &mut Context<Self>) -> anyhow::Result<()> {
         if self.playback.pipeline.is_some() {
             return Ok(());
         }
@@ -149,19 +150,18 @@ impl PlayCore {
             )
             .build();
 
-        if self.show_frame {
-            if let Some(video_filter) = self.build_video_filter() {
-                playbin.set_property("video-filter", &video_filter);
-                self.playback.video_filter = Some(video_filter);
-            }
+        if let Some(video_filter) = self.build_video_filter() {
+            playbin.set_property("video-filter", &video_filter);
+            self.playback.video_filter = Some(video_filter);
         }
         playbin.set_property("video-sink", &appsink);
         playbin.set_property("volume", &(self.volume as f64));
         playbin.set_property("uri", &self.current_player.url);
         playbin.set_state(gst::State::Paused)?;
 
-        self.playback.video_sink = Some(appsink);
         self.playback.pipeline = Some(playbin);
+        self.start_event_bus(cx);
+        self.start_loading_timeout_task(cx);
         Ok(())
     }
 
@@ -173,10 +173,30 @@ impl PlayCore {
             .unwrap_or(false)
     }
 
-    pub(crate) fn set_paused(&self) {
+    pub(crate) fn set_paused(&mut self) {
         if let Some(pipeline) = &self.playback.pipeline {
             let _ = pipeline.set_state(gst::State::Paused);
         }
+        self.playback.loading_timeout_task = None;
+    }
+
+    pub(crate) fn maintain_pipeline_tasks(&mut self, cx: &mut Context<Self>) {
+        self.start_loading_timeout_task(cx);
+        if self.media_type == PlayCoreMediaType::Video {
+            self.start_frame_task(cx);
+        }
+    }
+
+    pub(crate) fn mark_loading_progress(&mut self) {
+        self.playback.loading_progress = self.playback.loading_progress.wrapping_add(1);
+    }
+
+    pub(crate) fn mark_buffering_progress(&mut self, percent: i32) {
+        if self.playback.last_buffering_percent == Some(percent) {
+            return;
+        }
+        self.playback.last_buffering_percent = Some(percent);
+        self.mark_loading_progress();
     }
 
     pub(crate) fn reset_pipeline_state(&mut self) {
@@ -185,15 +205,18 @@ impl PlayCore {
         }
         self.playback.pipeline = None;
         self.playback.video_filter = None;
-        self.playback.video_sink = None;
     }
 
-    pub(crate) fn seek_pipeline(&self, position: std::time::Duration) {
-        if let Some(pipeline) = &self.playback.pipeline {
-            let target =
-                gst::ClockTime::from_nseconds(position.as_nanos().min(u64::MAX as u128) as u64);
-            let _ = pipeline.seek_simple(gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, target);
-        }
+    pub(crate) fn seek_pipeline(&mut self, position: std::time::Duration) -> bool {
+        let Some(pipeline) = &self.playback.pipeline else {
+            return false;
+        };
+        let target =
+            gst::ClockTime::from_nseconds(position.as_nanos().min(u64::MAX as u128) as u64);
+        let seeked = pipeline
+            .seek_simple(gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, target)
+            .is_ok();
+        seeked
     }
 
     pub(crate) fn seek_segment_pipeline(

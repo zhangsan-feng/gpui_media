@@ -1,4 +1,4 @@
-use crate::{PlatState, PlayCore};
+use crate::{PlatState, PlayCore, PlayCoreMediaType};
 use gpui::*;
 use gstreamer::prelude::*;
 use std::time::Duration;
@@ -10,28 +10,47 @@ impl PlayCore {
         }
         let source = self.current_player.url.clone();
         let session_id = self.playback.session_id;
-        if source.starts_with("file://") || !self.show_frame {
+        if source.starts_with("file://") {
             return;
         }
 
+        let mut loading_progress = self.playback.loading_progress;
         self.playback.loading_timeout_task = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(Duration::from_secs(30))
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                if !this.playback.is_current_session(session_id) {
-                    return;
-                }
-                let still_loading = this.current_player.url == source
-                    && this.playback.pipeline.is_some()
-                    && this.frames.current_image().is_none();
-                this.playback.loading_timeout_task = None;
-                if still_loading {
-                    this.reset_pipeline();
-                    this.playback.state = PlatState::Error("加载视频源超时".to_string());
-                    cx.notify();
-                }
-            });
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_secs(60))
+                    .await;
+                let next_progress = this
+                    .update(cx, |this, cx| {
+                        if !this.playback.is_current_session(session_id)
+                            || this.current_player.url != source
+                        {
+                            return None;
+                        }
+                        if !matches!(
+                            this.playback.state,
+                            PlatState::Loading | PlatState::Cache(_)
+                        ) {
+                            this.playback.loading_timeout_task = None;
+                            return None;
+                        }
+                        if this.playback.loading_progress != loading_progress {
+                            return Some(this.playback.loading_progress);
+                        }
+
+                        this.reset_pipeline();
+                        this.playback.state = PlatState::Error("加载媒体源超时".to_string());
+                        this.playback.loading_timeout_task = None;
+                        cx.notify();
+                        None
+                    })
+                    .ok()
+                    .flatten();
+                let Some(next_progress) = next_progress else {
+                    break;
+                };
+                loading_progress = next_progress;
+            }
         }));
     }
 
@@ -56,6 +75,9 @@ impl PlayCore {
     }
 
     pub(crate) fn start_frame_task(&mut self, cx: &mut Context<Self>) {
+        if self.media_type != PlayCoreMediaType::Video {
+            return;
+        }
         if self.playback.frame_task.is_some() {
             return;
         }
@@ -112,22 +134,28 @@ impl PlayCore {
         if !self.playback.is_current_session(session_id) {
             return false;
         }
+        if self.media_type != PlayCoreMediaType::Video {
+            self.playback.frame_task = None;
+            return false;
+        }
         if let Some(frame) = self.frames.submit_latest_frame() {
+            self.mark_loading_progress();
             self.frame_aspect = (frame.width as f32 / frame.height as f32).max(0.01);
             self.frame_width = frame.width as f32;
             self.frame_height = frame.height as f32;
             self.frame_rate = frame.frame_rate;
             self.mark_video_present();
-            if matches!(
-                self.playback.state,
-                PlatState::Loading | PlatState::Cache(_)
-            ) {
+            if matches!(self.playback.state, PlatState::Loading) {
                 self.playback.state = PlatState::Playing;
             }
             cx.notify();
         }
 
-        let keep_running = self.playback.pipeline.is_some();
+        let keep_running = self.playback.pipeline.is_some()
+            && matches!(
+                self.playback.state,
+                PlatState::Loading | PlatState::Playing | PlatState::Paused | PlatState::Cache(_)
+            );
         if !keep_running {
             self.playback.frame_task = None;
         }

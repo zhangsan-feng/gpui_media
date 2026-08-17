@@ -20,33 +20,30 @@ pub enum Page {
 }
 
 pub struct HomeView {
-    select_id: Page,
     music_recommend_page: Entity<MusicPage>,
     video_recommend_page: Entity<VideoPage>,
-    custmer_player: Entity<VideoPlayer>,
+    customer_player: Entity<VideoPlayer>,
     title_bar: Entity<CustomTitleBar>,
     sidebar_menu: Entity<CustomSidebarMenu>,
 }
 
 impl HomeView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> HomeView {
-        let custmer_player = cx.new(|cx| VideoPlayer::new(window, cx));
         HomeView {
             title_bar: cx.new(|cx| CustomTitleBar::new(window, cx)),
             sidebar_menu: cx.new(|cx| CustomSidebarMenu::new(window, cx)),
-            select_id: Page::VideoPlayer,
             music_recommend_page: cx.new(|cx| MusicPage::new(window, cx)),
             video_recommend_page: cx.new(|cx| VideoPage::new(window, cx)),
-            custmer_player,
+            customer_player: cx.new(|cx| VideoPlayer::new(window, cx)),
         }
     }
 }
 
 impl Render for HomeView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.select_id = self.sidebar_menu.read(cx).select_id.clone();
+        let select_page = self.sidebar_menu.read(cx).select_id.clone();
 
-        let content_anim_id = match self.select_id {
+        let content_anim_id = match select_page {
             Page::MusicPage => "home-view-recommend",
             Page::VideoPage => "video-player-recommend",
             Page::VideoPlayer => "video-player",
@@ -76,7 +73,7 @@ impl Render for HomeView {
                                     .h_full()
                                     .min_w_0()
                                     .min_h_0()
-                                    .child(match self.select_id {
+                                    .child(match select_page {
                                         Page::MusicPage => {
                                             self.music_recommend_page.clone().into_any_element()
                                         }
@@ -84,7 +81,7 @@ impl Render for HomeView {
                                             self.video_recommend_page.clone().into_any_element()
                                         }
                                         Page::VideoPlayer => {
-                                            self.custmer_player.clone().into_any_element()
+                                            self.customer_player.clone().into_any_element()
                                         }
                                     })
                                     .with_animations(

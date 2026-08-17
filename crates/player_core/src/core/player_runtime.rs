@@ -1,6 +1,5 @@
 use gpui::*;
 use gstreamer as gst;
-use gstreamer_app as gst_app;
 use image::{Frame, RgbaImage};
 use std::sync::{Arc, Mutex};
 
@@ -24,11 +23,12 @@ pub(crate) struct PlaybackRuntime {
     pub(crate) state: PlatState,
     pub(crate) pipeline: Option<gst::Element>,
     pub(crate) video_filter: Option<gst::Element>,
-    pub(crate) video_sink: Option<gst_app::AppSink>,
     pub(crate) progress_task: Option<Task<()>>,
     pub(crate) frame_task: Option<Task<()>>,
     pub(crate) bus_watch_task: Option<Task<()>>,
     pub(crate) loading_timeout_task: Option<Task<()>>,
+    pub(crate) loading_progress: u64,
+    pub(crate) last_buffering_percent: Option<i32>,
     pub(crate) bus_watch_started: bool,
 }
 
@@ -39,11 +39,12 @@ impl Default for PlaybackRuntime {
             state: PlatState::UnLoading,
             pipeline: None,
             video_filter: None,
-            video_sink: None,
             progress_task: None,
             frame_task: None,
             bus_watch_task: None,
             loading_timeout_task: None,
+            loading_progress: 0,
+            last_buffering_percent: None,
             bus_watch_started: false,
         }
     }
@@ -146,6 +147,15 @@ impl FramePipeline {
     pub(crate) fn drain_retired_images(&mut self, window: &mut Window) {
         for image in self.retired_images.drain(..) {
             let _ = window.drop_image(image);
+        }
+    }
+
+    pub(crate) fn release_images(&mut self, cx: &mut App) {
+        if let Some(image) = self.current_image.take() {
+            cx.drop_image(image, None);
+        }
+        for image in self.retired_images.drain(..) {
+            cx.drop_image(image, None);
         }
     }
 }

@@ -241,18 +241,14 @@ impl Render for MusicPage {
                     .bg(rgb_to_u32(252, 249, 254))
                     .child(Input::new(&self.music_search_keyword))
                     .child(
-                        h_flex()
-                            .size_full()
-                            .items_stretch()
-                            .gap_2()
-                            .child(v_flex().flex_1().child(self.vm_list(window, cx)))
-                            .child(
-                                div().w(px(8.)).h_full().child(
-                                    Scrollbar::vertical(&self.vm_scroll_handle)
-                                        .mode(ScrollbarMode::Always)
-                                        .axis(ScrollbarAxis::Vertical),
-                                ),
+                        h_flex().size_full().child(self.vm_list(window, cx)).child(
+                            div().w(px(16.)).h_full().child(
+                                Scrollbar::vertical(&self.vm_scroll_handle)
+                                    .mode(ScrollbarMode::Always)
+                                    .axis(ScrollbarAxis::Vertical)
+                                    .viewport_from_layout(),
                             ),
+                        ),
                     ),
             )
             .child(self.music_player.clone())

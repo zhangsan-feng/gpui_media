@@ -1,9 +1,11 @@
 use super::FetchDocument;
 use crate::drive::{NetworkStatic, NetworkStaticInterface};
 use crate::plugins::extractor::config::{self, PlatformConfig};
+#[cfg(test)]
 use futures_util::future::join_all;
 use gpui::http_client::Url;
 
+#[cfg(test)]
 pub(crate) async fn filter_playable(items: Vec<NetworkStatic>) -> Vec<NetworkStatic> {
     join_all(items.into_iter().map(|item| async move {
         let candidate = item.clone();
@@ -36,6 +38,9 @@ impl NetworkStaticInterface for ConfiguredVideoInterface {
         if params.source.trim().is_empty() {
             // log::warn!("[video:play] empty source, id={}", params.id);
             return String::new();
+        }
+        if is_direct_media_source(&params.source) {
+            return params.source.clone();
         }
 
         let Some(detail) = self.config.item_children.detail.as_ref() else {
@@ -93,7 +98,9 @@ impl NetworkStaticInterface for ConfiguredVideoInterface {
         let detail_url = detail
             .base_url
             .as_deref()
-            .map(|template| config::resolve_template(&params.source, template, &params.source))
+            .map(|template| {
+                config::resolve_template(&self.config.base_url, template, &params.source)
+            })
             .unwrap_or_else(|| params.source.clone());
         let child_url = children
             .base_url
@@ -155,4 +162,12 @@ fn unwrap_play_source(source: &str) -> String {
     //     embedded_url
     // );
     embedded_url
+}
+
+fn is_direct_media_source(source: &str) -> bool {
+    let Ok(url) = Url::parse(source) else {
+        return false;
+    };
+    let path = url.path().to_ascii_lowercase();
+    path.ends_with(".m3u8") || path.ends_with(".mp4")
 }

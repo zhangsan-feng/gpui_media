@@ -114,9 +114,9 @@ impl PlayCore {
         let Some(target) = target else {
             return false;
         };
-        self.seek(target);
+        let seeked = self.seek(target);
         cx.notify();
-        true
+        seeked
     }
 
     pub fn _drag_volume(&mut self, volume: f32, cx: &mut Context<Self>) -> f32 {

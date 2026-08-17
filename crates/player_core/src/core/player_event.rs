@@ -1,5 +1,5 @@
 use crate::state::{PlayCoreGlobalState, PlayCoreStateEvent};
-use crate::{PlatState, PlayCore};
+use crate::{PlatState, PlayCore, PlayCoreMediaType};
 use gpui::*;
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -73,7 +73,9 @@ impl PlayCore {
                                 PlayCore::stream_metadata(&collection.stream_collection());
                             let _ = this.update(cx, |this, cx| {
                                 if this.playback.is_current_session(session_id) {
+                                    this.mark_loading_progress();
                                     this.apply_stream_metadata(metadata);
+                                    this.maintain_pipeline_tasks(cx);
                                     cx.notify();
                                 }
                             });
@@ -82,7 +84,9 @@ impl PlayCore {
                             let metadata = PlayCore::stream_metadata(selected.streams());
                             let _ = this.update(cx, |this, cx| {
                                 if this.playback.is_current_session(session_id) {
+                                    this.mark_loading_progress();
                                     this.apply_stream_metadata(metadata);
+                                    this.maintain_pipeline_tasks(cx);
                                     cx.notify();
                                 }
                             });
@@ -109,11 +113,13 @@ impl PlayCore {
                             }
                             let _ = this.update(cx, |this, cx| {
                                 if this.playback.is_current_session(session_id) {
+                                    this.mark_loading_progress();
                                     this.update_codec_metadata(
                                         video_codec,
                                         audio_codec,
                                         fallback_codec,
                                     );
+                                    this.maintain_pipeline_tasks(cx);
                                     cx.notify();
                                 }
                             });
@@ -137,6 +143,7 @@ impl PlayCore {
                                 let _ = pipeline.set_state(gst::State::Paused);
                                 let _ = this.update(cx, |this, cx| {
                                     if this.playback.is_current_session(session_id) {
+                                        this.mark_buffering_progress(percent);
                                         this.playback.state =
                                             PlatState::Cache(format!("缓冲中 {percent}%"));
                                         cx.notify();
@@ -146,11 +153,13 @@ impl PlayCore {
                                 let _ = pipeline.set_state(gst::State::Playing);
                                 let _ = this.update(cx, |this, cx| {
                                     if this.playback.is_current_session(session_id) {
-                                        this.playback.state = if this.show_frame {
-                                            PlatState::Loading
-                                        } else {
-                                            PlatState::Playing
-                                        };
+                                        this.mark_buffering_progress(percent);
+                                        this.playback.state =
+                                            if this.media_type == PlayCoreMediaType::Audio {
+                                                PlatState::Playing
+                                            } else {
+                                                PlatState::Loading
+                                            };
                                         cx.notify();
                                     }
                                 });
@@ -191,7 +200,7 @@ impl PlayCore {
                 let keep_running = this
                     .update(cx, |this, _| {
                         this.playback.is_current_session(session_id)
-                            && this.playback.video_sink.is_some()
+                            && this.playback.pipeline.is_some()
                     })
                     .unwrap_or(false);
                 if !keep_running {

@@ -3,7 +3,18 @@ use gpui::Context;
 use std::time::Duration;
 
 impl PlayCore {
+    pub(crate) fn playback_controls_enabled(&self) -> bool {
+        !matches!(
+            self.playback.state,
+            PlatState::Loading | PlatState::Cache(_)
+        )
+    }
+
     pub(crate) fn toggle_play(&mut self, cx: &mut Context<Self>) {
+        if !self.playback_controls_enabled() {
+            return;
+        }
+
         match &self.playback.state {
             PlatState::Playing => self.pause(cx),
             PlatState::Paused => {
@@ -14,17 +25,15 @@ impl PlayCore {
                     self.play(cx);
                 }
             }
-            PlatState::Loading | PlatState::Cache(_) => {
-                if self.resume() {
-                    cx.notify();
-                }
-            }
             PlatState::UnLoading | PlatState::Error(_) => self.play(cx),
+            PlatState::Loading | PlatState::Cache(_) => {}
         }
     }
 
     pub(crate) fn retry(&mut self, cx: &mut Context<Self>) {
-        if self.current_player.url.is_empty() {
+        if self.current_player.url.trim().is_empty() {
+            self.reset_pipeline();
+            cx.notify();
             return;
         }
         self.reset_pipeline();
@@ -32,13 +41,13 @@ impl PlayCore {
     }
 
     pub(crate) fn play(&mut self, cx: &mut Context<Self>) {
-        if self.current_player.url.is_empty() {
+        if self.current_player.url.is_empty() || !self.playback_controls_enabled() {
             return;
         }
 
         self.playback.state = PlatState::Loading;
         cx.notify();
-        if let Err(error) = self.set_pipeline() {
+        if let Err(error) = self.set_pipeline(cx) {
             self.reset_pipeline();
             self.playback.state = PlatState::Error("播放失败".to_string());
             log::debug!("{}", error.backtrace());
@@ -46,17 +55,15 @@ impl PlayCore {
             return;
         }
 
-        if self.set_playing() {
-            if !self.show_frame {
-                self.playback.state = PlatState::Playing;
-            }
-            self.start_event_bus(cx);
-            if self.show_frame {
-                self.start_loading_timeout_task(cx);
-                self.start_frame_task(cx);
-            }
-            self.start_progress_task(cx);
+        if !self.set_playing() {
+            self.reset_pipeline();
+            self.playback.state = PlatState::Error("播放失败".to_string());
+            log::warn!("[gst:play] pipeline failed to enter playing state");
+            cx.notify();
+            return;
         }
+
+        self.start_progress_task(cx);
         cx.notify();
     }
 
@@ -66,6 +73,9 @@ impl PlayCore {
     }
 
     pub(crate) fn resume(&mut self) -> bool {
+        if !matches!(self.playback.state, PlatState::Paused) {
+            return false;
+        }
         if !self.set_playing() {
             return false;
         }
@@ -74,16 +84,23 @@ impl PlayCore {
     }
 
     pub(crate) fn pause_pipeline(&mut self) {
+        if !self.playback_controls_enabled() {
+            return;
+        }
         self.set_paused();
         self.playback.state = PlatState::Paused;
     }
 
-    pub(crate) fn seek(&mut self, position: Duration) {
+    pub(crate) fn seek(&mut self, position: Duration) -> bool {
         self.segment_end = None;
         if self.playback.pipeline.is_some() {
-            self.seek_pipeline(position);
+            if !self.seek_pipeline(position) {
+                return false;
+            }
             self.position = position;
+            return true;
         }
+        false
     }
 
     pub(crate) fn play_segment(&mut self, start: Duration, end: Duration) -> bool {
@@ -110,6 +127,7 @@ impl PlayCore {
         self.playback.frame_task = None;
         self.playback.bus_watch_task = None;
         self.playback.loading_timeout_task = None;
+        self.playback.last_buffering_percent = None;
         self.total_duration = None;
         self.position = Duration::ZERO;
         self.frame_width = 0.0;

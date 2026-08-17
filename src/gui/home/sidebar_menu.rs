@@ -12,8 +12,8 @@ pub struct CustomSidebarMenu {
 impl CustomSidebarMenu {
     pub fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
         Self {
-            select_id: Page::VideoPlayer,
-            previous_select_id: Page::VideoPlayer,
+            select_id: Page::MusicPage,
+            previous_select_id: Page::MusicPage,
         }
     }
 

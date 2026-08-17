@@ -1,4 +1,4 @@
-use crate::{PlayCore, PlayCoreMediaType};
+use crate::{PlatState, PlayCore, PlayCoreMediaType};
 use gstreamer as gst;
 
 #[derive(Default)]
@@ -33,6 +33,9 @@ impl PlayCore {
     pub(crate) fn apply_stream_metadata(&mut self, metadata: PlayCoreStreamMetadata) {
         if metadata.media_type != PlayCoreMediaType::Unknown {
             self.media_type = metadata.media_type;
+            if metadata.media_type == PlayCoreMediaType::Audio {
+                self.finish_audio_loading();
+            }
         }
     }
 
@@ -56,6 +59,18 @@ impl PlayCore {
             if !codec.is_empty() {
                 self.codec = Some(codec);
             }
+        }
+
+        if self.media_type == PlayCoreMediaType::Audio {
+            self.finish_audio_loading();
+        }
+    }
+
+    fn finish_audio_loading(&mut self) {
+        self.playback.frame_task = None;
+        self.playback.loading_timeout_task = None;
+        if self.playback.state == PlatState::Loading {
+            self.playback.state = PlatState::Playing;
         }
     }
 }

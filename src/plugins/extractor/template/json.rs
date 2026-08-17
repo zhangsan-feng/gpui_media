@@ -120,6 +120,13 @@ pub(crate) fn parse_items(
 }
 
 fn split_items(value: &str, config: &ItemSplitConfig) -> Vec<Value> {
+    let value = config
+        .group_separator
+        .as_deref()
+        .zip(config.group_index)
+        .and_then(|(separator, index)| value.split(separator).nth(index))
+        .unwrap_or(value);
+
     value
         .split(&config.item_separator)
         .filter_map(|item| {

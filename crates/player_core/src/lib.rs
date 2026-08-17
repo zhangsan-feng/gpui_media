@@ -85,7 +85,6 @@ impl Default for PlayStatic {
 pub struct PlayCore {
     pub current_player: PlayStatic,
     window_id: WindowId,
-    show_frame: bool,
     playback: PlaybackRuntime,
     frames: FramePipeline,
     volume: f32,
@@ -108,19 +107,10 @@ pub struct PlayCore {
 
 impl PlayCore {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new_with_frame(window, cx, true)
-    }
-
-    pub fn new_controls_only(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new_with_frame(window, cx, false)
-    }
-
-    fn new_with_frame(window: &mut Window, cx: &mut Context<Self>, show_frame: bool) -> Self {
         let window_id = window.window_handle().window_id();
         let mut s = Self {
             current_player: PlayStatic::default(),
             window_id,
-            show_frame,
             playback: PlaybackRuntime::default(),
             frames: FramePipeline::default(),
             volume: 0.6,
@@ -140,6 +130,10 @@ impl PlayCore {
             progress_bar_bounds: None,
             volume_bar_bounds: None,
         };
+        cx.on_release(|this, cx| {
+            this.frames.release_images(cx);
+        })
+        .detach();
         s.init_subscribe(window_id, cx);
         s
     }
@@ -173,10 +167,6 @@ impl PlayCore {
 impl Render for PlayCore {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.frames.drain_retired_images(window);
-
-        if !self.show_frame {
-            return self.render_control(window, cx).into_any_element();
-        }
 
         if !self.current_player.title.trim().is_empty() {
             window.set_window_title(&self.current_player.title);

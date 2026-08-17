@@ -40,6 +40,10 @@ pub struct ItemSplitConfig {
     pub item_separator: String,
     #[serde(default)]
     pub field_separator: Option<String>,
+    #[serde(default)]
+    pub group_separator: Option<String>,
+    #[serde(default)]
+    pub group_index: Option<usize>,
 }
 
 impl FieldConfig {

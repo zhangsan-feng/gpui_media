@@ -11,43 +11,6 @@ use std::rc::Rc;
 
 impl VideoPage {
     pub(super) fn render_header(&self, _: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        if self.current_page == Page::Detail {
-            let title = self
-                .detail_source
-                .as_ref()
-                .map(|source| source.name.clone())
-                .filter(|title| !title.trim().is_empty())
-                .unwrap_or_else(|| "视频详情".to_string());
-
-            return h_flex()
-                .items_center()
-                .h(px(64.))
-                .w_full()
-                .gap_3()
-                .px_3()
-                .rounded_xl()
-                .border_1()
-                .border_color(rgb_to_u32(238, 232, 244))
-                .bg(rgb_to_u32(252, 249, 254))
-                .child(
-                    Button::new("video-detail-back")
-                        .label("返回")
-                        .ghost()
-                        .compact()
-                        .on_click(cx.listener(|this, _, _, cx| this.back_from_detail(cx))),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .text_size(px(17.))
-                        .text_color(rgb_to_u32(15, 23, 42))
-                        .text_ellipsis()
-                        .child(title),
-                )
-                .into_any_element();
-        }
-
         let result_count = match self.current_page {
             Page::Recommend => self.recommend_result.len(),
             Page::Search => self.search_result.values().map(Vec::len).sum(),
@@ -264,12 +227,13 @@ impl VideoPage {
 
     pub(super) fn render_scrollbar(handle: &gpui_component::VirtualListScrollHandle) -> AnyElement {
         div()
-            .w(px(8.))
+            .w(px(16.))
             .h_full()
             .child(
                 Scrollbar::vertical(handle)
                     .mode(ScrollbarMode::Always)
-                    .axis(ScrollbarAxis::Vertical),
+                    .axis(ScrollbarAxis::Vertical)
+                    .viewport_from_layout(),
             )
             .into_any_element()
     }

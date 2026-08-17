@@ -4,6 +4,7 @@ mod recommend_page;
 mod search_page;
 mod ui;
 
+use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::input::InputState;
 use gpui_component::{VirtualListScrollHandle, v_flex};
@@ -35,7 +36,7 @@ pub struct VideoPage {
     detail_result: Vec<crate::drive::NetworkStatic>,
     active_player_target: Option<(WindowId, EntityId)>,
     vm_scroll_handler: VirtualListScrollHandle,
-    detail_list_state: ListState,
+    detail_scroll_handler: VirtualListScrollHandle,
 }
 
 impl VideoPage {
@@ -53,7 +54,7 @@ impl VideoPage {
             detail_result: Vec::new(),
             active_player_target: None,
             vm_scroll_handler: VirtualListScrollHandle::new(),
-            detail_list_state: ListState::new(0, ListAlignment::Top, px(96.)),
+            detail_scroll_handler: VirtualListScrollHandle::new(),
         };
         PlayCoreGlobalState::subscribe(cx, |this, event, cx| {
             let PlayCoreStateEvent::PlayBackFished(
@@ -113,7 +114,9 @@ impl Render for VideoPage {
             .gap_3()
             .p_3()
             .bg(rgb_to_u32(255, 255, 255))
-            .child(self.render_header(window, cx))
+            .when(self.current_page != Page::Detail, |this| {
+                this.child(self.render_header(window, cx))
+            })
             .child(div().flex_1().min_h_0().child(content))
             .into_any_element()
     }

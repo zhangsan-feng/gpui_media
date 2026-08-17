@@ -2,7 +2,6 @@
 ```aiignore
 这是一个基于 GPUI + GStreamer 实现的音乐播放器和视频播放器。
 
-
 本地视频：MP4、MOV、M4V、3GP、MKV、WebM、AVI、FLV
 本地音频：MP3、AAC/M4A、FLAC、WAV、OGG
 
@@ -23,6 +22,8 @@ https://github.com/youhunwl/TVAPP
 开发阶段需要 下载gst的c代码环境 
 https://gstreamer.freedesktop.org/download/
 
+player_core 实现播放管线和生命周期管理 自带默认的ui 也可以用api 二次开发ui
+ 
 由于构建需要裁减c 的dll 打包比较麻烦 
 windows 构建
     cargo run --release -p build_windows -- doctor
@@ -39,8 +40,9 @@ web 构建
 
 
 ```
-![134432.png](example_img/134432.png)
+![122202.png](example_img/122202.png)
 ![134755.png](example_img/134755.png)
 ![134412.png](example_img/134412.png)
-![092252.png](example_img/092252.png)
-![135551.png](example_img/135551.png)
+![144750.png](example_img/144750.png)
+![121727.png](example_img/121727.png)
+![133257.png](example_img/133257.png)

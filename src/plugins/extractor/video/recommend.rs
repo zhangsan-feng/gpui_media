@@ -1,4 +1,4 @@
-use super::{FetchDocument, default_fetcher, default_plugins, play::filter_playable};
+use super::{FetchDocument, default_fetcher, default_plugins};
 use crate::drive::NetworkStatic;
 
 use crate::plugins::extractor::config::{self, PlatformConfig};
@@ -37,13 +37,8 @@ async fn recommend_one(config: PlatformConfig, fetcher: FetchDocument) -> Vec<Ne
     {
         Ok(body) => {
             let items = super::search::build_items(&body, &config, &url, fetcher);
-            let playable = filter_playable(items).await;
-            log::debug!(
-                "video recommend source={} playable={}",
-                config.id,
-                playable.len()
-            );
-            playable
+            log::debug!("video recommend source={} items={}", config.id, items.len());
+            items
         }
         Err(error) => {
             log::error!("request {} error: {:#}", config.id, error);

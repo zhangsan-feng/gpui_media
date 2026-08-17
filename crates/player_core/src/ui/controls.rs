@@ -1,8 +1,7 @@
 use crate::core::{ProgressDrag, VolumeDrag};
 use crate::{PlatState, PlayCore, rgb_to_u32};
-use gpui::prelude::FluentBuilder;
 use gpui::*;
-use gpui_component::{ElementExt, h_flex, v_flex};
+use gpui_component::{ElementExt, IconName, h_flex, v_flex};
 use std::time::Duration;
 
 impl PlayCore {
@@ -165,13 +164,14 @@ impl PlayCore {
                 .id("video_progress_bar")
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(|this, event: &MouseDownEvent, _, _| {
+                    cx.listener(|this, event: &MouseDownEvent, _, cx| {
                         if let Some(bounds) = this.progress_bar_bounds {
                             if let Some(target) = this.get_progress_position(event.position, bounds)
                             {
                                 this.seek(target);
                                 this.is_dragging_progress_bar = false;
                                 this.pending_seek_position = None;
+                                cx.notify();
                             }
                         }
                     }),
@@ -216,9 +216,10 @@ impl PlayCore {
         &self,
         id: impl Into<ElementId>,
         label: impl IntoElement,
+        enabled: bool,
         click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> impl IntoElement {
-        div()
+        let mut button = div()
             .size(px(36.))
             .rounded_md()
             .bg(rgb_to_u32(248, 250, 252))
@@ -229,35 +230,43 @@ impl PlayCore {
             .justify_center()
             .text_size(px(13.))
             .text_color(rgb_to_u32(15, 23, 42))
-            .cursor_pointer()
-            .hover(|style| {
-                style
-                    .bg(rgb_to_u32(239, 246, 255))
-                    .border_color(rgb_to_u32(147, 197, 253))
-                    .text_color(rgb_to_u32(37, 99, 235))
-            })
-            .id(id)
-            .on_click(click)
-            .child(label)
+            .id(id);
+        if enabled {
+            button = button
+                .cursor_pointer()
+                .hover(|style| {
+                    style
+                        .bg(rgb_to_u32(239, 246, 255))
+                        .border_color(rgb_to_u32(147, 197, 253))
+                        .text_color(rgb_to_u32(37, 99, 235))
+                })
+                .on_click(click);
+        } else {
+            button = button.opacity(0.45);
+        }
+        button.child(label)
     }
 
     pub(crate) fn player_control_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let can_toggle_play = self.playback_controls_enabled();
         h_flex()
             .gap_2()
             .child(self.render_control_button(
                 "video_play_button",
                 if self.playback.state == PlatState::Playing {
-                    div().child("◼")
+                    IconName::Pause
                 } else {
-                    div().child("▶")
+                    IconName::Play
                 },
+                can_toggle_play,
                 cx.listener(|this, _, _, cx| {
                     this.toggle_play(cx);
                 }),
             ))
             .child(self.render_control_button(
                 "video_retry_button",
-                div().child("↻"),
+                IconName::Undo2,
+                true,
                 cx.listener(|this, _, _, cx| {
                     this.retry(cx);
                 }),

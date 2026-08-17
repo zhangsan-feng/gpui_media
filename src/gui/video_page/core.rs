@@ -1,8 +1,7 @@
-use super::detail_page::{EPISODE_ROW_HEIGHT, EPISODES_PER_ROW};
 use super::{DetailOrigin, Page, VideoPage};
 use crate::drive::NetworkStatic;
 use crate::plugins::extractor::video;
-use gpui::{AsyncApp, Context, EntityId, Window, WindowId, px};
+use gpui::{AsyncApp, Context, EntityId, Window, WindowId, point, px};
 use log::info;
 use player_core::{PlayCore, PlayCoreGlobalState, PlayCoreStateEvent, PlayStatic};
 
@@ -92,8 +91,7 @@ impl VideoPage {
         self.detail_source = Some(data.clone());
         self.detail_result.clear();
         self.active_player_target = None;
-        self.detail_list_state
-            .reset_with_uniform_height(0, px(EPISODE_ROW_HEIGHT));
+        self.detail_scroll_handler.set_offset(point(px(0.), px(0.)));
         self.is_detail_loading = true;
         cx.notify();
 
@@ -101,9 +99,10 @@ impl VideoPage {
         let entity = cx.entity().clone();
         let mut cx_async = cx.to_async().clone();
         cx.spawn(|_, _: &mut AsyncApp| async move {
-            let result = tokio::spawn(async move { data.func.detail(&data) })
+            let mut result = tokio::spawn(async move { data.func.detail(&data) })
                 .await
                 .unwrap_or_default();
+            super::detail_page::sort_episodes(&mut result);
 
             let _ = entity.update(&mut cx_async, |this, cx| {
                 let is_current_detail = this.current_page == Page::Detail
@@ -116,10 +115,6 @@ impl VideoPage {
                 }
 
                 this.detail_result = result;
-                let row_count =
-                    (this.detail_result.len() + EPISODES_PER_ROW - 1) / EPISODES_PER_ROW;
-                this.detail_list_state
-                    .reset_with_uniform_height(row_count, px(EPISODE_ROW_HEIGHT));
                 this.is_detail_loading = false;
                 cx.notify();
             });
@@ -135,8 +130,7 @@ impl VideoPage {
         self.detail_source = None;
         self.detail_result.clear();
         self.active_player_target = None;
-        self.detail_list_state
-            .reset_with_uniform_height(0, px(EPISODE_ROW_HEIGHT));
+        self.detail_scroll_handler.set_offset(point(px(0.), px(0.)));
         self.is_detail_loading = false;
         cx.notify();
     }

@@ -1,6 +1,6 @@
 use crate::{PlatState, PlayCore, rgb_to_u32};
 use gpui::*;
-use gpui_component::{ElementExt, text::markdown, v_flex};
+use gpui_component::{ElementExt, IconName, text::markdown, v_flex};
 
 impl PlayCore {
     pub fn render_frame(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -16,6 +16,39 @@ impl PlayCore {
                 (container_width, container_width / frame_aspect)
             }
         });
+        let current_image = self.frames.current_image();
+        let pause_overlay = match (&self.playback.state, current_image.is_some()) {
+            (PlatState::Paused, true) => div()
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_color(rgb(0xFFFFFF))
+                .text_size(px(48.))
+                .opacity(0.72)
+                .child(IconName::Play)
+                .into_any_element(),
+            _ => div().into_any_element(),
+        };
+        let buffering_overlay = match (&self.playback.state, current_image.is_some()) {
+            (PlatState::Cache(message), true) => v_flex()
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(rgb_to_u32(15, 23, 42))
+                .opacity(0.68)
+                .child(
+                    markdown(message.clone())
+                        .selectable(true)
+                        .text_color(rgb(0xE2E8F0))
+                        .cursor_text(),
+                )
+                .into_any_element(),
+            _ => div().into_any_element(),
+        };
         let error_overlay = match &self.playback.state {
             PlatState::Error(message) => v_flex()
                 .absolute()
@@ -49,6 +82,13 @@ impl PlayCore {
             .min_h_0()
             .flex()
             .relative()
+            .cursor_pointer()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    this.toggle_play(cx);
+                }),
+            )
             .justify_center()
             .items_center()
             .overflow_hidden()
@@ -74,7 +114,7 @@ impl PlayCore {
                     });
                 }
             })
-            .child(if let Some(frame) = self.frames.current_image() {
+            .child(if let Some(frame) = current_image {
                 div()
                     .absolute()
                     .inset_0()
@@ -117,6 +157,8 @@ impl PlayCore {
                     )
                     .into_any_element()
             })
+            .child(pause_overlay)
+            .child(buffering_overlay)
             .child(error_overlay)
     }
 }

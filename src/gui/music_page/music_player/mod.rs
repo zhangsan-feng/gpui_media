@@ -13,7 +13,7 @@ pub struct MusicPlayer {
 
 impl MusicPlayer {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let play_core = cx.new(|cx| PlayCore::new_controls_only(window, cx));
+        let play_core = cx.new(|cx| PlayCore::new(window, cx));
         cx.observe(&play_core, |_, _, cx| cx.notify()).detach();
 
         Self {
