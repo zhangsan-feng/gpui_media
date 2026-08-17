@@ -6,7 +6,6 @@
 不要写mod sss {} 我希望是mod.rs 是入口 功能是单独的rs 文件
 不要写 pub (crate in xxx)
 引入依赖统一在代码文件顶部
-不要在代理逻辑里面写 use super::函数 或者 use crate:: 或者 crate::
 UI 样式参考 [Tailwind CSS](https://tailwindcss.com/)，或者 shadcn-ui(https://ui.shadcn.com/)  尽量用 size_full 和 flex_1  
 图标设计与语义参考 [Lucide](https://lucide.dev/)；优先复用项目已有的 Lucide 图标资源，避免引入重复图标依赖。
 

@@ -1,15 +1,11 @@
 use crate::{PlatState, PlayCore, PlayCoreMediaType};
+use gpui::Context;
 use gstreamer as gst;
-
-#[derive(Default)]
-pub(crate) struct PlayCoreStreamMetadata {
-    media_type: PlayCoreMediaType,
-}
 
 impl PlayCore {
     pub(crate) fn stream_metadata(
         streams: impl IntoIterator<Item = gst::Stream>,
-    ) -> PlayCoreStreamMetadata {
+    ) -> PlayCoreMediaType {
         let mut has_video = false;
         let mut has_audio = false;
 
@@ -19,28 +15,28 @@ impl PlayCore {
             has_audio |= stream_type.contains(gst::StreamType::AUDIO);
         }
 
-        PlayCoreStreamMetadata {
-            media_type: if has_video {
-                PlayCoreMediaType::Video
-            } else if has_audio {
-                PlayCoreMediaType::Audio
-            } else {
-                PlayCoreMediaType::Unknown
-            },
+        if has_video {
+            PlayCoreMediaType::Video
+        } else if has_audio {
+            PlayCoreMediaType::Audio
+        } else {
+            PlayCoreMediaType::Unknown
         }
     }
 
-    pub(crate) fn apply_stream_metadata(&mut self, metadata: PlayCoreStreamMetadata) {
-        if metadata.media_type != PlayCoreMediaType::Unknown {
-            self.media_type = metadata.media_type;
-            if metadata.media_type == PlayCoreMediaType::Audio {
-                self.finish_audio_loading();
-            }
-        }
+    pub(crate) fn update_stream_metadata(
+        &mut self,
+        media_type: PlayCoreMediaType,
+        cx: &mut Context<Self>,
+    ) {
+        self.mark_loading_progress();
+        self.set_media_type(media_type);
+        self.maintain_pipeline_tasks(cx);
+        cx.notify();
     }
 
     pub(crate) fn mark_video_present(&mut self) {
-        self.media_type = PlayCoreMediaType::Video;
+        self.set_media_type(PlayCoreMediaType::Video);
     }
 
     pub(crate) fn update_codec_metadata(
@@ -50,27 +46,35 @@ impl PlayCore {
         fallback_codec: Option<String>,
     ) {
         if video_codec.is_some() {
-            self.media_type = PlayCoreMediaType::Video;
-        } else if audio_codec.is_some() && self.media_type == PlayCoreMediaType::Unknown {
-            self.media_type = PlayCoreMediaType::Audio;
+            self.set_media_type(PlayCoreMediaType::Video);
+        } else if audio_codec.is_some()
+            && self.player_static_info.media_type == PlayCoreMediaType::Unknown
+        {
+            self.set_media_type(PlayCoreMediaType::Audio);
         }
 
         if let Some(codec) = video_codec.or(audio_codec).or(fallback_codec) {
             if !codec.is_empty() {
-                self.codec = Some(codec);
+                self.player_static_info.codec = Some(codec);
             }
         }
+    }
 
-        if self.media_type == PlayCoreMediaType::Audio {
+    fn set_media_type(&mut self, media_type: PlayCoreMediaType) {
+        if media_type == PlayCoreMediaType::Unknown {
+            return;
+        }
+        self.player_static_info.media_type = media_type;
+        if media_type == PlayCoreMediaType::Audio {
             self.finish_audio_loading();
         }
     }
 
     fn finish_audio_loading(&mut self) {
-        self.playback.frame_task = None;
-        self.playback.loading_timeout_task = None;
-        if self.playback.state == PlatState::Loading {
-            self.playback.state = PlatState::Playing;
+        self.task.frame_task = None;
+        self.task.loading_timeout_task = None;
+        if self.pipeline.state == PlatState::Loading {
+            self.pipeline.state = PlatState::Playing;
         }
     }
 }

@@ -1,5 +1,5 @@
-use super::PlayCoreTranscodeFormat;
-use super::transcoder::{PlayCoreTranscoder, make_uri_decodebin};
+use crate::PlayCoreTranscodeFormat;
+use crate::transcoder::transcoder::{PlayCoreTranscoder, make_uri_decodebin};
 use anyhow::{Context, bail};
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -27,13 +27,7 @@ impl PlayCoreDownload {
         validate_request(&request)?;
         let source = make_uri_decodebin(&request.url)?;
         connect_source_setup(&source, request.headers);
-        PlayCoreTranscoder::transcode_source_blocking(
-            source,
-            &request.output,
-            request.format,
-            None,
-            None,
-        )
+        PlayCoreTranscoder::transcode_source_blocking(source, &request.output, request.format, None)
     }
 }
 

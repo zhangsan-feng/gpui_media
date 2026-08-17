@@ -1,4 +1,5 @@
 use crate::{PlayCore, PlayCoreMediaType};
+use anyhow::Context as AnyhowContext;
 use gpui::Context;
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -7,22 +8,21 @@ use gstreamer_video as gst_video;
 
 impl Drop for PlayCore {
     fn drop(&mut self) {
-        if let Some(pipeline) = &self.playback.pipeline {
-            let _ = pipeline.set_state(gst::State::Null);
-        }
+        self.reset_pipeline_state();
     }
 }
 
 impl PlayCore {
     pub(crate) fn set_pipeline(&mut self, cx: &mut Context<Self>) -> anyhow::Result<()> {
-        if self.playback.pipeline.is_some() {
+        if self.pipeline.pipeline.is_some() {
             return Ok(());
         }
 
+        gst::init().context("初始化 GStreamer 失败")?;
         let playbin = gst::ElementFactory::make("playbin3")
             .name("video-playbin")
             .build()?;
-        let mut headers = self.current_player.headers.clone();
+        let mut headers = self.player_static.headers.clone();
         if !headers.contains_key(reqwest::header::USER_AGENT) {
             headers.insert(
                 reqwest::header::USER_AGENT,
@@ -33,7 +33,7 @@ impl PlayCore {
         }
         log::info!(
             "[gst:play] uri={} headers={:?}",
-            self.current_player.url,
+            self.player_static.url,
             headers.keys().map(|name| name.as_str()).collect::<Vec<_>>()
         );
         playbin.connect("source-setup", false, move |values| {
@@ -44,7 +44,9 @@ impl PlayCore {
                 return None;
             };
 
-            if source.find_property("extra-headers").is_none() {
+            let has_extra_headers = source.find_property("extra-headers").is_some();
+            let has_user_agent = source.find_property("user-agent").is_some();
+            if !has_extra_headers && !has_user_agent {
                 return None;
             }
 
@@ -56,18 +58,20 @@ impl PlayCore {
                     continue;
                 };
                 if name == reqwest::header::USER_AGENT {
-                    if source.find_property("user-agent").is_some() {
+                    if has_user_agent {
                         source.set_property("user-agent", value);
                         applied_headers.push(name.as_str());
                     }
                     continue;
                 }
-                extra_headers = extra_headers.field(name.as_str(), value.to_owned());
-                header_count += 1;
-                applied_headers.push(name.as_str());
+                if has_extra_headers {
+                    extra_headers = extra_headers.field(name.as_str(), value.to_owned());
+                    header_count += 1;
+                    applied_headers.push(name.as_str());
+                }
             }
 
-            if header_count > 0 {
+            if has_extra_headers && header_count > 0 {
                 source.set_property("extra-headers", extra_headers.build());
             }
             log::info!(
@@ -81,7 +85,7 @@ impl PlayCore {
         let caps = gst::Caps::builder("video/x-raw")
             .field("format", "BGRA")
             .build();
-        let buffer_clone = self.frames.latest_frame();
+        let buffer_clone = self.frame.images.latest_frame();
         let appsink = gst_app::AppSink::builder()
             .caps(&caps)
             .sync(true)
@@ -119,14 +123,28 @@ impl PlayCore {
                         let Ok(map) = buffer.map_readable() else {
                             return Ok(gst::FlowSuccess::Ok);
                         };
-                        let stride = info.stride()[0] as usize;
-                        let row_bytes = width * 4;
+                        let Some(stride) = info.stride().first().copied() else {
+                            return Ok(gst::FlowSuccess::Ok);
+                        };
+                        let Some(row_bytes) = width.checked_mul(4) else {
+                            return Ok(gst::FlowSuccess::Ok);
+                        };
+                        if stride <= 0 || (stride as usize) < row_bytes {
+                            return Ok(gst::FlowSuccess::Ok);
+                        }
+                        let stride = stride as usize;
                         let data = map.as_slice();
-                        if data.len() < stride * height {
+                        let Some(required_bytes) = stride.checked_mul(height) else {
+                            return Ok(gst::FlowSuccess::Ok);
+                        };
+                        let Some(output_bytes) = row_bytes.checked_mul(height) else {
+                            return Ok(gst::FlowSuccess::Ok);
+                        };
+                        if data.len() < required_bytes {
                             return Ok(gst::FlowSuccess::Ok);
                         }
 
-                        let mut out = vec![0u8; width * height * 4];
+                        let mut out = vec![0u8; output_bytes];
                         if stride == row_bytes {
                             out.copy_from_slice(&data[..row_bytes * height]);
                         } else {
@@ -139,9 +157,9 @@ impl PlayCore {
                         }
 
                         let mut target = buffer_clone.lock().unwrap();
-                        target.width = width as u32;
-                        target.height = height as u32;
-                        target.frame_rate = frame_rate;
+                        target.info.width = width as u32;
+                        target.info.height = height as u32;
+                        target.info.frame_rate = frame_rate;
                         target.data = out;
                         target.seq = target.seq.wrapping_add(1);
                         Ok(gst::FlowSuccess::Ok)
@@ -150,69 +168,71 @@ impl PlayCore {
             )
             .build();
 
-        if let Some(video_filter) = self.build_video_filter() {
-            playbin.set_property("video-filter", &video_filter);
-            self.playback.video_filter = Some(video_filter);
-        }
         playbin.set_property("video-sink", &appsink);
-        playbin.set_property("volume", &(self.volume as f64));
-        playbin.set_property("uri", &self.current_player.url);
+        playbin.set_property("volume", &(self.volume.value as f64));
+        playbin.set_property("uri", &self.player_static.url);
         playbin.set_state(gst::State::Paused)?;
 
-        self.playback.pipeline = Some(playbin);
+        self.pipeline.pipeline = Some(playbin);
         self.start_event_bus(cx);
         self.start_loading_timeout_task(cx);
         Ok(())
     }
 
     pub(crate) fn set_playing(&self) -> bool {
-        self.playback
-            .pipeline
-            .as_ref()
-            .map(|pipeline| pipeline.set_state(gst::State::Playing).is_ok())
-            .unwrap_or(false)
+        self.set_pipeline_state(gst::State::Playing)
     }
 
-    pub(crate) fn set_paused(&mut self) {
-        if let Some(pipeline) = &self.playback.pipeline {
-            let _ = pipeline.set_state(gst::State::Paused);
+    pub(crate) fn set_paused(&mut self) -> bool {
+        if self.pipeline.pipeline.is_none() {
+            return false;
         }
-        self.playback.loading_timeout_task = None;
+        if !self.set_pipeline_state(gst::State::Paused) {
+            return false;
+        }
+        self.task.loading_timeout_task = None;
+        true
     }
 
     pub(crate) fn maintain_pipeline_tasks(&mut self, cx: &mut Context<Self>) {
         self.start_loading_timeout_task(cx);
-        if self.media_type == PlayCoreMediaType::Video {
+        if self.player_static_info.media_type == PlayCoreMediaType::Video {
             self.start_frame_task(cx);
         }
     }
 
     pub(crate) fn mark_loading_progress(&mut self) {
-        self.playback.loading_progress = self.playback.loading_progress.wrapping_add(1);
+        self.pipeline.loading_progress = self.pipeline.loading_progress.wrapping_add(1);
     }
 
     pub(crate) fn mark_buffering_progress(&mut self, percent: i32) {
-        if self.playback.last_buffering_percent == Some(percent) {
+        if self.pipeline.last_buffering_percent == Some(percent) {
             return;
         }
-        self.playback.last_buffering_percent = Some(percent);
+        self.pipeline.last_buffering_percent = Some(percent);
         self.mark_loading_progress();
     }
 
     pub(crate) fn reset_pipeline_state(&mut self) {
-        if let Some(pipeline) = &self.playback.pipeline {
+        if let Some(pipeline) = &self.pipeline.pipeline {
             let _ = pipeline.set_state(gst::State::Null);
         }
-        self.playback.pipeline = None;
-        self.playback.video_filter = None;
+        self.pipeline.pipeline = None;
+    }
+
+    fn set_pipeline_state(&self, state: gst::State) -> bool {
+        self.pipeline
+            .pipeline
+            .as_ref()
+            .map(|pipeline| pipeline.set_state(state).is_ok())
+            .unwrap_or(false)
     }
 
     pub(crate) fn seek_pipeline(&mut self, position: std::time::Duration) -> bool {
-        let Some(pipeline) = &self.playback.pipeline else {
+        let Some(pipeline) = &self.pipeline.pipeline else {
             return false;
         };
-        let target =
-            gst::ClockTime::from_nseconds(position.as_nanos().min(u64::MAX as u128) as u64);
+        let target = PlayCore::duration_to_clock_time(position);
         let seeked = pipeline
             .seek_simple(gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, target)
             .is_ok();
@@ -224,11 +244,11 @@ impl PlayCore {
         start: std::time::Duration,
         end: std::time::Duration,
     ) -> bool {
-        let Some(pipeline) = &self.playback.pipeline else {
+        let Some(pipeline) = &self.pipeline.pipeline else {
             return false;
         };
-        let start = gst::ClockTime::from_nseconds(start.as_nanos().min(u64::MAX as u128) as u64);
-        let end = gst::ClockTime::from_nseconds(end.as_nanos().min(u64::MAX as u128) as u64);
+        let start = PlayCore::duration_to_clock_time(start);
+        let end = PlayCore::duration_to_clock_time(end);
         pipeline
             .seek(
                 1.0,
@@ -242,8 +262,8 @@ impl PlayCore {
     }
 
     pub(crate) fn set_pipeline_volume(&self, volume: f32) {
-        if let Some(pipeline) = &self.playback.pipeline {
-            pipeline.set_property("volume", &(volume.clamp(0.0, 1.0) as f64));
+        if let Some(pipeline) = &self.pipeline.pipeline {
+            pipeline.set_property("volume", &(volume as f64));
         }
     }
 }

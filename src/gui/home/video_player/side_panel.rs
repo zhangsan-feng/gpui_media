@@ -1,8 +1,5 @@
 use super::core::export_format_label;
-use super::{
-    BrightnessFilterDrag, ContrastFilterDrag, HueFilterDrag, SaturationFilterDrag, SidePanelState,
-    VideoPlayer,
-};
+use super::{SidePanelState, VideoPlayer};
 use crate::component::color::rgb_to_u32;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants};
@@ -10,9 +7,7 @@ use gpui_component::input::Input;
 use gpui_component::menu::{DropdownMenu, PopupMenu, PopupMenuItem};
 use gpui_component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarMode};
 use gpui_component::{Disableable, IconName, h_flex, v_flex};
-use player_core::{
-    PlayCoreFilterKind, PlayCoreMediaType, PlayCoreTranscodeFormat, PlayCoreViewState,
-};
+use player_core::{PlayCoreMediaType, PlayCoreTranscodeFormat, PlayCoreViewState};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -188,7 +183,6 @@ impl VideoPlayer {
                     ),
             )
             .child(self._render_media_info(&view_state))
-            // .child(self._render_filter_panel(cx))
             .child(export_controls)
             .into_any_element()
     }
@@ -221,163 +215,6 @@ impl VideoPlayer {
             .child(self._render_project_info_row("分辨率", resolution))
             .child(self._render_project_info_row("帧率", frame_rate))
             .child(self._render_project_info_row("编码", codec))
-            .into_any_element()
-    }
-
-    fn _render_filter_panel(&self, cx: &mut Context<Self>) -> AnyElement {
-        let view_state = self.play_core.read(cx)._view_state();
-        if view_state.media_type != PlayCoreMediaType::Video {
-            return div().into_any_element();
-        }
-
-        v_flex()
-            .w_full()
-            .gap_2()
-            .mt_1()
-            .child(
-                div()
-                    .w_full()
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(rgb_to_u32(190, 48, 139))
-                    .child("视频滤镜"),
-            )
-            .child(self._render_filter_row(
-                "亮度",
-                PlayCoreFilterKind::Brightness,
-                view_state.filters.brightness,
-                -1.0,
-                1.0,
-                cx,
-            ))
-            .child(self._render_filter_row(
-                "对比度",
-                PlayCoreFilterKind::Contrast,
-                view_state.filters.contrast,
-                0.0,
-                2.0,
-                cx,
-            ))
-            .child(self._render_filter_row(
-                "饱和度",
-                PlayCoreFilterKind::Saturation,
-                view_state.filters.saturation,
-                0.0,
-                2.0,
-                cx,
-            ))
-            .child(self._render_filter_row(
-                "色调",
-                PlayCoreFilterKind::Hue,
-                view_state.filters.hue,
-                -1.0,
-                1.0,
-                cx,
-            ))
-            .child(self._render_control_button(
-                "video-filter-reset",
-                "重置滤镜",
-                false,
-                |this, _, _, cx| {
-                    let _ = this
-                        .play_core
-                        .update(cx, |player, cx| player._reset_filters(cx));
-                },
-                cx,
-            ))
-            .into_any_element()
-    }
-
-    fn _render_filter_row(
-        &self,
-        label: &str,
-        filter: PlayCoreFilterKind,
-        value: f32,
-        min: f32,
-        max: f32,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        match filter {
-            PlayCoreFilterKind::Brightness => self
-                ._render_filter_row_with_drag::<BrightnessFilterDrag>(
-                    label, filter, value, min, max, cx,
-                ),
-            PlayCoreFilterKind::Contrast => self
-                ._render_filter_row_with_drag::<ContrastFilterDrag>(
-                    label, filter, value, min, max, cx,
-                ),
-            PlayCoreFilterKind::Saturation => self
-                ._render_filter_row_with_drag::<SaturationFilterDrag>(
-                    label, filter, value, min, max, cx,
-                ),
-            PlayCoreFilterKind::Hue => self
-                ._render_filter_row_with_drag::<HueFilterDrag>(label, filter, value, min, max, cx),
-        }
-    }
-
-    fn _render_filter_row_with_drag<Drag>(
-        &self,
-        label: &str,
-        filter: PlayCoreFilterKind,
-        value: f32,
-        min: f32,
-        max: f32,
-        cx: &mut Context<Self>,
-    ) -> AnyElement
-    where
-        Drag: Default + 'static,
-    {
-        let ratio = ((value - min) / (max - min)).clamp(0.0, 1.0);
-        h_flex()
-            .w_full()
-            .items_center()
-            .gap_2()
-            .child(
-                div()
-                    .w(px(48.))
-                    .flex_shrink_0()
-                    .text_size(px(12.))
-                    .text_color(rgb_to_u32(148, 140, 163))
-                    .child(label.to_string()),
-            )
-            .child(
-                div()
-                    .relative()
-                    .h(px(7.))
-                    .flex_1()
-                    .rounded_full()
-                    .bg(rgb_to_u32(226, 220, 231))
-                    .cursor_pointer()
-                    .id(format!("video-filter-bar-{label}"))
-                    .on_drag(Drag::default(), |_, _, _, cx: &mut App| cx.new(|_| Empty))
-                    .on_drag_move::<Drag>(cx.listener(
-                        move |this, event: &DragMoveEvent<Drag>, _, cx| {
-                            let width = event.bounds.size.width.as_f32().max(1.0);
-                            let position =
-                                event.event.position.x.as_f32() - event.bounds.origin.x.as_f32();
-                            let ratio = (position / width).clamp(0.0, 1.0);
-                            let value = min + (max - min) * ratio;
-                            let _ = this
-                                .play_core
-                                .update(cx, |player, cx| player._drag_filter(filter, value, cx));
-                        },
-                    ))
-                    .child(
-                        div()
-                            .h_full()
-                            .w(relative(ratio))
-                            .rounded_full()
-                            .bg(rgb_to_u32(190, 48, 139)),
-                    ),
-            )
-            .child(
-                div()
-                    .w(px(36.))
-                    .flex_shrink_0()
-                    .text_size(px(11.))
-                    .text_color(rgb_to_u32(73, 66, 92))
-                    .child(format!("{value:.2}")),
-            )
             .into_any_element()
     }
 

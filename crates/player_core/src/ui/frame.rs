@@ -4,8 +4,8 @@ use gpui_component::{ElementExt, IconName, text::markdown, v_flex};
 
 impl PlayCore {
     pub fn render_frame(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let frame_aspect = self.frame_aspect.max(0.01);
-        let fitted_frame_size = self.surface_bounds.map(|bounds| {
+        let frame_aspect = self.player_static_info.frame_info.aspect_ratio();
+        let fitted_frame_size = self.frame.surface_bounds.map(|bounds| {
             let container_width = bounds.size.width.as_f32().max(1.0);
             let container_height = bounds.size.height.as_f32().max(1.0);
             let container_aspect = container_width / container_height;
@@ -16,8 +16,8 @@ impl PlayCore {
                 (container_width, container_width / frame_aspect)
             }
         });
-        let current_image = self.frames.current_image();
-        let pause_overlay = match (&self.playback.state, current_image.is_some()) {
+        let current_image = self.frame.images.current_image();
+        let pause_overlay = match (&self.pipeline.state, current_image.is_some()) {
             (PlatState::Paused, true) => div()
                 .absolute()
                 .inset_0()
@@ -31,25 +31,7 @@ impl PlayCore {
                 .into_any_element(),
             _ => div().into_any_element(),
         };
-        let buffering_overlay = match (&self.playback.state, current_image.is_some()) {
-            (PlatState::Cache(message), true) => v_flex()
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(rgb_to_u32(15, 23, 42))
-                .opacity(0.68)
-                .child(
-                    markdown(message.clone())
-                        .selectable(true)
-                        .text_color(rgb(0xE2E8F0))
-                        .cursor_text(),
-                )
-                .into_any_element(),
-            _ => div().into_any_element(),
-        };
-        let error_overlay = match &self.playback.state {
+        let error_overlay = match &self.pipeline.state {
             PlatState::Error(message) => v_flex()
                 .absolute()
                 .inset_0()
@@ -101,6 +83,7 @@ impl PlayCore {
                 move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
                     let _ = player_entity.update(cx, |player, cx| {
                         let changed = player
+                            .frame
                             .surface_bounds
                             .map(|current| {
                                 current.size.width != bounds.size.width
@@ -108,7 +91,7 @@ impl PlayCore {
                             })
                             .unwrap_or(true);
                         if changed {
-                            player.surface_bounds = Some(bounds);
+                            player.frame.surface_bounds = Some(bounds);
                             cx.notify();
                         }
                     });
@@ -143,12 +126,11 @@ impl PlayCore {
                     .items_center()
                     .child(
                         div().px_4().child(
-                            markdown(match &self.playback.state {
+                            markdown(match &self.pipeline.state {
                                 PlatState::Playing | PlatState::Paused => String::new(),
                                 PlatState::Loading => "加载中".to_string(),
                                 PlatState::UnLoading => "没有加载播放来源".to_string(),
                                 PlatState::Error(_) => String::new(),
-                                PlatState::Cache(message) => message.clone(),
                             })
                             .selectable(true)
                             .text_color(rgb(0xCBD5E1))
@@ -158,7 +140,6 @@ impl PlayCore {
                     .into_any_element()
             })
             .child(pause_overlay)
-            .child(buffering_overlay)
             .child(error_overlay)
     }
 }

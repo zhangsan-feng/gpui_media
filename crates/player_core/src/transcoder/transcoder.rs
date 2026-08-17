@@ -1,4 +1,3 @@
-use crate::PlayCoreFilterState;
 use anyhow::{Context as AnyhowContext, bail};
 use gpui::http_client::Url;
 use gstreamer as gst;
@@ -86,7 +85,7 @@ impl PlayCoreTranscoder {
         let input_uri = Url::from_file_path(&request.input)
             .map_err(|_| anyhow::anyhow!("无法转换输入文件路径: {}", request.input.display()))?;
         let source = make_uri_decodebin(input_uri.as_str())?;
-        Self::transcode_source_blocking(source, &request.output, request.format, None, None)
+        Self::transcode_source_blocking(source, &request.output, request.format, None)
     }
 
     pub(crate) fn transcode_source_blocking(
@@ -94,13 +93,12 @@ impl PlayCoreTranscoder {
         output: &Path,
         format: PlayCoreTranscodeFormat,
         trim: Option<PlayCoreTranscodeTrim>,
-        filters: Option<&PlayCoreFilterState>,
     ) -> anyhow::Result<()> {
         gst::init().context("初始化 GStreamer 失败")?;
         prepare_output(output)?;
 
         let pipeline = gst::Pipeline::new();
-        let branches = build_output_branches(&pipeline, output, format, filters)?;
+        let branches = build_output_branches(&pipeline, output, format)?;
         connect_decodebin_pad_added(&source, branches);
         pipeline.add(&source)?;
         run_transcode_pipeline(&pipeline, trim)
@@ -196,20 +194,6 @@ fn sink_pad(element: &gst::Element) -> anyhow::Result<gst::Pad> {
     element.static_pad("sink").context("转码分支缺少 sink pad")
 }
 
-fn create_video_filter(
-    filters: Option<&PlayCoreFilterState>,
-) -> anyhow::Result<Option<gst::Element>> {
-    let Some(filters) = filters else {
-        return Ok(None);
-    };
-    let filter = make_element("videobalance")?;
-    filter.set_property("brightness", &(filters.brightness as f64));
-    filter.set_property("contrast", &(filters.contrast as f64));
-    filter.set_property("saturation", &(filters.saturation as f64));
-    filter.set_property("hue", &(filters.hue as f64));
-    Ok(Some(filter))
-}
-
 struct OutputBranches {
     video_sink: Option<gst::Pad>,
     audio_sink: Option<gst::Pad>,
@@ -219,12 +203,10 @@ fn build_output_branches(
     pipeline: &gst::Pipeline,
     output: &Path,
     format: PlayCoreTranscodeFormat,
-    filters: Option<&PlayCoreFilterState>,
 ) -> anyhow::Result<OutputBranches> {
     match format {
         PlayCoreTranscodeFormat::Mp4 | PlayCoreTranscodeFormat::MOV => {
             let video_queue = make_element("queue")?;
-            let video_filter = create_video_filter(filters)?;
             let video_convert = make_element("videoconvert")?;
             let video_encoder = make_element("x264enc")?;
             let video_parser = make_element("h264parse")?;
@@ -244,11 +226,8 @@ fn build_output_branches(
             }
             let sink = make_filesink(output)?;
 
-            let mut elements = vec![&video_queue];
-            if let Some(filter) = video_filter.as_ref() {
-                elements.push(filter);
-            }
-            elements.extend([
+            let elements = vec![
+                &video_queue,
                 &video_convert,
                 &video_encoder,
                 &video_parser,
@@ -259,14 +238,17 @@ fn build_output_branches(
                 &audio_parser,
                 &mux,
                 &sink,
-            ]);
+            ];
             add_elements(pipeline, &elements)?;
 
-            let mut video_chain = vec![&video_queue];
-            if let Some(filter) = video_filter.as_ref() {
-                video_chain.push(filter);
-            }
-            video_chain.extend([&video_convert, &video_encoder, &video_parser, &mux, &sink]);
+            let video_chain = vec![
+                &video_queue,
+                &video_convert,
+                &video_encoder,
+                &video_parser,
+                &mux,
+                &sink,
+            ];
             link_elements(&video_chain)?;
             link_elements(&[
                 &audio_queue,
@@ -284,7 +266,6 @@ fn build_output_branches(
         }
         PlayCoreTranscodeFormat::Mkv => {
             let video_queue = make_element("queue")?;
-            let video_filter = create_video_filter(filters)?;
             let video_convert = make_element("videoconvert")?;
             let video_encoder = make_element("x264enc")?;
             let video_parser = make_element("h264parse")?;
@@ -295,11 +276,8 @@ fn build_output_branches(
             let mux = make_element("matroskamux")?;
             let sink = make_filesink(output)?;
 
-            let mut elements = vec![&video_queue];
-            if let Some(filter) = video_filter.as_ref() {
-                elements.push(filter);
-            }
-            elements.extend([
+            let elements = vec![
+                &video_queue,
                 &video_convert,
                 &video_encoder,
                 &video_parser,
@@ -309,14 +287,17 @@ fn build_output_branches(
                 &audio_encoder,
                 &mux,
                 &sink,
-            ]);
+            ];
             add_elements(pipeline, &elements)?;
 
-            let mut video_chain = vec![&video_queue];
-            if let Some(filter) = video_filter.as_ref() {
-                video_chain.push(filter);
-            }
-            video_chain.extend([&video_convert, &video_encoder, &video_parser, &mux, &sink]);
+            let video_chain = vec![
+                &video_queue,
+                &video_convert,
+                &video_encoder,
+                &video_parser,
+                &mux,
+                &sink,
+            ];
             link_elements(&video_chain)?;
             link_elements(&[
                 &audio_queue,
@@ -441,34 +422,31 @@ pub(crate) fn run_transcode_pipeline(
     pipeline: &gst::Pipeline,
     trim: Option<PlayCoreTranscodeTrim>,
 ) -> anyhow::Result<()> {
-    if let Some(trim) = trim {
-        if let Err(error) = pipeline.set_state(gst::State::Paused) {
-            let _ = pipeline.set_state(gst::State::Null);
-            return Err(error.into());
+    let result = (|| {
+        if let Some(trim) = trim {
+            pipeline.set_state(gst::State::Paused)?;
+            let (state_result, state, _) = pipeline.state(Some(gst::ClockTime::from_seconds(10)));
+            state_result.context("转码管线进入暂停状态失败")?;
+            if state < gst::State::Paused {
+                bail!("转码管线未完成预加载");
+            }
+            let start =
+                gst::ClockTime::from_nseconds(trim.start.as_nanos().min(u64::MAX as u128) as u64);
+            let end =
+                gst::ClockTime::from_nseconds(trim.end.as_nanos().min(u64::MAX as u128) as u64);
+            pipeline.seek(
+                1.0,
+                gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE | gst::SeekFlags::SEGMENT,
+                gst::SeekType::Set,
+                start,
+                gst::SeekType::Set,
+                end,
+            )?;
         }
-        let (state_result, state, _) = pipeline.state(Some(gst::ClockTime::from_seconds(10)));
-        state_result.context("转码管线进入暂停状态失败")?;
-        if state < gst::State::Paused {
-            bail!("转码管线未完成预加载");
-        }
-        let start =
-            gst::ClockTime::from_nseconds(trim.start.as_nanos().min(u64::MAX as u128) as u64);
-        let end = gst::ClockTime::from_nseconds(trim.end.as_nanos().min(u64::MAX as u128) as u64);
-        pipeline.seek(
-            1.0,
-            gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE | gst::SeekFlags::SEGMENT,
-            gst::SeekType::Set,
-            start,
-            gst::SeekType::Set,
-            end,
-        )?;
-    }
 
-    if let Err(error) = pipeline.set_state(gst::State::Playing) {
-        let _ = pipeline.set_state(gst::State::Null);
-        return Err(error.into());
-    }
-    let result = wait_for_eos(pipeline);
+        pipeline.set_state(gst::State::Playing)?;
+        wait_for_eos(pipeline)
+    })();
     let _ = pipeline.set_state(gst::State::Null);
     result
 }
@@ -519,7 +497,7 @@ fn transcode_realtime_blocking(
     pipeline.add(&decodebin)?;
     appsrc_element.link(&decodebin)?;
 
-    let branches = build_output_branches(&pipeline, &request.output, request.format, None)?;
+    let branches = build_output_branches(&pipeline, &request.output, request.format)?;
     connect_decodebin_pad_added(&decodebin, branches);
     run_pipeline_until_input_end(&pipeline, &appsrc, &mut receiver)
 }

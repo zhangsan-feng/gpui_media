@@ -6,11 +6,8 @@ use std::time::Duration;
 
 impl PlayCore {
     pub fn render_control(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let total = self.total_duration.unwrap_or(Duration::ZERO);
-        let display_position = self
-            .pending_seek_position
-            .filter(|_| self.is_dragging_progress_bar)
-            .unwrap_or(self.position);
+        let total = self.progress.duration.unwrap_or(Duration::ZERO);
+        let display_position = self.display_position();
 
         v_flex()
             .w_full()
@@ -43,7 +40,7 @@ impl PlayCore {
     }
 
     pub(crate) fn player_volume_control_ui(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let volume_ratio = self.volume.clamp(0.0, 1.0);
+        let volume_ratio = self.volume.value;
         let volume_bar_width = 150.0;
 
         h_flex().child(
@@ -80,7 +77,7 @@ impl PlayCore {
                             let volume_bar_entity = cx.entity();
                             move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
                                 let _ = volume_bar_entity.update(cx, |this, _| {
-                                    this.volume_bar_bounds = Some(bounds);
+                                    this.volume.bar_bounds = Some(bounds);
                                 });
                             }
                         })
@@ -88,7 +85,7 @@ impl PlayCore {
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                                if let Some(bounds) = this.volume_bar_bounds {
+                                if let Some(bounds) = this.volume.bar_bounds {
                                     let _ = this._drag_volume_at(event.position, bounds, cx);
                                 }
                             }),
@@ -129,18 +126,10 @@ impl PlayCore {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let total = self.total_duration.unwrap_or(Duration::ZERO);
-        let display_position = self
-            .pending_seek_position
-            .filter(|_| self.is_dragging_progress_bar)
-            .unwrap_or(self.position);
-        let progress_ratio = if total.as_secs_f32() > 0.0 {
-            (display_position.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
+        let progress_ratio = self.progress_ratio();
         let progress_bar_width = self
-            .progress_bar_bounds
+            .progress
+            .bar_bounds
             .as_ref()
             .map(|bounds| bounds.size.width.as_f32())
             .unwrap_or(0.0);
@@ -157,7 +146,7 @@ impl PlayCore {
                     let progress_bar_entity = progress_bar_entity.clone();
                     move |bounds: Bounds<Pixels>, _: &mut Window, cx: &mut App| {
                         let _ = progress_bar_entity.update(cx, |this, _| {
-                            this.progress_bar_bounds = Some(bounds);
+                            this.progress.bar_bounds = Some(bounds);
                         });
                     }
                 })
@@ -165,12 +154,12 @@ impl PlayCore {
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                        if let Some(bounds) = this.progress_bar_bounds {
+                        if let Some(bounds) = this.progress.bar_bounds {
                             if let Some(target) = this.get_progress_position(event.position, bounds)
                             {
-                                this.seek(target);
-                                this.is_dragging_progress_bar = false;
-                                this.pending_seek_position = None;
+                                this.seek(target, cx);
+                                this.progress.is_dragging = false;
+                                this.progress.pending_seek_position = None;
                                 cx.notify();
                             }
                         }
@@ -189,7 +178,7 @@ impl PlayCore {
                 .on_mouse_up(
                     MouseButton::Left,
                     cx.listener(|this, _, _, cx| {
-                        if this.is_dragging_progress_bar {
+                        if this.progress.is_dragging {
                             let _ = this._commit_progress_drag(cx);
                         }
                     }),
@@ -197,7 +186,7 @@ impl PlayCore {
                 .on_mouse_up_out(
                     MouseButton::Left,
                     cx.listener(|this, _, _, cx| {
-                        if this.is_dragging_progress_bar {
+                        if this.progress.is_dragging {
                             let _ = this._commit_progress_drag(cx);
                         }
                     }),
@@ -253,7 +242,7 @@ impl PlayCore {
             .gap_2()
             .child(self.render_control_button(
                 "video_play_button",
-                if self.playback.state == PlatState::Playing {
+                if self.pipeline.state == PlatState::Playing {
                     IconName::Pause
                 } else {
                     IconName::Play

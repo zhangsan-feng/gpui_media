@@ -1,4 +1,4 @@
-use super::transcoder::{
+use crate::transcoder::transcoder::{
     PlayCoreTranscodeFormat, PlayCoreTranscodeTrim, PlayCoreTranscoder, make_uri_decodebin,
 };
 use anyhow::{Context as AnyhowContext, bail};
@@ -18,7 +18,6 @@ pub struct PlayCoreExportRequest {
     pub output: PathBuf,
     pub format: PlayCoreTranscodeFormat,
     pub trim: Option<PlayCoreExportTrim>,
-    pub filters: Option<crate::PlayCoreFilterState>,
 }
 
 pub struct PlayCoreExport;
@@ -41,13 +40,7 @@ impl PlayCoreExport {
             start: trim.start,
             end: trim.end,
         });
-        PlayCoreTranscoder::transcode_source_blocking(
-            source,
-            &request.output,
-            request.format,
-            trim,
-            request.filters.as_ref(),
-        )
+        PlayCoreTranscoder::transcode_source_blocking(source, &request.output, request.format, trim)
     }
 }
 

@@ -143,7 +143,13 @@ impl VideoPage {
     ) {
         let window_title = format!("{} - {}", episode.name, episode.source);
         let (player_window_id, player_entity_id) =
-            PlayCore::_open_window(window, cx, &window_title);
+            match PlayCore::_open_window(window, cx, &window_title) {
+                Ok(target) => target,
+                Err(error) => {
+                    log::error!("创建播放器窗口失败: {error:#}");
+                    return;
+                }
+            };
         self.active_player_target = Some((player_window_id, player_entity_id));
         self.request_play_episode(episode, player_window_id, player_entity_id, cx);
     }

@@ -14,18 +14,6 @@ enum SidePanelState {
     Closing,
 }
 
-#[derive(Default)]
-struct BrightnessFilterDrag;
-
-#[derive(Default)]
-struct ContrastFilterDrag;
-
-#[derive(Default)]
-struct SaturationFilterDrag;
-
-#[derive(Default)]
-struct HueFilterDrag;
-
 #[derive(Clone, Debug)]
 enum ExportStatus {
     Working(String),
