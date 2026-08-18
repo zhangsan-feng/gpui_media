@@ -89,7 +89,7 @@ impl PlayCore {
         let appsink = gst_app::AppSink::builder()
             .caps(&caps)
             .sync(true)
-            .max_buffers(8)
+            .max_buffers(3)
             .drop(true)
             .callbacks(
                 gst_app::AppSinkCallbacks::builder()

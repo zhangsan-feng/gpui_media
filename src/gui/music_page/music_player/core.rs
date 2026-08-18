@@ -19,9 +19,25 @@ impl MusicPlayer {
         cx.notify();
     }
 
-    pub fn _is_playing_item(&self, id: &str, cx: &gpui::App) -> bool {
-        let state = self.play_core.read(cx)._view_state();
-        state.is_playing && state.player.id == id
+    pub fn _is_current_item(&self, id: &str, cx: &gpui::App) -> bool {
+        self.play_core.read(cx)._view_state().player.id == id
+    }
+
+    pub fn _toggle_play(&mut self, window_id: WindowId, cx: &mut Context<Self>) {
+        let Some(index) = self
+            .current_index
+            .or_else(|| (!self.play_list.is_empty()).then_some(0))
+        else {
+            return;
+        };
+
+        if self.current_index.is_none() {
+            self._play_item(index, window_id, cx);
+            return;
+        }
+
+        self.play_core
+            .update(cx, |player, cx| player._toggle_play(cx));
     }
 
     pub fn _play_item(&mut self, index: usize, window_id: WindowId, cx: &mut Context<Self>) {

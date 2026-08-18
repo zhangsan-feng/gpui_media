@@ -93,12 +93,12 @@ impl MusicPage {
         index: usize,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let is_playing = { self.music_player.read(cx)._is_playing_item(&data.id, cx) };
+        let is_current = { self.music_player.read(cx)._is_current_item(&data.id, cx) };
         Button::new(("music-play-index-", index))
-            .label(if is_playing { "播放中" } else { "播放" })
+            .label(if is_current { "播放中" } else { "播放" })
             .compact()
-            .when(is_playing, |button| button.primary())
-            .when(!is_playing, |button| button.ghost())
+            .when(is_current, |button| button.primary())
+            .when(!is_current, |button| button.ghost())
             .on_click(cx.listener(move |this, _, window, cx| {
                 let _ = this.music_player.update(cx, |player, cx| {
                     player._play_item(index, window.window_handle().window_id(), cx)
@@ -122,14 +122,14 @@ impl MusicPage {
                 visible_range
                     .map(|index| {
                         let data = view.music_data[index].clone();
-                        let is_playing =
-                            { view.music_player.read(cx)._is_playing_item(&data.id, cx) };
-                        let row_bg = if is_playing {
+                        let is_current =
+                            { view.music_player.read(cx)._is_current_item(&data.id, cx) };
+                        let row_bg = if is_current {
                             rgb_to_u32(239, 246, 255)
                         } else {
                             rgb_to_u32(255, 255, 255)
                         };
-                        let row_border = if is_playing {
+                        let row_border = if is_current {
                             rgb_to_u32(147, 197, 253)
                         } else {
                             rgb_to_u32(226, 232, 240)
@@ -193,7 +193,7 @@ impl MusicPage {
                                             div()
                                                 .w_full()
                                                 .text_size(px(14.))
-                                                .font_weight(if is_playing {
+                                                .font_weight(if is_current {
                                                     FontWeight::SEMIBOLD
                                                 } else {
                                                     FontWeight::MEDIUM

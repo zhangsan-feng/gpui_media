@@ -144,10 +144,8 @@ impl Render for MusicPlayer {
                                     IconName::Play
                                 },
                                 true,
-                                |this, _, _, cx| {
-                                    let _ = this
-                                        .play_core
-                                        .update(cx, |player, cx| player._toggle_play(cx));
+                                |this, _, window, cx| {
+                                    this._toggle_play(window.window_handle().window_id(), cx);
                                 },
                                 cx,
                             ))

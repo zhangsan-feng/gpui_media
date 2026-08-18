@@ -166,14 +166,12 @@ impl PlayCore {
                                             cx.notify();
                                             return None;
                                         }
-                                        let should_resume = this.pipeline.buffering_paused;
                                         this.pipeline.buffering_paused = false;
-                                        Some(should_resume)
+                                        Some(())
                                     })
                                     .unwrap_or(None);
-                                if let Some(should_resume) = should_resume {
-                                    let resumed = !should_resume
-                                        || pipeline.set_state(gst::State::Playing).is_ok();
+                                if should_resume.is_some() {
+                                    let resumed = pipeline.set_state(gst::State::Playing).is_ok();
                                     let _ = this.update(cx, |this, cx| {
                                         if this.pipeline.is_current_session(session_id) {
                                             if resumed {
