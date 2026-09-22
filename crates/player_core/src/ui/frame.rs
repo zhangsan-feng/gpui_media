@@ -31,6 +31,22 @@ impl PlayCore {
                 .into_any_element(),
             _ => div().into_any_element(),
         };
+        let buffering_overlay = match (&self.pipeline.state, current_image.is_some()) {
+            (PlatState::Loading, true) => v_flex()
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .gap_2()
+                .bg(rgb_to_u32(15, 23, 42))
+                .text_color(rgb(0xFFFFFF))
+                .opacity(0.72)
+                .child(IconName::LoaderCircle)
+                .child(div().text_size(px(14.)).child("缓冲中"))
+                .into_any_element(),
+            _ => div().into_any_element(),
+        };
         let error_overlay = match &self.pipeline.state {
             PlatState::Error(message) => v_flex()
                 .absolute()
@@ -139,6 +155,7 @@ impl PlayCore {
                     )
                     .into_any_element()
             })
+            .child(buffering_overlay)
             .child(pause_overlay)
             .child(error_overlay)
     }

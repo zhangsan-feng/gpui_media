@@ -105,7 +105,7 @@ impl PlayCore {
                             .text_size(px(13.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(rgb_to_u32(73, 66, 92))
-                            .child(""),
+                            .child(self.player_static.title.clone()),
                     ),
             )
             .child(
