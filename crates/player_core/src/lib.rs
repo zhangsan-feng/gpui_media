@@ -1,5 +1,6 @@
 mod core;
 mod download;
+mod editing;
 mod export;
 mod external;
 mod internal;
@@ -13,5 +14,7 @@ pub use self::core::{
     PlayCoreExportTrim, PlayCoreRealtimeTranscodeRequest, PlayCoreTranscodeFormat,
     PlayCoreTranscodeRequest, PlayCoreTranscodeSession, PlayCoreTranscoder, PlayStatic,
 };
+pub use self::editing::PlayCoreTimeline;
+pub use self::export::PlayCoreTimelineExportRequest;
 pub use self::external::{PlayCoreMediaType, PlayCoreProgress, PlayCoreViewState};
 pub use self::state::{PlayCoreGlobalState, PlayCoreState, PlayCoreStateEvent};

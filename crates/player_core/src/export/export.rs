@@ -1,5 +1,6 @@
 use crate::transcoder::transcoder::{
-    PlayCoreTranscodeFormat, PlayCoreTranscodeTrim, PlayCoreTranscoder, make_uri_decodebin,
+    PlayCoreTranscodeFormat, PlayCoreTranscodeRequest, PlayCoreTranscodeTrim, PlayCoreTranscoder,
+    make_uri_decodebin,
 };
 use anyhow::{Context as AnyhowContext, bail};
 use gpui_kit::http_client::Url;
@@ -31,6 +32,47 @@ impl PlayCoreExport {
 
     pub fn export_blocking(request: PlayCoreExportRequest) -> anyhow::Result<()> {
         validate_request(&request)?;
+
+        // FLAC cannot reliably restart its encoder after a flushing preroll seek.
+        // Trim to PCM first, then encode that bounded source without another seek.
+        if request.format == PlayCoreTranscodeFormat::FLAC && request.trim.is_some() {
+            let directory =
+                std::env::temp_dir().join(format!("gpui-medio-trim-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir(&directory).context("创建裁剪临时目录失败")?;
+            let intermediate = directory.join("clip.wav");
+            log::info!(
+                "[gst:export] staging FLAC trim through PCM: {}",
+                intermediate.display()
+            );
+            let result = Self::export_blocking(PlayCoreExportRequest {
+                input: request.input,
+                output: intermediate.clone(),
+                format: PlayCoreTranscodeFormat::WAV,
+                trim: request.trim,
+            })
+            .and_then(|_| {
+                PlayCoreTranscoder::transcode_offline_blocking(PlayCoreTranscodeRequest {
+                    input: intermediate.clone(),
+                    output: request.output,
+                    format: PlayCoreTranscodeFormat::FLAC,
+                })
+            });
+            if intermediate.exists() {
+                if let Err(error) = std::fs::remove_file(&intermediate) {
+                    log::warn!(
+                        "[gst:export] temporary PCM cleanup failed: {}: {error}",
+                        intermediate.display()
+                    );
+                }
+            }
+            if let Err(error) = std::fs::remove_dir(&directory) {
+                log::warn!(
+                    "[gst:export] temporary directory cleanup failed: {}: {error}",
+                    directory.display()
+                );
+            }
+            return result;
+        }
 
         let input_uri = Url::from_file_path(&request.input)
             .map_err(|_| anyhow::anyhow!("无法转换输入文件路径: {}", request.input.display()))?

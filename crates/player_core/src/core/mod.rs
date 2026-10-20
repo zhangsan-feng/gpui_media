@@ -69,6 +69,7 @@ pub struct PlayCore {
     pub(crate) pipeline: PipelineRuntime,
     pub(crate) task: TaskRuntime,
     pub(crate) window_id: WindowId,
+    pub(crate) retain_source_at_end: bool,
 }
 
 impl PlayCore {
@@ -83,6 +84,7 @@ impl PlayCore {
             pipeline: PipelineRuntime::default(),
             task: TaskRuntime::default(),
             window_id,
+            retain_source_at_end: false,
         };
         cx.on_release(|this, cx| {
             this.frame.images.release_images(cx);

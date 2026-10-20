@@ -1,5 +1,7 @@
 use crate::{PlatState, PlayCore, PlayStatic};
-use gpui_kit::{Bounds, Context, ExternalPaths, Point};
+use gpui_kit::{Bounds, Context, ExternalPaths, Point, Task};
+use gstreamer as gst;
+use gstreamer::prelude::*;
 use std::time::Duration;
 
 impl PlayCore {
@@ -93,6 +95,29 @@ impl PlayCore {
         self.player_static = player;
         self.retry(cx);
         cx.notify();
+    }
+
+    pub fn _stop_and_release(&mut self, cx: &mut Context<Self>) -> Task<()> {
+        let pipeline = self.pipeline.pipeline.clone();
+        self.player_static = PlayStatic::default();
+        self.reset_pipeline_with_release_wait(false);
+        cx.notify();
+
+        cx.background_executor().spawn(async move {
+            let Some(pipeline) = pipeline else {
+                return;
+            };
+            let set_result = pipeline.set_state(gst::State::Null);
+            let timeout = gst::ClockTime::from_seconds(2);
+            let (wait_result, state, pending) = pipeline.state(Some(timeout));
+            if set_result.is_err() || wait_result.is_err() || state != gst::State::Null {
+                log::warn!(
+                    "[gst:stop] pipeline did not reach Null cleanly: state={state:?} pending={pending:?} set_state={set_result:?} wait={wait_result:?}"
+                );
+            } else {
+                log::info!("[gst:stop] pipeline reached Null and released its source");
+            }
+        })
     }
 
     pub fn _play(&mut self, cx: &mut Context<Self>) {

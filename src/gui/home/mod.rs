@@ -1,10 +1,12 @@
+mod media_editor;
+mod medio_player;
 mod sidebar_menu;
-mod video_player;
 
 use crate::component::color::rgb_to_u32;
 use crate::component::window_title_bar::CustomTitleBar;
+use crate::gui::home::media_editor::MediaEditor;
+use crate::gui::home::medio_player::MedioPlayer;
 use crate::gui::home::sidebar_menu::CustomSidebarMenu;
-use crate::gui::home::video_player::VideoPlayer;
 use crate::gui::music_page::MusicPage;
 use crate::gui::video_page::VideoPage;
 use gpui_kit::component::{Root, h_flex, v_flex};
@@ -15,13 +17,15 @@ use std::time::Duration;
 pub enum Page {
     MusicPage,
     VideoPage,
-    VideoPlayer,
+    MediaEditor,
+    MedioPlayer,
 }
 
 pub struct HomeView {
     music_recommend_page: Entity<MusicPage>,
     video_recommend_page: Entity<VideoPage>,
-    customer_player: Entity<VideoPlayer>,
+    media_editor: Entity<MediaEditor>,
+    medio_player: Entity<MedioPlayer>,
     title_bar: Entity<CustomTitleBar>,
     sidebar_menu: Entity<CustomSidebarMenu>,
 }
@@ -33,7 +37,8 @@ impl HomeView {
             sidebar_menu: cx.new(|cx| CustomSidebarMenu::new(window, cx)),
             music_recommend_page: cx.new(|cx| MusicPage::new(window, cx)),
             video_recommend_page: cx.new(|cx| VideoPage::new(window, cx)),
-            customer_player: cx.new(|cx| VideoPlayer::new(window, cx)),
+            media_editor: cx.new(|cx| MediaEditor::new(window, cx)),
+            medio_player: cx.new(|cx| MedioPlayer::new(window, cx)),
         }
     }
 }
@@ -45,7 +50,8 @@ impl Render for HomeView {
         let content_anim_id = match select_page {
             Page::MusicPage => "home-view-recommend",
             Page::VideoPage => "video-player-recommend",
-            Page::VideoPlayer => "video-player",
+            Page::MediaEditor => "media-editor",
+            Page::MedioPlayer => "medio-player",
         };
 
         v_flex()
@@ -79,8 +85,11 @@ impl Render for HomeView {
                                         Page::VideoPage => {
                                             self.video_recommend_page.clone().into_any_element()
                                         }
-                                        Page::VideoPlayer => {
-                                            self.customer_player.clone().into_any_element()
+                                        Page::MediaEditor => {
+                                            self.media_editor.clone().into_any_element()
+                                        }
+                                        Page::MedioPlayer => {
+                                            self.medio_player.clone().into_any_element()
                                         }
                                     })
                                     .with_animations(

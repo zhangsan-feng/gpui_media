@@ -21,7 +21,8 @@ impl CustomSidebarMenu {
         match page {
             Page::MusicPage => 0,
             Page::VideoPage => 1,
-            Page::VideoPlayer => 2,
+            Page::MediaEditor => 2,
+            Page::MedioPlayer => 3,
         }
     }
 
@@ -76,7 +77,8 @@ impl CustomSidebarMenu {
                     .child(match page {
                         Page::MusicPage => "MU",
                         Page::VideoPage => "VI",
-                        Page::VideoPlayer => "PL",
+                        Page::MediaEditor => "ED",
+                        Page::MedioPlayer => "PL",
                     }),
             )
             .child(label)
@@ -126,7 +128,8 @@ impl Render for CustomSidebarMenu {
                     )
                     .child(self.render_item("音乐", Page::MusicPage, cx))
                     .child(self.render_item("视频", Page::VideoPage, cx))
-                    .child(self.render_item("播放器", Page::VideoPlayer, cx)),
+                    .child(self.render_item("编辑器", Page::MediaEditor, cx))
+                    .child(self.render_item("播放器", Page::MedioPlayer, cx)),
             )
     }
 }

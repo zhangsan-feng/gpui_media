@@ -101,7 +101,7 @@ impl PlayCoreTranscoder {
         let branches = build_output_branches(&pipeline, output, format)?;
         connect_decodebin_pad_added(&source, branches);
         pipeline.add(&source)?;
-        run_transcode_pipeline(&pipeline, trim)
+        run_transcode_pipeline(&pipeline, &source, trim)
     }
 
     pub fn start_realtime(
@@ -164,39 +164,47 @@ pub(crate) fn prepare_output(output: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn make_element(factory: &str) -> anyhow::Result<gst::Element> {
+pub(super) fn make_element(factory: &str) -> anyhow::Result<gst::Element> {
     gst::ElementFactory::make(factory)
         .build()
         .with_context(|| format!("GStreamer 元素不可用: {factory}"))
 }
 
-fn make_filesink(output: &Path) -> anyhow::Result<gst::Element> {
+pub(super) fn make_filesink(output: &Path) -> anyhow::Result<gst::Element> {
     let sink = make_element("filesink")?;
+    // Encoders such as FLAC emit headers during preroll. Waiting on the file sink's
+    // asynchronous preroll again after a flushing trim seek can strand it in Paused.
+    sink.set_property("async", false);
     sink.set_property("location", output.to_string_lossy().into_owned());
     Ok(sink)
 }
 
-fn add_elements(pipeline: &gst::Pipeline, elements: &[&gst::Element]) -> anyhow::Result<()> {
+pub(super) fn add_elements(
+    pipeline: &gst::Pipeline,
+    elements: &[&gst::Element],
+) -> anyhow::Result<()> {
     for element in elements {
         pipeline.add(*element)?;
     }
     Ok(())
 }
 
-fn link_elements(elements: &[&gst::Element]) -> anyhow::Result<()> {
+pub(super) fn link_elements(elements: &[&gst::Element]) -> anyhow::Result<()> {
     for pair in elements.windows(2) {
         pair[0].link(pair[1])?;
     }
     Ok(())
 }
 
-fn sink_pad(element: &gst::Element) -> anyhow::Result<gst::Pad> {
+pub(super) fn sink_pad(element: &gst::Element) -> anyhow::Result<gst::Pad> {
     element.static_pad("sink").context("转码分支缺少 sink pad")
 }
 
-struct OutputBranches {
-    video_sink: Option<gst::Pad>,
-    audio_sink: Option<gst::Pad>,
+pub(super) struct OutputBranches {
+    pub(super) video_sink: Option<gst::Pad>,
+    pub(super) audio_sink: Option<gst::Pad>,
+    pub(super) optional_branches: Vec<Vec<gst::Element>>,
+    pub(super) mux: Option<gst::Element>,
 }
 
 fn build_output_branches(
@@ -209,6 +217,7 @@ fn build_output_branches(
             let video_queue = make_element("queue")?;
             let video_convert = make_element("videoconvert")?;
             let video_encoder = make_element("x264enc")?;
+            video_encoder.set_property_from_str("tune", "zerolatency");
             let video_parser = make_element("h264parse")?;
             let audio_queue = make_element("queue")?;
             let audio_convert = make_element("audioconvert")?;
@@ -241,33 +250,38 @@ fn build_output_branches(
             ];
             add_elements(pipeline, &elements)?;
 
-            let video_chain = vec![
-                &video_queue,
-                &video_convert,
-                &video_encoder,
-                &video_parser,
-                &mux,
-                &sink,
-            ];
+            let video_chain = vec![&video_queue, &video_convert, &video_encoder, &video_parser];
             link_elements(&video_chain)?;
+            mux.link(&sink)?;
             link_elements(&[
                 &audio_queue,
                 &audio_convert,
                 &audio_resample,
                 &audio_encoder,
                 &audio_parser,
-                &mux,
             ])?;
 
             Ok(OutputBranches {
                 video_sink: Some(sink_pad(&video_queue)?),
                 audio_sink: Some(sink_pad(&audio_queue)?),
+                optional_branches: vec![
+                    vec![video_queue, video_convert, video_encoder, video_parser],
+                    vec![
+                        audio_queue,
+                        audio_convert,
+                        audio_resample,
+                        audio_encoder,
+                        audio_parser,
+                    ],
+                ],
+                mux: Some(mux),
             })
         }
         PlayCoreTranscodeFormat::Mkv => {
             let video_queue = make_element("queue")?;
             let video_convert = make_element("videoconvert")?;
             let video_encoder = make_element("x264enc")?;
+            video_encoder.set_property_from_str("tune", "zerolatency");
             let video_parser = make_element("h264parse")?;
             let audio_queue = make_element("queue")?;
             let audio_convert = make_element("audioconvert")?;
@@ -290,26 +304,24 @@ fn build_output_branches(
             ];
             add_elements(pipeline, &elements)?;
 
-            let video_chain = vec![
-                &video_queue,
-                &video_convert,
-                &video_encoder,
-                &video_parser,
-                &mux,
-                &sink,
-            ];
+            let video_chain = vec![&video_queue, &video_convert, &video_encoder, &video_parser];
             link_elements(&video_chain)?;
+            mux.link(&sink)?;
             link_elements(&[
                 &audio_queue,
                 &audio_convert,
                 &audio_resample,
                 &audio_encoder,
-                &mux,
             ])?;
 
             Ok(OutputBranches {
                 video_sink: Some(sink_pad(&video_queue)?),
                 audio_sink: Some(sink_pad(&audio_queue)?),
+                optional_branches: vec![
+                    vec![video_queue, video_convert, video_encoder, video_parser],
+                    vec![audio_queue, audio_convert, audio_resample, audio_encoder],
+                ],
+                mux: Some(mux),
             })
         }
         PlayCoreTranscodeFormat::Mp3
@@ -325,6 +337,19 @@ fn build_output_branches(
             } else {
                 None
             };
+            let audio_caps = if matches!(format, PlayCoreTranscodeFormat::AAC) {
+                let filter = make_element("capsfilter")?;
+                filter.set_property(
+                    "caps",
+                    gst::Caps::builder("audio/mpeg")
+                        .field("mpegversion", 4i32)
+                        .field("stream-format", "adts")
+                        .build(),
+                );
+                Some(filter)
+            } else {
+                None
+            };
             let sink = make_filesink(output)?;
 
             let mut elements = vec![
@@ -335,6 +360,9 @@ fn build_output_branches(
             ];
             if let Some(parser) = audio_parser.as_ref() {
                 elements.push(parser);
+            }
+            if let Some(filter) = audio_caps.as_ref() {
+                elements.push(filter);
             }
             elements.push(&sink);
             add_elements(pipeline, &elements)?;
@@ -348,28 +376,41 @@ fn build_output_branches(
             if let Some(parser) = audio_parser.as_ref() {
                 audio_chain.push(parser);
             }
+            if let Some(filter) = audio_caps.as_ref() {
+                audio_chain.push(filter);
+            }
             audio_chain.push(&sink);
             link_elements(&audio_chain)?;
 
             Ok(OutputBranches {
                 video_sink: None,
                 audio_sink: Some(sink_pad(&audio_queue)?),
+                optional_branches: Vec::new(),
+                mux: None,
             })
         }
     }
 }
 
-fn connect_decodebin_pad_added(source: &gst::Element, branches: OutputBranches) {
+pub(super) fn connect_decodebin_pad_added(source: &gst::Element, branches: OutputBranches) {
     let OutputBranches {
         video_sink,
         audio_sink,
+        optional_branches,
+        mux,
     } = branches;
+    let link_branches = optional_branches.clone();
     source.connect_pad_added(move |_source, pad| {
         let caps = pad.current_caps().unwrap_or_else(|| pad.query_caps(None));
-        let Some(structure) = caps.structure(0) else {
-            return;
-        };
-        let media_type = structure.name().as_str();
+        // Joined-source ghost pads appear before concat has negotiated its first caps.
+        let media_type = caps
+            .structure(0)
+            .map(|structure| structure.name().as_str().to_string())
+            .unwrap_or_else(|| match pad.name().as_str() {
+                "video" => "video/x-raw".to_string(),
+                "audio" => "audio/x-raw".to_string(),
+                _ => String::new(),
+            });
         let target = if media_type.starts_with("video/") {
             video_sink.clone()
         } else if media_type.starts_with("audio/") {
@@ -383,8 +424,58 @@ fn connect_decodebin_pad_added(source: &gst::Element, branches: OutputBranches) 
         if target.is_linked() {
             return;
         }
+        // Request a mux track only once the corresponding decoded stream exists.
+        // Releasing a pre-created empty track after preroll leaves invalid MP4 metadata.
+        if let Some(mux) = &mux {
+            let index = if media_type.starts_with("video/") {
+                0
+            } else {
+                1
+            };
+            if let Some(output) = link_branches.get(index).and_then(|branch| branch.last()) {
+                if let Err(error) = output.link(mux) {
+                    log::error!("[gst:transcoder] link {media_type} mux track failed: {error}");
+                    return;
+                }
+            }
+        }
         if let Err(error) = pad.link(&target) {
             log::warn!("[gst:transcoder] link {media_type} pad failed: {error}");
+        }
+    });
+    // A video may have no audio track. An unconnected encoder/mux request pad otherwise
+    // prevents preroll and EOS forever. Remove only branches without a decoded source.
+    source.connect_no_more_pads(move |source| {
+        let Some(pipeline) = source
+            .parent()
+            .and_then(|parent| parent.downcast::<gst::Pipeline>().ok())
+        else {
+            return;
+        };
+        for branch in &optional_branches {
+            let Some(first) = branch.first() else {
+                continue;
+            };
+            if first.static_pad("sink").is_some_and(|pad| pad.is_linked())
+                || first.parent().is_none()
+            {
+                continue;
+            }
+            if let Some(last_src) = branch.last().and_then(|element| element.static_pad("src")) {
+                if let Some(peer) = last_src.peer() {
+                    let _ = last_src.unlink(&peer);
+                    if let Some(mux) = peer.parent_element() {
+                        mux.release_request_pad(&peer);
+                    }
+                }
+            }
+            for element in branch {
+                let _ = element.set_state(gst::State::Null);
+                if let Err(error) = pipeline.remove(element) {
+                    log::warn!("[gst:transcoder] unused branch removal failed: {error}");
+                }
+            }
+            log::info!("[gst:transcoder] removed unused output branch");
         }
     });
 }
@@ -420,31 +511,40 @@ pub(crate) fn run_pipeline_until_input_end(
 
 pub(crate) fn run_transcode_pipeline(
     pipeline: &gst::Pipeline,
+    source: &gst::Element,
     trim: Option<PlayCoreTranscodeTrim>,
 ) -> anyhow::Result<()> {
     let result = (|| {
         if let Some(trim) = trim {
+            log::info!(
+                "[gst:transcoder] preparing trim start={:?} end={:?}",
+                trim.start,
+                trim.end
+            );
             pipeline.set_state(gst::State::Paused)?;
             let (state_result, state, _) = pipeline.state(Some(gst::ClockTime::from_seconds(10)));
             state_result.context("转码管线进入暂停状态失败")?;
             if state < gst::State::Paused {
                 bail!("转码管线未完成预加载");
             }
+            log::info!("[gst:transcoder] prerolled; seeking decoded source");
             let start =
                 gst::ClockTime::from_nseconds(trim.start.as_nanos().min(u64::MAX as u128) as u64);
             let end =
                 gst::ClockTime::from_nseconds(trim.end.as_nanos().min(u64::MAX as u128) as u64);
-            pipeline.seek(
+            source.seek(
                 1.0,
-                gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE | gst::SeekFlags::SEGMENT,
+                gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
                 gst::SeekType::Set,
                 start,
                 gst::SeekType::Set,
                 end,
             )?;
+            log::info!("[gst:transcoder] trim seek applied");
         }
 
         pipeline.set_state(gst::State::Playing)?;
+        log::info!("[gst:transcoder] waiting for encoder EOS");
         wait_for_eos(pipeline)
     })();
     let _ = pipeline.set_state(gst::State::Null);
@@ -453,17 +553,12 @@ pub(crate) fn run_transcode_pipeline(
 
 fn wait_for_eos(pipeline: &gst::Pipeline) -> anyhow::Result<()> {
     let bus = pipeline.bus().context("转码管线没有消息总线")?;
-    let mut segment_finished = false;
     loop {
         let Some(message) = bus.timed_pop(gst::ClockTime::from_mseconds(100)) else {
             continue;
         };
         match message.view() {
             gst::MessageView::Eos(..) => return Ok(()),
-            gst::MessageView::SegmentDone(_) if !segment_finished => {
-                segment_finished = true;
-                pipeline.send_event(gst::event::Eos::new());
-            }
             gst::MessageView::Error(error) => {
                 bail!("转码失败: {} ({:?})", error.error(), error.debug());
             }

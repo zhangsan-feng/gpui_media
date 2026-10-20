@@ -123,7 +123,11 @@ impl PlayCore {
     }
 
     pub(crate) fn reset_pipeline(&mut self) {
-        self.stop_pipeline_runtime();
+        self.reset_pipeline_with_release_wait(false);
+    }
+
+    pub(crate) fn reset_pipeline_with_release_wait(&mut self, wait_for_null: bool) {
+        self.stop_pipeline_runtime(wait_for_null);
         self.pipeline.state = PlatState::UnLoading;
         self.progress.duration = None;
         self.progress.position = Duration::ZERO;
@@ -135,7 +139,7 @@ impl PlayCore {
     }
 
     pub(crate) fn finish_pipeline(&mut self) {
-        self.stop_pipeline_runtime();
+        self.stop_pipeline_runtime(false);
         self.pipeline.state = PlatState::Paused;
         if let Some(duration) = self.progress.duration {
             self.progress.position = duration;
@@ -143,9 +147,9 @@ impl PlayCore {
         self.clear_progress_interaction();
     }
 
-    fn stop_pipeline_runtime(&mut self) {
+    fn stop_pipeline_runtime(&mut self, wait_for_null: bool) {
         self.pipeline.invalidate_session();
-        self.reset_pipeline_state();
+        self.reset_pipeline_state_and_wait(wait_for_null);
         self.task.progress_task = None;
         self.task.frame_task = None;
         self.task.bus_watch_task = None;

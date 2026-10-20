@@ -96,7 +96,7 @@ impl VideoPage {
             this.request_play_episode(next, *event_window_id, *event_entity_id, cx);
         })
         .detach();
-        page.init_data(cx);
+        // page.init_data(cx);
         page
     }
 }

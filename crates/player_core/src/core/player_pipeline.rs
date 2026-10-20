@@ -86,6 +86,74 @@ impl PlayCore {
             .field("format", "BGRA")
             .build();
         let buffer_clone = self.frame.images.latest_frame();
+        let store_frame = move |sample: gst::Sample| {
+            let caps = match sample.caps() {
+                Some(caps) => caps,
+                None => return Ok(gst::FlowSuccess::Ok),
+            };
+            let info = match gst_video::VideoInfo::from_caps(&caps) {
+                Ok(info) => info,
+                Err(_) => return Ok(gst::FlowSuccess::Ok),
+            };
+            let width = info.width() as usize;
+            let height = info.height() as usize;
+            if width == 0 || height == 0 {
+                return Ok(gst::FlowSuccess::Ok);
+            }
+            let fps = info.fps();
+            let frame_rate = if fps.denom() > 0 {
+                fps.numer() as f64 / fps.denom() as f64
+            } else {
+                0.0
+            };
+            let Some(buffer) = sample.buffer() else {
+                return Ok(gst::FlowSuccess::Ok);
+            };
+            let Ok(map) = buffer.map_readable() else {
+                return Ok(gst::FlowSuccess::Ok);
+            };
+            let Some(stride) = info.stride().first().copied() else {
+                return Ok(gst::FlowSuccess::Ok);
+            };
+            let Some(row_bytes) = width.checked_mul(4) else {
+                return Ok(gst::FlowSuccess::Ok);
+            };
+            if stride <= 0 || (stride as usize) < row_bytes {
+                return Ok(gst::FlowSuccess::Ok);
+            }
+            let stride = stride as usize;
+            let data = map.as_slice();
+            let Some(required_bytes) = stride.checked_mul(height) else {
+                return Ok(gst::FlowSuccess::Ok);
+            };
+            let Some(output_bytes) = row_bytes.checked_mul(height) else {
+                return Ok(gst::FlowSuccess::Ok);
+            };
+            if data.len() < required_bytes {
+                return Ok(gst::FlowSuccess::Ok);
+            }
+
+            let mut out = vec![0u8; output_bytes];
+            if stride == row_bytes {
+                out.copy_from_slice(&data[..row_bytes * height]);
+            } else {
+                for y in 0..height {
+                    let src_start = y * stride;
+                    let dst_start = y * row_bytes;
+                    out[dst_start..dst_start + row_bytes]
+                        .copy_from_slice(&data[src_start..src_start + row_bytes]);
+                }
+            }
+
+            let mut target = buffer_clone.lock().unwrap();
+            target.info.width = width as u32;
+            target.info.height = height as u32;
+            target.info.frame_rate = frame_rate;
+            target.data = out;
+            target.seq = target.seq.wrapping_add(1);
+            Ok(gst::FlowSuccess::Ok)
+        };
+        let store_preroll = store_frame.clone();
         let appsink = gst_app::AppSink::builder()
             .caps(&caps)
             .sync(true)
@@ -93,76 +161,13 @@ impl PlayCore {
             .drop(true)
             .callbacks(
                 gst_app::AppSinkCallbacks::builder()
-                    .new_sample(move |appsink| {
-                        let sample = match appsink.pull_sample() {
-                            Ok(sample) => sample,
-                            Err(_) => return Ok(gst::FlowSuccess::Ok),
-                        };
-                        let caps = match sample.caps() {
-                            Some(caps) => caps,
-                            None => return Ok(gst::FlowSuccess::Ok),
-                        };
-                        let info = match gst_video::VideoInfo::from_caps(&caps) {
-                            Ok(info) => info,
-                            Err(_) => return Ok(gst::FlowSuccess::Ok),
-                        };
-                        let width = info.width() as usize;
-                        let height = info.height() as usize;
-                        if width == 0 || height == 0 {
-                            return Ok(gst::FlowSuccess::Ok);
-                        }
-                        let fps = info.fps();
-                        let frame_rate = if fps.denom() > 0 {
-                            fps.numer() as f64 / fps.denom() as f64
-                        } else {
-                            0.0
-                        };
-                        let Some(buffer) = sample.buffer() else {
-                            return Ok(gst::FlowSuccess::Ok);
-                        };
-                        let Ok(map) = buffer.map_readable() else {
-                            return Ok(gst::FlowSuccess::Ok);
-                        };
-                        let Some(stride) = info.stride().first().copied() else {
-                            return Ok(gst::FlowSuccess::Ok);
-                        };
-                        let Some(row_bytes) = width.checked_mul(4) else {
-                            return Ok(gst::FlowSuccess::Ok);
-                        };
-                        if stride <= 0 || (stride as usize) < row_bytes {
-                            return Ok(gst::FlowSuccess::Ok);
-                        }
-                        let stride = stride as usize;
-                        let data = map.as_slice();
-                        let Some(required_bytes) = stride.checked_mul(height) else {
-                            return Ok(gst::FlowSuccess::Ok);
-                        };
-                        let Some(output_bytes) = row_bytes.checked_mul(height) else {
-                            return Ok(gst::FlowSuccess::Ok);
-                        };
-                        if data.len() < required_bytes {
-                            return Ok(gst::FlowSuccess::Ok);
-                        }
-
-                        let mut out = vec![0u8; output_bytes];
-                        if stride == row_bytes {
-                            out.copy_from_slice(&data[..row_bytes * height]);
-                        } else {
-                            for y in 0..height {
-                                let src_start = y * stride;
-                                let dst_start = y * row_bytes;
-                                out[dst_start..dst_start + row_bytes]
-                                    .copy_from_slice(&data[src_start..src_start + row_bytes]);
-                            }
-                        }
-
-                        let mut target = buffer_clone.lock().unwrap();
-                        target.info.width = width as u32;
-                        target.info.height = height as u32;
-                        target.info.frame_rate = frame_rate;
-                        target.data = out;
-                        target.seq = target.seq.wrapping_add(1);
-                        Ok(gst::FlowSuccess::Ok)
+                    .new_preroll(move |appsink| match appsink.pull_preroll() {
+                        Ok(sample) => store_preroll(sample),
+                        Err(_) => Ok(gst::FlowSuccess::Ok),
+                    })
+                    .new_sample(move |appsink| match appsink.pull_sample() {
+                        Ok(sample) => store_frame(sample),
+                        Err(_) => Ok(gst::FlowSuccess::Ok),
                     })
                     .build(),
             )
@@ -214,10 +219,26 @@ impl PlayCore {
     }
 
     pub(crate) fn reset_pipeline_state(&mut self) {
-        if let Some(pipeline) = &self.pipeline.pipeline {
-            let _ = pipeline.set_state(gst::State::Null);
+        self.reset_pipeline_state_and_wait(false);
+    }
+
+    pub(crate) fn reset_pipeline_state_and_wait(&mut self, wait_for_null: bool) {
+        if let Some(pipeline) = self.pipeline.pipeline.take() {
+            let state_result = pipeline.set_state(gst::State::Null);
+            if wait_for_null {
+                let timeout = gst::ClockTime::from_seconds(2);
+                let (wait_result, state, pending) = pipeline.state(Some(timeout));
+                if state_result.is_err() || wait_result.is_err() || state != gst::State::Null {
+                    log::warn!(
+                        "[gst:stop] pipeline did not reach Null cleanly: state={state:?} pending={pending:?} set_state={state_result:?} wait={wait_result:?}"
+                    );
+                } else {
+                    log::info!("[gst:stop] pipeline reached Null and released its source");
+                }
+            } else if let Err(error) = state_result {
+                log::warn!("[gst:stop] failed to set pipeline to Null: {error}");
+            }
         }
-        self.pipeline.pipeline = None;
     }
 
     fn set_pipeline_state(&self, state: gst::State) -> bool {
@@ -252,7 +273,7 @@ impl PlayCore {
         pipeline
             .seek(
                 1.0,
-                gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE | gst::SeekFlags::SEGMENT,
+                gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
                 gst::SeekType::Set,
                 start,
                 gst::SeekType::Set,

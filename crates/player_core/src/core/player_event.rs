@@ -117,20 +117,6 @@ impl PlayCore {
                                 }
                             });
                         }
-                        gst::MessageView::SegmentDone(_) => {
-                            let _ = pipeline.set_state(gst::State::Paused);
-                            let _ = this.update(cx, |this, cx| {
-                                if !this.pipeline.is_current_session(session_id) {
-                                    return;
-                                }
-                                if let Some(end) = this.pipeline.segment_end.take() {
-                                    this.progress.position = end;
-                                }
-                                this.pipeline.buffering_paused = false;
-                                this.pipeline.state = PlatState::Paused;
-                                cx.notify();
-                            });
-                        }
                         gst::MessageView::Buffering(buffering) if !is_local_file => {
                             let percent = buffering.percent();
                             if percent < 100 {
@@ -200,6 +186,37 @@ impl PlayCore {
                             }
                         }
                         gst::MessageView::Eos(_) => {
+                            let retained = this
+                                .update(cx, |this, cx| {
+                                    if !this.pipeline.is_current_session(session_id) {
+                                        return false;
+                                    }
+                                    if this.pipeline.segment_end.is_none()
+                                        && !this.retain_source_at_end
+                                    {
+                                        return false;
+                                    }
+                                    let end =
+                                        this.pipeline.segment_end.take().or(this.progress.duration);
+                                    // A pending progress poll can otherwise replace the exact
+                                    // end position with the last decoded frame after EOS.
+                                    this.task.progress_task = None;
+                                    this.pause_pipeline();
+                                    this.pipeline.state = PlatState::Paused;
+                                    if let Some(end) = end {
+                                        this.progress.position = end;
+                                    }
+                                    log::info!(
+                                        "[gst:preview] reached end; source retained at {:?}",
+                                        end
+                                    );
+                                    cx.notify();
+                                    true
+                                })
+                                .unwrap_or(false);
+                            if retained {
+                                continue;
+                            }
                             let _ = this.update(cx, |this, cx| {
                                 if !this.pipeline.is_current_session(session_id) {
                                     return;

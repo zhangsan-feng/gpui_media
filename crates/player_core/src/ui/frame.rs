@@ -1,9 +1,18 @@
 use crate::{PlatState, PlayCore, rgb_to_u32};
 use gpui_kit::component::{ElementExt, IconName, text::markdown, v_flex};
+use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 impl PlayCore {
     pub fn render_frame(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_frame_with_interaction(true, cx)
+    }
+
+    pub(crate) fn render_frame_with_interaction(
+        &self,
+        interactive: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let frame_aspect = self.player_static_info.frame_info.aspect_ratio();
         let fitted_frame_size = self.frame.surface_bounds.map(|bounds| {
             let container_width = bounds.size.width.as_f32().max(1.0);
@@ -80,13 +89,14 @@ impl PlayCore {
             .min_h_0()
             .flex()
             .relative()
-            .cursor_pointer()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
-                    this.toggle_play(cx);
-                }),
-            )
+            .when(interactive, |element| {
+                element.cursor_pointer().on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        this.toggle_play(cx);
+                    }),
+                )
+            })
             .justify_center()
             .items_center()
             .overflow_hidden()

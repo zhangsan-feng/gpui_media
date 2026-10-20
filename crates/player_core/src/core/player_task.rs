@@ -3,6 +3,8 @@ use gpui_kit::*;
 use gstreamer::prelude::*;
 use std::time::Duration;
 
+const PROGRESS_REFRESH_INTERVAL: Duration = Duration::from_millis(16);
+
 impl PlayCore {
     pub(crate) fn start_loading_timeout_task(&mut self, cx: &mut Context<Self>) {
         if self.task.loading_timeout_task.is_some() {
@@ -56,10 +58,13 @@ impl PlayCore {
             return;
         }
         let session_id = self.pipeline.session_id;
+        log::info!(
+            "[gst:progress] starting refresh task: session={session_id} interval={PROGRESS_REFRESH_INTERVAL:?}"
+        );
         self.task.progress_task = Some(cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
-                    .timer(Duration::from_millis(200))
+                    .timer(PROGRESS_REFRESH_INTERVAL)
                     .await;
                 if !this
                     .update(cx, |this, cx| this.update_progress(session_id, cx))
@@ -98,6 +103,7 @@ impl PlayCore {
         if !self.pipeline.is_current_session(session_id) {
             return false;
         }
+        let previous_progress = (self.progress.position, self.progress.duration);
         if let Some(pipeline) = &self.pipeline.pipeline {
             if let Some(position) = pipeline.query_position::<gstreamer::ClockTime>() {
                 self.progress.position = self.clock_to_duration(position);
@@ -122,7 +128,9 @@ impl PlayCore {
         if !keep_running {
             self.task.progress_task = None;
         }
-        cx.notify();
+        if previous_progress != (self.progress.position, self.progress.duration) {
+            cx.notify();
+        }
         keep_running
     }
 

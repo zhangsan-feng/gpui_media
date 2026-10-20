@@ -47,6 +47,11 @@ pub struct PlayCoreViewState {
 }
 
 impl PlayCore {
+    /// Keep the source and last frame available for seeking after playback ends.
+    pub fn _set_retain_source_at_end(&mut self, retain: bool) {
+        self.retain_source_at_end = retain;
+    }
+
     pub fn _progress(&self) -> PlayCoreProgress {
         let duration = self.progress.duration;
         let position = self.display_position();
@@ -90,6 +95,16 @@ impl PlayCore {
     pub fn _frame_ui(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.frame.images.drain_retired_images(window);
         self.render_frame(cx)
+    }
+
+    /// Render the frame while the containing workspace owns playback gestures.
+    pub fn _frame_preview_ui(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        self.frame.images.drain_retired_images(window);
+        self.render_frame_with_interaction(false, cx)
     }
 
     pub fn _progress_ui(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
