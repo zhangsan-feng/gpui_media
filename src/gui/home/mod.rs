@@ -1,11 +1,9 @@
-mod media_editor;
-mod medio_player;
+mod media_workspace;
 mod sidebar_menu;
 
 use crate::component::color::rgb_to_u32;
 use crate::component::window_title_bar::CustomTitleBar;
-use crate::gui::home::media_editor::MediaEditor;
-use crate::gui::home::medio_player::MedioPlayer;
+use crate::gui::home::media_workspace::MediaWorkspace;
 use crate::gui::home::sidebar_menu::CustomSidebarMenu;
 use crate::gui::music_page::MusicPage;
 use crate::gui::video_page::VideoPage;
@@ -17,15 +15,13 @@ use std::time::Duration;
 pub enum Page {
     MusicPage,
     VideoPage,
-    MediaEditor,
-    MedioPlayer,
+    MediaWorkspace,
 }
 
 pub struct HomeView {
     music_recommend_page: Entity<MusicPage>,
     video_recommend_page: Entity<VideoPage>,
-    media_editor: Entity<MediaEditor>,
-    medio_player: Entity<MedioPlayer>,
+    media_workspace: Entity<MediaWorkspace>,
     title_bar: Entity<CustomTitleBar>,
     sidebar_menu: Entity<CustomSidebarMenu>,
 }
@@ -37,8 +33,7 @@ impl HomeView {
             sidebar_menu: cx.new(|cx| CustomSidebarMenu::new(window, cx)),
             music_recommend_page: cx.new(|cx| MusicPage::new(window, cx)),
             video_recommend_page: cx.new(|cx| VideoPage::new(window, cx)),
-            media_editor: cx.new(|cx| MediaEditor::new(window, cx)),
-            medio_player: cx.new(|cx| MedioPlayer::new(window, cx)),
+            media_workspace: cx.new(|cx| MediaWorkspace::new(window, cx)),
         }
     }
 }
@@ -50,8 +45,7 @@ impl Render for HomeView {
         let content_anim_id = match select_page {
             Page::MusicPage => "home-view-recommend",
             Page::VideoPage => "video-player-recommend",
-            Page::MediaEditor => "media-editor",
-            Page::MedioPlayer => "medio-player",
+            Page::MediaWorkspace => "media-editor",
         };
 
         v_flex()
@@ -85,11 +79,8 @@ impl Render for HomeView {
                                         Page::VideoPage => {
                                             self.video_recommend_page.clone().into_any_element()
                                         }
-                                        Page::MediaEditor => {
-                                            self.media_editor.clone().into_any_element()
-                                        }
-                                        Page::MedioPlayer => {
-                                            self.medio_player.clone().into_any_element()
+                                        Page::MediaWorkspace => {
+                                            self.media_workspace.clone().into_any_element()
                                         }
                                     })
                                     .with_animations(

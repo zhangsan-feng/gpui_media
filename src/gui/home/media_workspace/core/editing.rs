@@ -1,13 +1,16 @@
-use super::super::{ClipSelection, MediaEditor, TimelineTarget};
+use super::super::{ClipSelection, MediaWorkspace, TimelineTarget};
 use gpui_kit::{AsyncApp, Context, ExternalPaths, PathPromptOptions, Pixels, Point};
 use player_core::{PlayCoreExportTrim, PlayCoreTimeline};
 use std::time::Duration;
 
-impl MediaEditor {
-    pub(in crate::gui::home::media_editor) fn sync_clip_selection(
+impl MediaWorkspace {
+    pub(in crate::gui::home::media_workspace) fn sync_clip_selection(
         &mut self,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         let state = self.play_core.read(cx)._view_state();
         let source_key = format!("{}\n{}", state.player.id, state.player.url);
         if self.clip.source_key != source_key {
@@ -32,11 +35,24 @@ impl MediaEditor {
                 .is_some_and(|range| state.position >= range.end)
         {
             self.clip.active_preview = None;
-            self.play_next_preview(cx);
+            if self.clip.preview_ranges.is_empty() {
+                let auto_next = self.clip.preview_auto_next;
+                self.clip.preview_auto_next = false;
+                log::info!(
+                    "[media-workspace:auto-next] preview finished: full_timeline={auto_next} enabled={} item_id={}",
+                    self.auto_play_next,
+                    state.player.id
+                );
+                if auto_next {
+                    self.play_next_after_finished(&state.player, cx);
+                }
+            } else {
+                self.play_next_preview(cx);
+            }
         }
     }
 
-    pub(in crate::gui::home::media_editor) fn edited_duration(&self) -> Duration {
+    pub(in crate::gui::home::media_workspace) fn edited_duration(&self) -> Duration {
         self.clip
             .timeline
             .as_ref()
@@ -44,7 +60,7 @@ impl MediaEditor {
             .unwrap_or_default()
     }
 
-    pub(in crate::gui::home::media_editor) fn edited_position(
+    pub(in crate::gui::home::media_workspace) fn edited_position(
         &self,
         cx: &Context<Self>,
     ) -> Duration {
@@ -56,13 +72,17 @@ impl MediaEditor {
             .unwrap_or_default()
     }
 
-    pub(in crate::gui::home::media_editor) fn clip_range(
+    pub(in crate::gui::home::media_workspace) fn clip_range(
         &self,
         cx: &Context<Self>,
     ) -> Option<PlayCoreExportTrim> {
         let state = self.play_core.read(cx)._view_state();
         let duration = self.edited_duration();
-        if duration.is_zero() || state.is_idle || state.is_loading || state.error_message.is_some()
+        if self.save_in_progress
+            || duration.is_zero()
+            || state.is_idle
+            || state.is_loading
+            || state.error_message.is_some()
         {
             return None;
         }
@@ -75,17 +95,21 @@ impl MediaEditor {
     fn clear_preview(&mut self) {
         self.clip.active_preview = None;
         self.clip.preview_ranges.clear();
+        self.clip.preview_auto_next = false;
     }
 
-    pub(in crate::gui::home::media_editor) fn pause_editor(&mut self, cx: &mut Context<Self>) {
+    pub(in crate::gui::home::media_workspace) fn pause_editor(&mut self, cx: &mut Context<Self>) {
         self.clear_preview();
         self.play_core.update(cx, |player, cx| player._pause(cx));
     }
 
-    pub(in crate::gui::home::media_editor) fn import_media_files(
+    pub(in crate::gui::home::media_workspace) fn import_media_files(
         &mut self,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         let dialog = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
@@ -114,11 +138,17 @@ impl MediaEditor {
         .detach();
     }
 
-    pub(in crate::gui::home::media_editor) fn import_dropped_media(
+    pub(in crate::gui::home::media_workspace) fn import_dropped_media(
         &mut self,
         paths: &ExternalPaths,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
+        if self.playlist_delete_in_progress {
+            return;
+        }
         let first = self.play_list.len();
         for path in paths
             .paths()
@@ -143,11 +173,14 @@ impl MediaEditor {
         }
     }
 
-    pub(in crate::gui::home::media_editor) fn seek_editor(
+    pub(in crate::gui::home::media_workspace) fn seek_editor(
         &mut self,
         position: Duration,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         self.clear_preview();
         let Some(source_position) = self
             .clip
@@ -171,42 +204,15 @@ impl MediaEditor {
         cx.notify();
     }
 
-    pub(in crate::gui::home::media_editor) fn step_editor(
-        &mut self,
-        direction: i32,
-        cx: &mut Context<Self>,
-    ) {
-        let state = self.play_core.read(cx)._view_state();
-        let duration = self.edited_duration();
-        if duration.is_zero() {
-            return;
-        }
-        let position = self.edited_position(cx);
-        let step = Duration::from_secs_f64(
-            1.0 / if state.frame_rate > 0.0 {
-                state.frame_rate
-            } else {
-                30.0
-            },
-        );
-        self.clear_preview();
-        self.play_core.update(cx, |player, cx| player._pause(cx));
-        self.seek_editor(
-            if direction < 0 {
-                position.saturating_sub(step)
-            } else {
-                position.saturating_add(step).min(duration)
-            },
-            cx,
-        );
-    }
-
-    pub(in crate::gui::home::media_editor) fn move_timeline_pointer(
+    pub(in crate::gui::home::media_workspace) fn move_timeline_pointer(
         &mut self,
         target: TimelineTarget,
         point: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         let Some(position) = self.timeline_position(point) else {
             return;
         };
@@ -258,10 +264,13 @@ impl MediaEditor {
         Some(duration.mul_f64(ratio as f64))
     }
 
-    pub(in crate::gui::home::media_editor) fn cancel_timeline_selection(
+    pub(in crate::gui::home::media_workspace) fn cancel_timeline_selection(
         &mut self,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         self.clip.selection = None;
         self.clip.selection_anchor = None;
         self.clip.selection_dragging = false;
@@ -269,11 +278,14 @@ impl MediaEditor {
         cx.notify();
     }
 
-    pub(in crate::gui::home::media_editor) fn begin_selection_resize(
+    pub(in crate::gui::home::media_workspace) fn begin_selection_resize(
         &mut self,
         target: TimelineTarget,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         if self.clip_range(cx).is_none() || self.clip.selection.is_none() {
             return;
         }
@@ -291,11 +303,14 @@ impl MediaEditor {
         );
     }
 
-    pub(in crate::gui::home::media_editor) fn begin_timeline_selection(
+    pub(in crate::gui::home::media_workspace) fn begin_timeline_selection(
         &mut self,
         point: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         if self.clip_range(cx).is_none() {
             return;
         }
@@ -309,11 +324,14 @@ impl MediaEditor {
         self.seek_editor(position, cx);
     }
 
-    pub(in crate::gui::home::media_editor) fn finish_timeline_selection(
+    pub(in crate::gui::home::media_workspace) fn finish_timeline_selection(
         &mut self,
         point: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         let was_dragging = self.clip.selection_dragging;
         if was_dragging {
             self.move_timeline_pointer(
@@ -335,10 +353,13 @@ impl MediaEditor {
         }
     }
 
-    pub(in crate::gui::home::media_editor) fn reset_clip_selection(
+    pub(in crate::gui::home::media_workspace) fn reset_clip_selection(
         &mut self,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         self.clear_preview();
         self.play_core.update(cx, |player, cx| player._pause(cx));
         self.clip.timeline = self
@@ -380,22 +401,30 @@ impl MediaEditor {
         };
         let ranges = timeline.ranges_for(range);
         self.clear_preview();
+        self.clip.preview_auto_next =
+            self.clip.selection.is_none() && range.end == self.edited_duration();
         self.clip.error = None;
         self.clip.preview_ranges = ranges.into();
         self.play_next_preview(cx);
     }
 
-    pub(in crate::gui::home::media_editor) fn preview_clip(&mut self, cx: &mut Context<Self>) {
+    pub(in crate::gui::home::media_workspace) fn preview_clip(&mut self, cx: &mut Context<Self>) {
+        if self.save_in_progress {
+            return;
+        }
         let Some(full) = self.clip_range(cx) else {
             return;
         };
         self.start_preview(self.clip.selection.unwrap_or(full), cx);
     }
 
-    pub(in crate::gui::home::media_editor) fn toggle_editor_playback(
+    pub(in crate::gui::home::media_workspace) fn toggle_editor_playback(
         &mut self,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         let state = self.play_core.read(cx)._view_state();
         if state.is_playing {
             self.clear_preview();
@@ -421,10 +450,13 @@ impl MediaEditor {
         );
     }
 
-    pub(in crate::gui::home::media_editor) fn delete_selected_clip(
+    pub(in crate::gui::home::media_workspace) fn delete_selected_clip(
         &mut self,
         cx: &mut Context<Self>,
     ) {
+        if self.save_in_progress {
+            return;
+        }
         let Some(selection) = self.clip.selection else {
             return;
         };
@@ -451,7 +483,7 @@ impl MediaEditor {
         cx.notify();
     }
 
-    pub(in crate::gui::home::media_editor) fn log_clip_selection(&self, _: &Context<Self>) {
+    pub(in crate::gui::home::media_workspace) fn log_clip_selection(&self, _: &Context<Self>) {
         if let Some(range) = self.clip.selection {
             log::info!(
                 "[media-editor:selection] edited range {:?}..{:?} length={:?}",

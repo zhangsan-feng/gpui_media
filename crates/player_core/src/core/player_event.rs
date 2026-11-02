@@ -196,6 +196,7 @@ impl PlayCore {
                                     {
                                         return false;
                                     }
+                                    let was_segment = this.pipeline.segment_end.is_some();
                                     let end =
                                         this.pipeline.segment_end.take().or(this.progress.duration);
                                     // A pending progress poll can otherwise replace the exact
@@ -210,6 +211,22 @@ impl PlayCore {
                                         "[gst:preview] reached end; source retained at {:?}",
                                         end
                                     );
+                                    // Retaining the source must not hide natural completion
+                                    // from the playlist. Bounded previews are handled by their queue.
+                                    if !was_segment {
+                                        log::info!(
+                                            "[gst:playback] retained source completed: item_id={}",
+                                            this.player_static.id
+                                        );
+                                        PlayCoreGlobalState::publish(
+                                            cx,
+                                            PlayCoreStateEvent::PlayBackFished(
+                                                this.window_id,
+                                                cx.entity_id(),
+                                                this.player_static.clone(),
+                                            ),
+                                        );
+                                    }
                                     cx.notify();
                                     true
                                 })

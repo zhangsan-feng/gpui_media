@@ -1,13 +1,16 @@
-use super::MediaEditor;
+use super::MediaWorkspace;
 use gpui_kit::{Context, EntityId};
 use player_core::PlayStatic;
 
-impl MediaEditor {
+impl MediaWorkspace {
     pub fn _play_core_id(&self) -> EntityId {
         self.play_core.entity_id()
     }
 
     pub fn _set_play_list(&mut self, play_list: Vec<PlayStatic>, cx: &mut Context<Self>) {
+        if self.save_in_progress {
+            return;
+        }
         let current_id = self
             .current_index
             .and_then(|index| self.play_list.get(index))
@@ -25,6 +28,9 @@ impl MediaEditor {
     }
 
     pub fn _append_play_item(&mut self, item: PlayStatic, cx: &mut Context<Self>) {
+        if self.save_in_progress {
+            return;
+        }
         self.play_list.push(item);
         cx.notify();
     }

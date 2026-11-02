@@ -1,19 +1,23 @@
+mod delete_dialog;
 mod export;
+mod mode_switch;
 mod side_panel;
 mod timeline;
 
-use super::{DeleteSelection, MediaEditor, TogglePlayback};
+use super::{DeleteSelection, MediaWorkspace, TogglePlayback, WorkspaceMode};
 use crate::component::color::rgb_to_u32;
 use gpui_kit::component::{IconName, h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-impl MediaEditor {
-    pub(in crate::gui::home::media_editor) fn _render_control_button(
+impl MediaWorkspace {
+    pub(in crate::gui::home::media_workspace) fn _render_control_button(
         &self,
         id: impl Into<ElementId>,
         label: impl IntoElement,
         is_primary: bool,
-        click: impl Fn(&mut MediaEditor, &ClickEvent, &mut Window, &mut Context<MediaEditor>) + 'static,
+        click: impl Fn(&mut MediaWorkspace, &ClickEvent, &mut Window, &mut Context<MediaWorkspace>)
+        + 'static,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
@@ -65,11 +69,19 @@ impl MediaEditor {
             .update(cx, |player, cx| player._volume_ui(cx).into_any_element());
         let duration = format!(
             "{} / {}",
-            timeline::timecode(self.edited_position(cx)),
-            timeline::timecode(self.edited_duration())
+            timeline::timecode(if self.mode == WorkspaceMode::Editing {
+                self.edited_position(cx)
+            } else {
+                state.position
+            }),
+            timeline::timecode(if self.mode == WorkspaceMode::Editing {
+                self.edited_duration()
+            } else {
+                state.duration.unwrap_or_default()
+            })
         );
         let title = if state.player.title.is_empty() {
-            "导入素材开始剪辑".to_owned()
+            "导入视频或音频开始播放".to_owned()
         } else {
             state.player.title
         };
@@ -92,7 +104,11 @@ impl MediaEditor {
                         div()
                             .text_size(px(12.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child("素材预览"),
+                            .child(if self.mode == WorkspaceMode::Editing {
+                                "素材预览"
+                            } else {
+                                "正在播放"
+                            }),
                     )
                     .child(
                         div()
@@ -118,11 +134,16 @@ impl MediaEditor {
                         MouseButton::Left,
                         cx.listener(|this, _, window, cx| {
                             window.focus(&this.focus_handle, cx);
-                            this.toggle_editor_playback(cx);
+                            this.toggle_playback(cx);
                         }),
                     )
                     .child(frame),
             )
+            .when(self.mode == WorkspaceMode::Playback, |preview| {
+                preview.child(self.play_core.update(cx, |player, cx| {
+                    player._progress_ui(window, cx).into_any_element()
+                }))
+            })
             .child(
                 h_flex()
                     .w_full()
@@ -134,13 +155,18 @@ impl MediaEditor {
                         h_flex()
                             .items_center()
                             .gap_2()
-                            .child(self._render_control_button(
-                                "media-editor-previous-frame",
-                                IconName::ChevronLeft,
-                                false,
-                                |this, _, _, cx| this.step_editor(-1, cx),
-                                cx,
-                            ))
+                            .child(
+                                self._render_control_button(
+                                    "media-workspace-previous",
+                                    h_flex()
+                                        .gap_1()
+                                        .child(IconName::ChevronLeft)
+                                        .child("上一项"),
+                                    false,
+                                    |this, _, _, cx| this._play_previous(cx),
+                                    cx,
+                                ),
+                            )
                             .child(self._render_control_button(
                                 "media-editor-toggle-play",
                                 if state.is_playing {
@@ -149,16 +175,21 @@ impl MediaEditor {
                                     IconName::Play
                                 },
                                 true,
-                                |this, _, _, cx| this.toggle_editor_playback(cx),
+                                |this, _, _, cx| this.toggle_playback(cx),
                                 cx,
                             ))
-                            .child(self._render_control_button(
-                                "media-editor-next-frame",
-                                IconName::ChevronRight,
-                                false,
-                                |this, _, _, cx| this.step_editor(1, cx),
-                                cx,
-                            ))
+                            .child(
+                                self._render_control_button(
+                                    "media-workspace-next",
+                                    h_flex()
+                                        .gap_1()
+                                        .child("下一项")
+                                        .child(IconName::ChevronRight),
+                                    false,
+                                    |this, _, _, cx| this._play_next(cx),
+                                    cx,
+                                ),
+                            )
                             .child(
                                 div()
                                     .text_size(px(12.))
@@ -171,7 +202,7 @@ impl MediaEditor {
             .into_any_element()
     }
 
-    pub(in crate::gui::home::media_editor) fn render_workspace(
+    pub(in crate::gui::home::media_workspace) fn render_workspace(
         &self,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -179,13 +210,13 @@ impl MediaEditor {
         v_flex()
             .id("media-editor-workspace")
             .track_focus(&self.focus_handle)
-            .key_context("MediaEditor")
-            .on_action(
-                cx.listener(|this, _: &TogglePlayback, _, cx| this.toggle_editor_playback(cx)),
-            )
-            .on_action(
-                cx.listener(|this, _: &DeleteSelection, _, cx| this.delete_selected_clip(cx)),
-            )
+            .key_context("MediaWorkspace")
+            .on_action(cx.listener(|this, _: &TogglePlayback, _, cx| this.toggle_playback(cx)))
+            .on_action(cx.listener(|this, _: &DeleteSelection, _, cx| {
+                if this.mode == WorkspaceMode::Editing {
+                    this.delete_selected_clip(cx);
+                }
+            }))
             .size_full()
             .min_w_0()
             .min_h_0()
@@ -214,9 +245,17 @@ impl MediaEditor {
                             .items_center()
                             .gap_2()
                             .child(gpui_kit::component::Icon::default().path("icon/scissors.svg"))
-                            .child(div().font_weight(FontWeight::SEMIBOLD).child("媒体编辑器")),
+                            .child(div().font_weight(FontWeight::SEMIBOLD).child("播放器")),
                     )
-                    .child(div().flex_1()),
+                    .child(div().flex_1())
+                    .child(self._render_control_button(
+                        "workspace-auto-play-next",
+                        "自动播放",
+                        self.auto_play_next,
+                        |this, _, _, cx| this.set_auto_play_next(!this.auto_play_next, cx),
+                        cx,
+                    ))
+                    .child(self.render_mode_switch(cx)),
             )
             .child(
                 h_flex()
@@ -229,7 +268,10 @@ impl MediaEditor {
                     .child(self._render_media_queue(cx))
                     .child(self.render_preview(window, cx)),
             )
-            .child(self.render_timeline(cx))
+            .when(
+                self.mode == WorkspaceMode::Editing || self.mode_animation_started.is_some(),
+                |workspace| workspace.child(self.render_mode_timeline(cx)),
+            )
             .child(self._render_export_status())
             .into_any_element()
     }

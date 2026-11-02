@@ -1,12 +1,12 @@
-use super::super::MediaEditor;
+use super::super::MediaWorkspace;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use gpui_kit::component::{Disableable, IconName};
 use gpui_kit::*;
 use player_core::{PlayCoreMediaType, PlayCoreTranscodeFormat};
 
-impl MediaEditor {
-    pub(in crate::gui::home::media_editor) fn render_export_menu(
+impl MediaWorkspace {
+    pub(in crate::gui::home::media_workspace) fn render_export_menu(
         &self,
         cx: &mut Context<Self>,
     ) -> AnyElement {

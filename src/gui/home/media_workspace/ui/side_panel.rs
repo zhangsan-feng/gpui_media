@@ -1,5 +1,7 @@
-use super::super::{MediaEditor, SidePanelState};
+use super::super::{MediaWorkspace, SidePanelState};
 use crate::component::color::rgb_to_u32;
+use gpui_kit::component::Disableable;
+use gpui_kit::component::button::Button;
 use gpui_kit::component::input::Input;
 use gpui_kit::component::menu::{ContextMenuExt, PopupMenuItem};
 use gpui_kit::component::scroll::{Scrollbar, ScrollbarAxis, ScrollbarMode};
@@ -10,7 +12,7 @@ use player_core::{PlayCoreMediaType, PlayCoreViewState};
 use std::rc::Rc;
 use std::time::Duration;
 
-impl MediaEditor {
+impl MediaWorkspace {
     fn _render_media_queue_content(
         &self,
         playlist_content: AnyElement,
@@ -25,12 +27,23 @@ impl MediaEditor {
                 h_flex()
                     .items_center()
                     .justify_between()
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child("素材库"))
+                    .child(
+                        div()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("播放列表 / 素材库"),
+                    )
                     .child(
                         div()
                             .text_size(px(12.))
                             .text_color(rgb_to_u32(148, 140, 163))
-                            .child(format!("{} 个素材", self.play_list.len())),
+                            .child(format!(
+                                "{}/{}",
+                                self.current_index
+                                    .filter(|index| *index < self.play_list.len())
+                                    .map(|index| index + 1)
+                                    .unwrap_or(0),
+                                self.play_list.len()
+                            )),
                     ),
             )
             .child(
@@ -49,7 +62,18 @@ impl MediaEditor {
                         false,
                         |this, _, _, cx| this.select_media_folder(cx),
                         cx,
-                    )),
+                    ))
+                    .child(
+                        Button::new("media-workspace-clear-playlist")
+                            .label("清空")
+                            .tooltip("清空列表并停止播放，不删除磁盘文件")
+                            .disabled(
+                                self.play_list.is_empty()
+                                    || self.export_in_progress
+                                    || self.playlist_delete_in_progress,
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| this.clear_playlist(cx))),
+                    ),
             )
             .child(
                 h_flex()
@@ -268,12 +292,12 @@ impl MediaEditor {
                 .justify_center()
                 .text_size(px(13.))
                 .text_color(rgb_to_u32(148, 140, 163))
-                .child("导入或拖入视频、音频开始剪辑")
+                .child("导入或拖入视频、音频开始播放")
                 .into_any_element()
         } else {
             // Fixed-height virtualization keeps total extent stable across redraws and resizes.
             let playlist_list = uniform_list(
-                "media_editor-playlist",
+                "media_workspace-playlist",
                 play_list.len(),
                 move |range, _, _| {
                     range
@@ -283,6 +307,7 @@ impl MediaEditor {
                             };
                             let is_current = current_index == Some(index);
                             let delete_item = item.clone();
+                            let folder_item = item.clone();
                             let is_local_file = item.url.starts_with("file://");
                             let title = if !item.title.trim().is_empty() {
                                 item.title.clone()
@@ -324,7 +349,21 @@ impl MediaEditor {
                                 .context_menu(move |menu, _, _| {
                                     let menu_player = menu_player.clone();
                                     let delete_item = delete_item.clone();
+                                    let folder_item = folder_item.clone();
+                                    let folder_player = menu_player.clone();
                                     menu.item(
+                                        PopupMenuItem::new("打开所在文件夹")
+                                            .disabled(!is_local_file)
+                                            .on_click(move |_, _, app| {
+                                                let _ = folder_player.update(app, |this, cx| {
+                                                    this.open_playlist_item_folder(
+                                                        &folder_item,
+                                                        cx,
+                                                    );
+                                                });
+                                            }),
+                                    )
+                                    .item(
                                         PopupMenuItem::new("删除磁盘文件")
                                             .disabled(!is_local_file)
                                             .on_click(move |_, window, app| {

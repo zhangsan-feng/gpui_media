@@ -1,4 +1,4 @@
-use super::super::{ExportStatus, MediaEditor};
+use super::super::{ExportStatus, MediaWorkspace};
 use gpui_kit::{AsyncApp, Context, PathPromptOptions};
 use player_core::{
     PlayCoreDownload, PlayCoreDownloadRequest, PlayCoreExport, PlayCoreExportTrim,
@@ -7,8 +7,8 @@ use player_core::{
 };
 use std::path::{Path, PathBuf};
 
-impl MediaEditor {
-    pub(in crate::gui::home::media_editor) fn export_media(
+impl MediaWorkspace {
+    pub(in crate::gui::home::media_workspace) fn export_media(
         &mut self,
         format: PlayCoreTranscodeFormat,
         cx: &mut Context<Self>,
@@ -16,7 +16,7 @@ impl MediaEditor {
         self.export_source(format, None, cx);
     }
 
-    pub(in crate::gui::home::media_editor) fn export_clip(
+    pub(in crate::gui::home::media_workspace) fn export_clip(
         &mut self,
         format: PlayCoreTranscodeFormat,
         cx: &mut Context<Self>,
@@ -128,7 +128,7 @@ impl MediaEditor {
         .detach();
     }
 
-    pub(in crate::gui::home::media_editor) fn export_playlist(
+    pub(in crate::gui::home::media_workspace) fn export_playlist(
         &mut self,
         format: PlayCoreTranscodeFormat,
         cx: &mut Context<Self>,
@@ -341,7 +341,7 @@ fn unique_export_path(folder: &Path, title: &str, format: PlayCoreTranscodeForma
     }
 }
 
-pub(in crate::gui::home::media_editor) fn export_format_label(
+pub(in crate::gui::home::media_workspace) fn export_format_label(
     format: PlayCoreTranscodeFormat,
 ) -> &'static str {
     match format {

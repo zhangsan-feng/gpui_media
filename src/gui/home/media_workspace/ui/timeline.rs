@@ -1,4 +1,4 @@
-use super::super::{MediaEditor, TimelineDrag, TimelineTarget};
+use super::super::{MediaWorkspace, TimelineDrag, TimelineTarget};
 use crate::component::color::rgb_to_u32;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::menu::{ContextMenuExt, PopupMenuItem};
@@ -18,8 +18,8 @@ pub(super) fn timecode(time: Duration) -> String {
     )
 }
 
-impl MediaEditor {
-    pub(in crate::gui::home::media_editor) fn render_timeline(
+impl MediaWorkspace {
+    pub(in crate::gui::home::media_workspace) fn render_timeline(
         &self,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -59,7 +59,7 @@ impl MediaEditor {
                     .child(self.timeline_button(
                         "media-editor-reset-clip",
                         "重置",
-                        state.duration.is_some() && !state.is_loading,
+                        state.duration.is_some() && !state.is_loading && !self.save_in_progress,
                         |this, _, _, cx| this.reset_clip_selection(cx),
                         cx,
                     ))
@@ -74,6 +74,13 @@ impl MediaEditor {
                         |this, _, _, cx| this.preview_clip(cx),
                         cx,
                     ))
+                    .child(
+                        Button::new("media-workspace-save")
+                            .label(if self.save_in_progress { "保存中…" } else { "保存" })
+                            .disabled(!self.can_save_edits(cx))
+                            .tooltip("将整条剪辑时间线写回原文件；支持 MP3、FLAC、WAV、AAC、MP4、MKV、MOV，有修改后可保存")
+                            .on_click(cx.listener(|this, _, _, cx| this.save_edits(cx))),
+                    )
                     .child(self.render_export_menu(cx)),
             )
             .child(
@@ -133,7 +140,8 @@ impl MediaEditor {
         id: &'static str,
         label: &'static str,
         enabled: bool,
-        click: impl Fn(&mut MediaEditor, &ClickEvent, &mut Window, &mut Context<MediaEditor>) + 'static,
+        click: impl Fn(&mut MediaWorkspace, &ClickEvent, &mut Window, &mut Context<MediaWorkspace>)
+        + 'static,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         Button::new(id)

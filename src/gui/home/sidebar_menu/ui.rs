@@ -1,28 +1,17 @@
+use super::CustomSidebarMenu;
 use crate::component::color::rgb_to_u32;
 use crate::gui::home::Page;
-use gpui_kit::component::*;
+use gpui_kit::component::{button::Button, *};
+use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use std::time::Duration;
 
-pub struct CustomSidebarMenu {
-    pub select_id: Page,
-    previous_select_id: Page,
-}
-
 impl CustomSidebarMenu {
-    pub fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
-        Self {
-            select_id: Page::MusicPage,
-            previous_select_id: Page::MusicPage,
-        }
-    }
-
     fn page_index(page: Page) -> usize {
         match page {
             Page::MusicPage => 0,
             Page::VideoPage => 1,
-            Page::MediaEditor => 2,
-            Page::MedioPlayer => 3,
+            Page::MediaWorkspace => 2,
         }
     }
 
@@ -77,20 +66,18 @@ impl CustomSidebarMenu {
                     .child(match page {
                         Page::MusicPage => "MU",
                         Page::VideoPage => "VI",
-                        Page::MediaEditor => "ED",
-                        Page::MedioPlayer => "PL",
+                        Page::MediaWorkspace => "PL",
                     }),
             )
-            .child(label)
-            .on_click(cx.listener(move |this, _, _, _| {
-                this.previous_select_id = this.select_id;
-                this.select_id = page;
+            .when(!self.collapsed, |item| item.child(label))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.select_page(page, cx);
             }))
     }
 }
 
-impl Render for CustomSidebarMenu {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl CustomSidebarMenu {
+    pub(super) fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let previous_index = Self::page_index(self.previous_select_id);
         let selected_index = Self::page_index(self.select_id);
 
@@ -98,11 +85,26 @@ impl Render for CustomSidebarMenu {
             .p_4()
             .gap_3()
             .h_full()
-            .w(px(196.))
+            .w(px(if self.collapsed { 84. } else { 196. }))
+            .flex_shrink_0()
             .border_r_1()
             .border_color(rgb_to_u32(238, 232, 244))
             .bg(rgb_to_u32(255, 255, 255))
             .justify_start()
+            .child(
+                Button::new("sidebar-toggle")
+                    .icon(if self.collapsed {
+                        IconName::ChevronRight
+                    } else {
+                        IconName::ChevronLeft
+                    })
+                    .tooltip(if self.collapsed {
+                        "展开菜单"
+                    } else {
+                        "收起菜单"
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| this.toggle_collapsed(cx))),
+            )
             .child(
                 v_flex()
                     .gap_2()
@@ -128,8 +130,7 @@ impl Render for CustomSidebarMenu {
                     )
                     .child(self.render_item("音乐", Page::MusicPage, cx))
                     .child(self.render_item("视频", Page::VideoPage, cx))
-                    .child(self.render_item("编辑器", Page::MediaEditor, cx))
-                    .child(self.render_item("播放器", Page::MedioPlayer, cx)),
+                    .child(self.render_item("播放器", Page::MediaWorkspace, cx)),
             )
     }
 }

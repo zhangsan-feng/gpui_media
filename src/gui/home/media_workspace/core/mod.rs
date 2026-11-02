@@ -1,20 +1,46 @@
 mod editing;
 mod export;
+mod playback;
+mod save;
 
 pub(super) use export::export_format_label;
 
-use super::MediaEditor;
+use super::MediaWorkspace;
 use super::SidePanelState;
 use anyhow::Context as AnyhowContext;
 use gpui_kit::http_client::Url;
-use gpui_kit::{AsyncApp, Context, PathPromptOptions, PromptButton, PromptLevel, Task, Window};
+use gpui_kit::{AsyncApp, Context, PathPromptOptions, Task, Window};
 use player_core::PlayStatic;
 use reqwest::header::HeaderMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use uuid::Uuid;
 
-impl MediaEditor {
+impl MediaWorkspace {
+    pub(in crate::gui::home::media_workspace) fn clear_playlist(&mut self, cx: &mut Context<Self>) {
+        if self.play_list.is_empty() || self.export_in_progress || self.playlist_delete_in_progress
+        {
+            return;
+        }
+        log::info!(
+            "[media-workspace:playlist] clearing list: count={} current_index={:?}",
+            self.play_list.len(),
+            self.current_index
+        );
+        self.pause_editor(cx);
+        self.play_core
+            .update(cx, |player, cx| player._stop_and_release(cx))
+            .detach();
+        self.play_list.clear();
+        self.current_index = None;
+        self.clip = Default::default();
+        self.play_list_state
+            .scroll_to_item(0, gpui_kit::ScrollStrategy::Top);
+        self.playlist_delete_error = None;
+        self.export_status = None;
+        cx.notify();
+    }
+
     pub(super) fn select_media_folder(&mut self, cx: &mut Context<Self>) {
         let dialog = cx.prompt_for_paths(PathPromptOptions {
             files: false,
@@ -67,6 +93,9 @@ impl MediaEditor {
                 folder.display()
             );
             let _ = entity.update(&mut cx_async, |this, cx| {
+                if this.playlist_delete_in_progress || this.save_in_progress {
+                    return;
+                }
                 let first_item = this.play_list.len();
                 this.play_list.extend(items);
                 this._play_item(first_item, cx);
@@ -145,7 +174,18 @@ impl MediaEditor {
         let Some(item) = self.play_list.get(index).cloned() else {
             return;
         };
+        if self.playlist_delete_in_progress || self.save_in_progress {
+            return;
+        }
+        log::info!(
+            "[media-workspace:playback] starting item {}/{}: {}",
+            index + 1,
+            self.play_list.len(),
+            item.title
+        );
         self.current_index = Some(index);
+        self.play_list_state
+            .scroll_to_item(index, gpui_kit::ScrollStrategy::Nearest);
         self.clip = Default::default();
         let _ = self
             .play_core
@@ -159,6 +199,9 @@ impl MediaEditor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.playlist_delete_in_progress || self.save_in_progress {
+            return;
+        }
         log::info!(
             "[media-editor:playlist-delete] requested: item_id={} title={} url={}",
             item.id,
@@ -178,45 +221,25 @@ impl MediaEditor {
                 return;
             }
         };
-        let detail = format!("{}\n{}", item.title, path.display());
-        let answers = [PromptButton::cancel("取消"), PromptButton::ok("删除")];
-        let prompt = window.prompt(
-            PromptLevel::Warning,
-            "确定删除这个磁盘文件？",
-            Some(&detail),
-            &answers,
-            cx,
+        self.open_playlist_delete_dialog(item, path, window, cx);
+    }
+
+    pub(super) fn delete_confirmed_playlist_item(
+        &mut self,
+        item: PlayStatic,
+        path: PathBuf,
+        cx: &mut Context<Self>,
+    ) {
+        log::info!(
+            "[media-editor:playlist-delete] confirmed in app dialog: item_id={} path={}",
+            item.id,
+            path.display()
         );
         let entity = cx.entity().clone();
         let mut cx_async = cx.to_async().clone();
         let background_executor = cx.background_executor().clone();
 
         cx.spawn(move |_, _: &mut AsyncApp| async move {
-            let answer = match prompt.await {
-                Ok(answer) => answer,
-                Err(error) => {
-                    log::warn!(
-                        "[media-editor:playlist-delete] confirmation prompt failed: item_id={} path={} error={error}",
-                        item.id,
-                        path.display()
-                    );
-                    return;
-                }
-            };
-            log::info!(
-                "[media-editor:playlist-delete] confirmation returned: item_id={} path={} button_index={answer}",
-                item.id,
-                path.display()
-            );
-            if answer != 1 {
-                log::info!(
-                    "[media-editor:playlist-delete] canceled by user: item_id={} path={}",
-                    item.id,
-                    path.display()
-                );
-                return;
-            }
-
             let prepared = entity.update(&mut cx_async, |this, cx| {
                 this.prepare_playlist_file_deletion(&item, &path, cx)
             });
@@ -255,7 +278,7 @@ impl MediaEditor {
         path: &Path,
         cx: &mut Context<Self>,
     ) -> Option<(usize, bool, Option<Task<()>>)> {
-        if self.playlist_delete_in_progress {
+        if self.playlist_delete_in_progress || self.save_in_progress {
             return None;
         }
         let index = self
